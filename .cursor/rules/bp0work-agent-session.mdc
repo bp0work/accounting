@@ -1,0 +1,25 @@
+---
+description: bp0.work spec-driven session protocol — read index + required prompt modules before coding
+alwaysApply: true
+---
+
+# bp0.work — Agent session protocol (mandatory)
+
+You are developing the **bp0.work AI Finance Operations Platform**. This is **specification-driven** — do not invent architecture, APIs, schema, workflows, or policies.
+
+## Before any implementation (every task)
+
+1. Read **`../platform_dox/cursor_master_development_prompt.md`** (index) **in full**.
+2. Classify the task using the index **module map** and read **every listed `cursor_prompt/M*.md` module in full**.
+3. Read all **MUST** numbered specs from **`../platform_dox/cursor_prompt/M04_spec_reading_matrix.md`**.
+4. In your **first reply**, state: current **Phase**, **modules read**, and **MUST specs read**. If not done, do not write code.
+5. On **new machine / fresh clone**: read **`M01_workspace_and_bootstrap.md`** and complete bootstrap before coding.
+
+## Non-negotiables
+
+| Rule | Detail |
+|------|--------|
+| **Code** | This `application/` folder only — **never** push `platform_dox/` to GitHub |
+| **Specs** | Read from `../platform_dox/` |
+| **Phases** | Strict **1 → 11** — see `M05`, `M06` |
+| **API** | **`../platform_dox/21_openapi.yaml` before `05`** |
