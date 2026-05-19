@@ -24,9 +24,24 @@ class Settings(BaseSettings):
     redis_db: int = Field(default=0, alias="FINANCE_REDIS__DB")
     redis_password: str = Field(alias="FINANCE_REDIS__PASSWORD")
 
+    jwt_secret: str = Field(alias="FINANCE_JWT__SECRET")
+    jwt_algorithm: str = Field(default="HS256", alias="FINANCE_JWT__ALGORITHM")
+    jwt_access_expire_minutes: int = Field(default=15, alias="FINANCE_JWT__ACCESS_TOKEN_EXPIRE_MINUTES")
+    jwt_refresh_expire_days: int = Field(default=7, alias="FINANCE_JWT__REFRESH_TOKEN_EXPIRE_DAYS")
+    jwt_issuer: str = Field(default="finance-platform", alias="FINANCE_JWT__ISSUER")
+    jwt_audience: str = Field(default="finance-api", alias="FINANCE_JWT__AUDIENCE")
+
+    privacy_encryption_key: str = Field(alias="FINANCE_PRIVACY_ENCRYPTION_KEY")
+    totp_issuer: str = Field(default="mmlogistix-finance", alias="FINANCE_TOTP__ISSUER")
+
+    max_failed_login_attempts: int = Field(default=5)
+    lockout_minutes: int = Field(default=30)
+    # Sixth failed attempt returns 429 (counter reaches 5 before the 6th call).
+    login_rate_limit_attempts: int = Field(default=5)
+
     @property
     def version(self) -> str:
-        return "0.1.0-phase1"
+        return "0.2.0-phase2"
 
 
 @lru_cache

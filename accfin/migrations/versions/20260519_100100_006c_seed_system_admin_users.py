@@ -37,11 +37,11 @@ def upgrade() -> None:
         ) VALUES
             (
                 :platform_id, 'system', 'BP0 Platform Administrator',
-                'system@bp0.work', :password_hash, :platform_role, 'active', true
+                'system@bp0.work', :password_hash, :platform_role, 'active', false
             ),
             (
                 :client_id, 'system.mmlogistix', 'mmlogistix System Administrator',
-                'system.mmlogistix@bp0.work', :password_hash, :client_role, 'active', true
+                'system.mmlogistix@bp0.work', :password_hash, :client_role, 'active', false
             )
         ON CONFLICT (id) DO NOTHING;
         """),
