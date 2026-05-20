@@ -152,6 +152,17 @@ async def auditor_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
+async def auditor_auth_headers(async_client: AsyncClient, auditor_user: User) -> dict[str, str]:
+    response = await async_client.post(
+        "/auth/login",
+        json={"username": auditor_user.username, "password": TEST_PASSWORD},
+    )
+    assert response.status_code == 200, response.text
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
 async def auth_headers(async_client: AsyncClient, test_user: User) -> dict[str, str]:
     response = await async_client.post(
         "/auth/login",

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.database import check_database
+from app.core.metrics import HEALTH_COMPONENT
 from app.core.redis_client import check_redis
 
 router = APIRouter(tags=["Health"])
@@ -18,14 +19,20 @@ async def get_health():
 
     try:
         components["database"] = await check_database()
+        HEALTH_COMPONENT.labels(component="database").set(
+            1 if components["database"] == "ok" else 0
+        )
     except Exception as exc:  # noqa: BLE001 — health probe must not raise
         components["database"] = f"error: {exc}"
+        HEALTH_COMPONENT.labels(component="database").set(0)
         overall = "degraded"
 
     try:
         components["redis"] = await check_redis()
+        HEALTH_COMPONENT.labels(component="redis").set(1 if components["redis"] == "ok" else 0)
     except Exception as exc:  # noqa: BLE001
         components["redis"] = f"error: {exc}"
+        HEALTH_COMPONENT.labels(component="redis").set(0)
         overall = "degraded"
 
     body = {

@@ -1,3 +1,4 @@
+from app.models.audit import AuditLog, SystemSetting
 from app.models.base import Base, TimestampMixin
 from app.models.case import Case, CaseAttachment, CaseNote, CaseTimeline, Counterparty
 from app.models.ledger import CoaAccount, JournalEntry, JournalEntryLine
@@ -39,6 +40,8 @@ __all__ = [
     "WorkflowTransition",
     "Policy",
     "Approval",
+    "AuditLog",
+    "SystemSetting",
     "CoaAccount",
     "JournalEntry",
     "JournalEntryLine",
