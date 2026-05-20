@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     ap_worker_port: int = Field(default=8012, alias="FINANCE_AP_WORKER_PORT")
     treasury_worker_enabled: bool = Field(default=True, alias="FINANCE_TREASURY_WORKER__ENABLED")
     treasury_worker_port: int = Field(default=8013, alias="FINANCE_TREASURY_WORKER_PORT")
+    expense_worker_enabled: bool = Field(default=True, alias="FINANCE_EXPENSE_WORKER__ENABLED")
+    expense_worker_port: int = Field(default=8014, alias="FINANCE_EXPENSE_WORKER_PORT")
     reconciliation_amount_tolerance_pct: float = Field(
         default=0.01, alias="FINANCE_RECONCILIATION_AMOUNT_TOLERANCE_PCT"
     )
@@ -72,7 +74,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.10.0-phase10"
+        return "0.11.0-phase11"
 
 
 @lru_cache

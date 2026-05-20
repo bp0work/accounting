@@ -230,3 +230,40 @@ class SuggestMatchesOutput(BaseModel):
 class SuggestMatchesResponse(BaseModel):
     success: bool = True
     output: SuggestMatchesOutput | None = None
+
+
+class ExtractExpenseClaimRequest(BaseModel):
+    email_id: str
+    email_body: str = ""
+    attachments: list[dict] = Field(default_factory=list)
+    claimant_hint: str | None = None
+    department_hint: str | None = None
+    expense_categories: list[str] = Field(default_factory=list)
+
+
+class ExtractedExpenseLineItem(BaseModel):
+    line_number: int
+    expense_date: date | None = None
+    category: str | None = None
+    description: str = ""
+    merchant: str | None = None
+    currency: str = "SGD"
+    amount_claimed: str = "0"
+    exchange_rate: str | None = None
+    confidence: float = 0.0
+
+
+class ExtractExpenseClaimOutput(BaseModel):
+    confidence_score: float = 0.0
+    claim_period_from: date | None = None
+    claim_period_to: date | None = None
+    purpose: str | None = None
+    currency: str = "SGD"
+    line_items: list[ExtractedExpenseLineItem] = Field(default_factory=list)
+    missing_fields: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExtractExpenseClaimResponse(BaseModel):
+    success: bool = True
+    output: ExtractExpenseClaimOutput | None = None

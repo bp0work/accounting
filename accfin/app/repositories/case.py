@@ -44,6 +44,32 @@ class CaseRepository:
         result = await self._session.execute(select(Email).where(Email.id == email_id))
         return result.scalar_one_or_none()
 
+    async def create_manual_case(
+        self,
+        *,
+        case_type: str,
+        subject: str,
+        description: str | None = None,
+        amount_value=None,
+        amount_currency: str = "SGD",
+        priority: str = "medium",
+    ) -> Case:
+        case_number = await self.generate_case_number()
+        case = Case(
+            case_number=case_number,
+            type=case_type,
+            status="inbound",
+            priority=priority,
+            subject=subject,
+            description=description,
+            amount_value=amount_value,
+            amount_currency=amount_currency,
+            classification_metadata={"source": "ui"},
+        )
+        self._session.add(case)
+        await self._session.flush()
+        return case
+
     async def create_case_from_email(
         self,
         *,
