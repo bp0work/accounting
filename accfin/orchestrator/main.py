@@ -1,4 +1,4 @@
-"""Workflow Orchestrator — intake consumer, retry, queue routing (port 8003)."""
+"""Workflow Orchestrator — retry/DLQ (port 8003). Intake is consumed by Accounts Worker."""
 
 from __future__ import annotations
 
@@ -9,9 +9,8 @@ import logging
 from fastapi import FastAPI
 
 from app.core.config import get_settings
-from app.core.database import check_database, get_session_factory
+from app.core.database import check_database
 from app.core.redis_client import check_redis, get_redis
-from app.services.intake_processor import IntakeProcessor
 from app.services.queue_router import pop_due_retries
 
 logging.basicConfig(level=logging.INFO)
@@ -39,59 +38,40 @@ async def health() -> dict:
             "accounts": accounts_depth,
             "dead_letter": dlq_depth,
         },
+        "intake_consumer": "accounts-worker",
     }
 
 
-async def _process_intake_once() -> bool:
-    redis = get_redis()
-    item = await redis.blpop(settings.intake_queue_name, timeout=1)
-    if not item:
-        return False
-    _key, raw = item
-    factory = get_session_factory()
-    retry_count = 0
-    try:
-        payload = json.loads(raw)
-        retry_count = int(payload.get("retry_count", 0))
-    except json.JSONDecodeError:
-        pass
-
-    async with factory() as session:
-        processor = IntakeProcessor(session)
-        try:
-            result = await processor.process_message(raw)
-            logger.info("Intake processed: %s", result)
-        except Exception as exc:
-            logger.exception("Intake processing failed")
-            await session.rollback()
-            processor = IntakeProcessor(session)
-            await processor.handle_failure(raw, str(exc), retry_count)
-    return True
-
-
 async def _process_retries_once() -> int:
-    items = await pop_due_retries(limit=5)
+    items = await pop_due_retries(limit=10)
     if not items:
         return 0
     redis = get_redis()
+    requeued = 0
     for item in items:
         inner = item.get("payload", {})
         raw = inner.get("raw")
-        if raw:
-            await redis.rpush(settings.intake_queue_name, raw)
-    return len(items)
+        if not raw:
+            continue
+        target = inner.get("queue_target", "intake")
+        queue = (
+            settings.accounts_queue_name
+            if target == "accounts"
+            else settings.intake_queue_name
+        )
+        await redis.rpush(queue, raw)
+        requeued += 1
+    return requeued
 
 
 async def _consumer_loop() -> None:
     while True:
         if settings.orchestrator_enabled:
             try:
-                worked = await _process_intake_once()
-                if not worked:
-                    await _process_retries_once()
+                await _process_retries_once()
             except Exception:
-                logger.exception("Consumer loop error")
-        await asyncio.sleep(0.5 if settings.orchestrator_enabled else 2)
+                logger.exception("Retry loop error")
+        await asyncio.sleep(2)
 
 
 @app.on_event("startup")
@@ -100,9 +80,7 @@ async def startup() -> None:
         asyncio.create_task(_consumer_loop())
 
 
-@app.post("/process-once", include_in_schema=False)
-async def process_once() -> dict:
-    """Manual trigger for tests."""
-    processed = await _process_intake_once()
-    retries = await _process_retries_once()
-    return {"intake_processed": processed, "retries_requeued": retries}
+@app.post("/process-retries-once", include_in_schema=False)
+async def process_retries_once() -> dict:
+    count = await _process_retries_once()
+    return {"retries_requeued": count}

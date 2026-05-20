@@ -12,15 +12,35 @@ from app.core.queues import ACCOUNTS_QUEUE, DEAD_LETTER_QUEUE, RETRY_QUEUE
 from app.core.redis_client import get_redis
 
 
-async def enqueue_accounts(*, case_id: UUID, case_type: str, case_number: str) -> str:
+async def enqueue_accounts(
+    *,
+    case_id: UUID,
+    case_type: str,
+    case_number: str,
+    email_id: UUID | None = None,
+    priority: str = "medium",
+    stp_eligible: bool = False,
+    confidence_score: float = 0.0,
+    retry_count: int = 0,
+) -> str:
     message_id = str(uuid4())
     payload = {
         "message_id": message_id,
         "case_id": str(case_id),
         "case_type": case_type,
         "case_number": case_number,
+        "email_id": str(email_id) if email_id else None,
+        "priority": priority,
+        "stp_eligible": stp_eligible,
+        "confidence_score": confidence_score,
         "enqueued_at": datetime.now(UTC).isoformat(),
-        "source": "orchestrator",
+        "retry_count": retry_count,
+        "retry_config": {
+            "max_attempts": 3,
+            "previous_error": None,
+            "previous_error_type": None,
+        },
+        "source": "accounts-worker",
     }
     redis = get_redis()
     await redis.rpush(get_settings().accounts_queue_name, json.dumps(payload))

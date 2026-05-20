@@ -4,7 +4,10 @@ from datetime import UTC, datetime
 import httpx
 from fastapi import FastAPI
 
-app = FastAPI(title="Hermes", version="0.1.0-phase1-stub")
+from agents.hermes.classify import classify_email_stub
+from app.schemas.hermes import ClassifyEmailRequest, ClassifyEmailResponse
+
+app = FastAPI(title="Hermes", version="0.2.0-phase5-stub")
 
 OLLAMA_BASE = os.environ.get("HERMES_OLLAMA_BASE_URL", "http://ollama:11434")
 
@@ -25,3 +28,9 @@ async def health():
         "timestamp": datetime.now(UTC).isoformat(),
         "components": components,
     }
+
+
+@app.post("/classify/email", response_model=ClassifyEmailResponse)
+async def classify_email(request: ClassifyEmailRequest) -> ClassifyEmailResponse:
+    """MVP classifier — rule-based stub; Ollama integration in a later phase."""
+    return classify_email_stub(request)
