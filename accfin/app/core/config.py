@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     accounts_worker_port: int = Field(default=8010, alias="FINANCE_ACCOUNTS_WORKER_PORT")
     ar_worker_enabled: bool = Field(default=True, alias="FINANCE_AR_WORKER__ENABLED")
     ar_worker_port: int = Field(default=8011, alias="FINANCE_AR_WORKER_PORT")
+    ap_worker_enabled: bool = Field(default=True, alias="FINANCE_AP_WORKER__ENABLED")
+    ap_worker_port: int = Field(default=8012, alias="FINANCE_AP_WORKER_PORT")
     hermes_base_url: str = Field(default="http://hermes:8001", alias="FINANCE_HERMES__BASE_URL")
     attachment_storage_path: str = Field(
         default="/data/attachments", alias="FINANCE_MAIL__ATTACHMENT_STORAGE_PATH"
@@ -62,7 +64,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.6.0-phase6"
+        return "0.7.0-phase7"
 
 
 @lru_cache

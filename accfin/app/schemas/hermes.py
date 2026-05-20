@@ -65,11 +65,36 @@ class ExtractedInvoice(BaseModel):
     invoice_date: date | None = None
     due_date: date | None = None
     vendor_name: str | None = None
+    po_reference: str | None = None
     total_amount: str | None = None
     tax_amount: str | None = None
     currency: str = "SGD"
     missing_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class ValidatePOMatchRequest(BaseModel):
+    case_id: UUID
+    extracted_invoice: ExtractedInvoice
+    po_data: dict
+
+
+class PODifference(BaseModel):
+    field: str
+    invoice_value: str
+    po_value: str
+
+
+class ValidatePOMatchOutput(BaseModel):
+    match_status: str
+    differences: list[PODifference] = Field(default_factory=list)
+    recommendation: str = ""
+
+
+class ValidatePOMatchResponse(BaseModel):
+    success: bool = True
+    confidence_score: float = 1.0
+    output: ValidatePOMatchOutput | None = None
 
 
 class ExtractInvoiceResponse(BaseModel):
