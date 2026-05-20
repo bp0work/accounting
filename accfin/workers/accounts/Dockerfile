@@ -7,14 +7,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 COPY pyproject.toml README.md ./
 COPY app ./app
-COPY agents ./agents
+COPY workers ./workers
 
 RUN pip install --no-cache-dir -e ".[dev]"
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ENV HERMES_PORT=8001
 
-EXPOSE 8001
+EXPOSE 8010
 
-CMD ["uvicorn", "agents.hermes.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uvicorn", "workers.accounts.main:app", "--host", "0.0.0.0", "--port", "8010"]

@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     retry_queue_name: str = Field(default="retry_queue", alias="FINANCE_ORCHESTRATOR__RETRY_QUEUE")
     orchestrator_enabled: bool = Field(default=True, alias="FINANCE_ORCHESTRATOR__ENABLED")
     orchestrator_port: int = Field(default=8003, alias="FINANCE_ORCHESTRATOR_PORT")
+    accounts_worker_enabled: bool = Field(default=True, alias="FINANCE_ACCOUNTS_WORKER__ENABLED")
+    accounts_worker_port: int = Field(default=8010, alias="FINANCE_ACCOUNTS_WORKER_PORT")
+    hermes_base_url: str = Field(default="http://hermes:8001", alias="FINANCE_HERMES__BASE_URL")
     attachment_storage_path: str = Field(
         default="/data/attachments", alias="FINANCE_MAIL__ATTACHMENT_STORAGE_PATH"
     )
@@ -57,7 +60,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.4.0-phase4"
+        return "0.5.0-phase5"
 
 
 @lru_cache

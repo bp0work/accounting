@@ -52,6 +52,35 @@ services:
       - "traefik.http.routers.fastapi.entrypoints=web"
       - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
 
+  accounts-worker:
+    build:
+      context: .
+      dockerfile: workers/accounts/Dockerfile
+    container_name: accounts-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      FINANCE_ACCOUNTS_WORKER__ENABLED: "true"
+      FINANCE_HERMES__BASE_URL: http://hermes:8001
+    ports:
+      - "8010:8010"
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      hermes:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   orchestrator:
     build:
       context: .
