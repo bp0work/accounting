@@ -1,5 +1,6 @@
-"""Hermes API schemas — `04` §6.1."""
+"""Hermes API schemas — `04` §6."""
 
+from datetime import date
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -48,3 +49,115 @@ class ClassifyEmailResponse(BaseModel):
     output: ClassifyEmailOutput | None = None
     error_code: str | None = None
     error_message: str | None = None
+
+
+class ExtractInvoiceRequest(BaseModel):
+    case_id: UUID
+    attachment_id: UUID | None = None
+    mime_type: str = "application/pdf"
+    extracted_text: str = ""
+    supplier_hint: str | None = None
+    currency_hint: str = "SGD"
+
+
+class ExtractedInvoice(BaseModel):
+    invoice_number: str | None = None
+    invoice_date: date | None = None
+    due_date: date | None = None
+    vendor_name: str | None = None
+    total_amount: str | None = None
+    tax_amount: str | None = None
+    currency: str = "SGD"
+    missing_fields: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExtractInvoiceResponse(BaseModel):
+    success: bool = True
+    confidence_score: float = 0.0
+    model_used: str = "hermes-stub"
+    prompt_version: str = "ar_invoice_extract-v1"
+    output: ExtractedInvoice | None = None
+
+
+class InvoiceAllocation(BaseModel):
+    invoice_number: str
+    amount_applied: str
+    discount_taken: str = "0.00"
+
+
+class ExtractPaymentAdviceRequest(BaseModel):
+    case_id: UUID
+    extracted_text: str = ""
+    customer_hint: str | None = None
+    currency_hint: str = "SGD"
+
+
+class ExtractedPaymentAdvice(BaseModel):
+    payer_name: str | None = None
+    payment_date: date | None = None
+    payment_amount: str | None = None
+    currency: str = "SGD"
+    bank_reference: str | None = None
+    allocations: list[InvoiceAllocation] = Field(default_factory=list)
+    unallocated_amount: str = "0.00"
+    missing_fields: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExtractPaymentAdviceResponse(BaseModel):
+    success: bool = True
+    confidence_score: float = 0.0
+    model_used: str = "hermes-stub"
+    prompt_version: str = "ar_payment_advice-v1"
+    output: ExtractedPaymentAdvice | None = None
+
+
+class RecentCase(BaseModel):
+    case_id: UUID
+    case_number: str
+    invoice_number: str | None = None
+    total_amount: str | None = None
+    created_at: str | None = None
+
+
+class CheckDuplicateRequest(BaseModel):
+    case_id: UUID
+    extracted_invoice: ExtractedInvoice
+    recent_cases: list[RecentCase] = Field(default_factory=list)
+
+
+class CheckDuplicateOutput(BaseModel):
+    is_duplicate: bool = False
+    similarity_score: float = 0.0
+    matched_case_id: UUID | None = None
+
+
+class CheckDuplicateResponse(BaseModel):
+    success: bool = True
+    output: CheckDuplicateOutput | None = None
+
+
+class OpenInvoiceItem(BaseModel):
+    case_number: str
+    invoice_number: str | None = None
+    amount: str | None = None
+    currency: str = "SGD"
+
+
+class GenerateSOARequest(BaseModel):
+    case_id: UUID
+    counterparty_name: str
+    open_invoices: list[OpenInvoiceItem] = Field(default_factory=list)
+    as_of_date: date | None = None
+
+
+class GenerateSOAOutput(BaseModel):
+    soa_text: str
+    total_outstanding: str
+    open_invoice_count: int
+
+
+class GenerateSOAResponse(BaseModel):
+    success: bool = True
+    output: GenerateSOAOutput | None = None

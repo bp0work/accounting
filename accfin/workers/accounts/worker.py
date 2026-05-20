@@ -30,7 +30,12 @@ class IntakeConsumer(QueueConsumer):
 class AccountsQueueConsumer(QueueConsumer):
     def __init__(self, redis) -> None:
         settings = get_settings()
-        super().__init__(redis, settings.accounts_queue_name, "accounts-worker")
+        super().__init__(
+            redis,
+            settings.accounts_queue_name,
+            "accounts-worker",
+            accepted_case_types=frozenset({"general_inquiry"}),
+        )
 
     async def handle_raw(self, raw: str, session: AsyncSession) -> dict[str, Any]:
         message = json.loads(raw)

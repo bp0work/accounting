@@ -54,6 +54,7 @@ _CASE_TYPE = ENUM(
     "treasury_fx",
     "treasury_suspense",
     "general_inquiry",
+    "ar_soa_request",
     name="case_type",
     create_type=False,
 )

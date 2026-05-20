@@ -7,7 +7,18 @@ import logging
 import httpx
 
 from app.core.config import get_settings
-from app.schemas.hermes import ClassifyEmailRequest, ClassifyEmailResponse
+from app.schemas.hermes import (
+    CheckDuplicateRequest,
+    CheckDuplicateResponse,
+    ClassifyEmailRequest,
+    ClassifyEmailResponse,
+    ExtractInvoiceRequest,
+    ExtractInvoiceResponse,
+    ExtractPaymentAdviceRequest,
+    ExtractPaymentAdviceResponse,
+    GenerateSOARequest,
+    GenerateSOAResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +35,11 @@ class HermesClient:
         self._base_url = (base_url or settings.hermes_base_url).rstrip("/")
         self._timeout = timeout
 
-    async def classify_email(self, request: ClassifyEmailRequest) -> ClassifyEmailResponse:
-        url = f"{self._base_url}/classify/email"
+    async def _post(self, path: str, payload: dict) -> dict:
+        url = f"{self._base_url}{path}"
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp = await client.post(url, json=request.model_dump(mode="json"))
+                resp = await client.post(url, json=payload)
         except httpx.TimeoutException as exc:
             raise HermesError("HERMES_TIMEOUT", str(exc)) from exc
         except httpx.HTTPError as exc:
@@ -38,8 +49,10 @@ class HermesClient:
             raise HermesError("HERMES_UNAVAILABLE", resp.text)
         if resp.status_code >= 400:
             raise HermesError("HERMES_PARSE_ERROR", resp.text)
+        return resp.json()
 
-        data = resp.json()
+    async def classify_email(self, request: ClassifyEmailRequest) -> ClassifyEmailResponse:
+        data = await self._post("/classify/email", request.model_dump(mode="json"))
         result = ClassifyEmailResponse.model_validate(data)
         if not result.success:
             raise HermesError(
@@ -47,3 +60,21 @@ class HermesClient:
                 result.error_message or "Classification failed",
             )
         return result
+
+    async def extract_invoice(self, request: ExtractInvoiceRequest) -> ExtractInvoiceResponse:
+        data = await self._post("/extract/invoice", request.model_dump(mode="json"))
+        return ExtractInvoiceResponse.model_validate(data)
+
+    async def extract_payment_advice(
+        self, request: ExtractPaymentAdviceRequest
+    ) -> ExtractPaymentAdviceResponse:
+        data = await self._post("/extract/payment-advice", request.model_dump(mode="json"))
+        return ExtractPaymentAdviceResponse.model_validate(data)
+
+    async def check_duplicate(self, request: CheckDuplicateRequest) -> CheckDuplicateResponse:
+        data = await self._post("/validate/duplicate", request.model_dump(mode="json"))
+        return CheckDuplicateResponse.model_validate(data)
+
+    async def generate_soa(self, request: GenerateSOARequest) -> GenerateSOAResponse:
+        data = await self._post("/generate/soa", request.model_dump(mode="json"))
+        return GenerateSOAResponse.model_validate(data)
