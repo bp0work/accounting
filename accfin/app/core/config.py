@@ -69,7 +69,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.8.0-phase8"
+        return "0.9.0-phase9"
 
 
 @lru_cache
