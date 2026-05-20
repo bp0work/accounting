@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     totp_issuer: str = Field(default="mmlogistix-finance", alias="FINANCE_TOTP__ISSUER")
 
     intake_queue_name: str = Field(default="intake_queue", alias="FINANCE_MAIL__INTAKE_QUEUE")
+    accounts_queue_name: str = Field(default="accounts_queue", alias="FINANCE_ORCHESTRATOR__ACCOUNTS_QUEUE")
+    dead_letter_queue_name: str = Field(
+        default="dead_letter_queue", alias="FINANCE_ORCHESTRATOR__DEAD_LETTER_QUEUE"
+    )
+    retry_queue_name: str = Field(default="retry_queue", alias="FINANCE_ORCHESTRATOR__RETRY_QUEUE")
+    orchestrator_enabled: bool = Field(default=True, alias="FINANCE_ORCHESTRATOR__ENABLED")
+    orchestrator_port: int = Field(default=8003, alias="FINANCE_ORCHESTRATOR_PORT")
     attachment_storage_path: str = Field(
         default="/data/attachments", alias="FINANCE_MAIL__ATTACHMENT_STORAGE_PATH"
     )
@@ -50,7 +57,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.3.0-phase3"
+        return "0.4.0-phase4"
 
 
 @lru_cache
