@@ -110,6 +110,35 @@ services:
       retries: 3
       start_period: 40s
 
+  ap-worker:
+    build:
+      context: .
+      dockerfile: workers/ap/Dockerfile
+    container_name: ap-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      FINANCE_AP_WORKER__ENABLED: "true"
+      FINANCE_HERMES__BASE_URL: http://hermes:8001
+    ports:
+      - "8012:8012"
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      hermes:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   orchestrator:
     build:
       context: .

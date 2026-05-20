@@ -20,6 +20,10 @@ from app.schemas.hermes import (
     GenerateSOAResponse,
     GenerateSOAOutput,
     InvoiceAllocation,
+    PODifference,
+    ValidatePOMatchOutput,
+    ValidatePOMatchRequest,
+    ValidatePOMatchResponse,
 )
 
 
@@ -36,9 +40,15 @@ def _parse_invoice_number(text: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _parse_po_reference(text: str) -> str | None:
+    match = re.search(r"(?:PO|purchase\s+order)[\s#:.-]*([A-Z0-9-]+)", text, re.I)
+    return match.group(1) if match else None
+
+
 def extract_invoice_stub(request: ExtractInvoiceRequest) -> ExtractInvoiceResponse:
     text = request.extracted_text or ""
     invoice_number = _parse_invoice_number(text)
+    po_reference = _parse_po_reference(text)
     total = _parse_amount(text)
     missing = []
     if not invoice_number:
@@ -50,6 +60,7 @@ def extract_invoice_stub(request: ExtractInvoiceRequest) -> ExtractInvoiceRespon
         invoice_number=invoice_number,
         invoice_date=today,
         vendor_name=request.supplier_hint,
+        po_reference=po_reference,
         total_amount=total,
         tax_amount="0.00",
         currency=request.currency_hint,
@@ -125,4 +136,46 @@ def generate_soa_stub(request: GenerateSOARequest) -> GenerateSOAResponse:
             total_outstanding=str(total),
             open_invoice_count=len(request.open_invoices),
         )
+    )
+
+
+def validate_po_match_stub(request: ValidatePOMatchRequest) -> ValidatePOMatchResponse:
+    """Rule-based PO match — compares invoice total to PO total_amount."""
+    inv = request.extracted_invoice
+    po = request.po_data
+    differences: list[PODifference] = []
+    inv_total = Decimal(inv.total_amount or "0")
+    po_total = Decimal(str(po.get("total_amount", "0")))
+    tolerance = Decimal("0.01")
+    if abs(inv_total - po_total) > tolerance:
+        differences.append(
+            PODifference(
+                field="total_amount",
+                invoice_value=str(inv_total),
+                po_value=str(po_total),
+            )
+        )
+    po_currency = po.get("currency", "SGD")
+    if inv.currency and po_currency and inv.currency != po_currency:
+        differences.append(
+            PODifference(
+                field="currency",
+                invoice_value=inv.currency,
+                po_value=str(po_currency),
+            )
+        )
+    if differences:
+        return ValidatePOMatchResponse(
+            confidence_score=0.70,
+            output=ValidatePOMatchOutput(
+                match_status="mismatch",
+                differences=differences,
+                recommendation="Route to manual review for PO variance",
+            ),
+        )
+    return ValidatePOMatchResponse(
+        output=ValidatePOMatchOutput(
+            match_status="match",
+            recommendation="Proceed with AP posting",
+        ),
     )

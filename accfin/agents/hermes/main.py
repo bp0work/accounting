@@ -10,6 +10,7 @@ from agents.hermes.extract import (
     extract_invoice_stub,
     extract_payment_advice_stub,
     generate_soa_stub,
+    validate_po_match_stub,
 )
 from app.schemas.hermes import (
     CheckDuplicateRequest,
@@ -22,9 +23,11 @@ from app.schemas.hermes import (
     ExtractPaymentAdviceResponse,
     GenerateSOARequest,
     GenerateSOAResponse,
+    ValidatePOMatchRequest,
+    ValidatePOMatchResponse,
 )
 
-app = FastAPI(title="Hermes", version="0.3.0-phase6-stub")
+app = FastAPI(title="Hermes", version="0.4.0-phase7-stub")
 
 OLLAMA_BASE = os.environ.get("HERMES_OLLAMA_BASE_URL", "http://ollama:11434")
 
@@ -72,3 +75,8 @@ async def check_duplicate(request: CheckDuplicateRequest) -> CheckDuplicateRespo
 @app.post("/generate/soa", response_model=GenerateSOAResponse)
 async def generate_soa(request: GenerateSOARequest) -> GenerateSOAResponse:
     return generate_soa_stub(request)
+
+
+@app.post("/validate/po-match", response_model=ValidatePOMatchResponse)
+async def validate_po_match(request: ValidatePOMatchRequest) -> ValidatePOMatchResponse:
+    return validate_po_match_stub(request)
