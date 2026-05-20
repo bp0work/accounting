@@ -1,4 +1,5 @@
 from app.models.audit import AuditLog, SystemSetting
+from app.models.expense import ExpenseClaim, ExpenseLineItem, ExpensePolicy
 from app.models.base import Base, TimestampMixin
 from app.models.case import Case, CaseAttachment, CaseNote, CaseTimeline, Counterparty
 from app.models.ledger import CoaAccount, JournalEntry, JournalEntryLine
@@ -42,6 +43,9 @@ __all__ = [
     "Approval",
     "AuditLog",
     "SystemSetting",
+    "ExpenseClaim",
+    "ExpenseLineItem",
+    "ExpensePolicy",
     "CoaAccount",
     "JournalEntry",
     "JournalEntryLine",

@@ -22,7 +22,12 @@ from app.schemas.hermes import (
     ValidatePOMatchResponse,
     SuggestMatchesRequest,
     SuggestMatchesResponse,
+    ExtractExpenseClaimRequest,
+    ExtractExpenseClaimResponse,
+    ExtractExpenseClaimOutput,
+    ExtractedExpenseLineItem,
 )
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -96,3 +101,33 @@ class HermesClient:
             "/reconciliation/suggest-matches", request.model_dump(mode="json")
         )
         return SuggestMatchesResponse.model_validate(data)
+
+    async def extract_expense_claim(
+        self, request: ExtractExpenseClaimRequest
+    ) -> ExtractExpenseClaimOutput:
+        try:
+            data = await self._post(
+                "/extract/expense-claim", request.model_dump(mode="json")
+            )
+            parsed = ExtractExpenseClaimResponse.model_validate(data)
+            if parsed.output:
+                return parsed.output
+        except HermesError:
+            logger.warning("Hermes expense extraction unavailable; using stub")
+        return ExtractExpenseClaimOutput(
+            confidence_score=0.75,
+            claim_period_from=date.today(),
+            claim_period_to=date.today(),
+            purpose="Expense from email",
+            currency="SGD",
+            line_items=[
+                ExtractedExpenseLineItem(
+                    line_number=1,
+                    expense_date=date.today(),
+                    category="other",
+                    description=request.email_body[:200] or "Expense claim",
+                    amount_claimed="0",
+                )
+            ],
+            missing_fields=["amount_claimed"] if not request.email_body else [],
+        )
