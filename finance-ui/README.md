@@ -2,4 +2,23 @@
 
 **Phase 9** — see `platform_dox/15_Approval_UI_Specification.md`.
 
-Scaffold with SvelteKit when Phase 9 starts. Host: `finance.bp0.work`.
+## Dev setup
+
+```bash
+cd finance-ui
+npm install
+npm run dev
+```
+
+Open http://localhost:5173 — Vite proxies API calls to FastAPI on port 8000.
+
+## Routes
+
+| Path | Purpose |
+|------|---------|
+| `/login` | JWT sign-in |
+| `/approvals` | Pending approvals queue |
+| `/approvals/{id}` | Approve / reject |
+| `/settings/notifications` | Notification preferences |
+
+Host (production): `finance.bp0.work`

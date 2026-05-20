@@ -2,6 +2,7 @@ from app.models.base import Base, TimestampMixin
 from app.models.case import Case, CaseAttachment, CaseNote, CaseTimeline, Counterparty
 from app.models.ledger import CoaAccount, JournalEntry, JournalEntryLine
 from app.models.purchase_order import PurchaseOrder
+from app.models.notification import Notification, NotificationTemplate, UserNotificationPreferences
 from app.models.reconciliation import (
     ReconciliationBankItem,
     ReconciliationLedgerItem,
