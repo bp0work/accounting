@@ -1,6 +1,7 @@
 """system_settings key-value store — `06` §13.2."""
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import SystemSetting
@@ -25,3 +26,15 @@ class SystemSettingsRepository:
             return int(raw)
         except ValueError:
             return default
+
+    async def set_value(self, key: str, value: str) -> None:
+        stmt = (
+            insert(SystemSetting)
+            .values(key=key, value=value, value_type="string", category="mail")
+            .on_conflict_do_update(
+                index_elements=["key"],
+                set_={"value": value},
+            )
+        )
+        await self._session.execute(stmt)
+        await self._session.commit()

@@ -30,6 +30,16 @@ if os.getenv("FINANCE_PRIVACY_ENCRYPTION_KEY", "").startswith("["):
     os.environ["FINANCE_PRIVACY_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
 if os.getenv("FINANCE_JWT__SECRET", "").startswith("["):
     os.environ["FINANCE_JWT__SECRET"] = "test-jwt-secret-key-32-bytes-minimum!!"
+if not os.getenv("FINANCE_INTERNAL_CRON__TOKEN") or os.getenv(
+    "FINANCE_INTERNAL_CRON__TOKEN", ""
+).startswith("["):
+    os.environ["FINANCE_INTERNAL_CRON__TOKEN"] = "test-cron-token"
+if not os.getenv("FINANCE_MAIL_ACTION__SECRET") or os.getenv(
+    "FINANCE_MAIL_ACTION__SECRET", ""
+).startswith("["):
+    os.environ["FINANCE_MAIL_ACTION__SECRET"] = "test-mail-action-secret"
+if not os.getenv("FINANCE_HASH_SECRET") or os.getenv("FINANCE_HASH_SECRET", "").startswith("["):
+    os.environ["FINANCE_HASH_SECRET"] = "test-hash-secret-32-bytes-minimum!!"
 
 get_settings.cache_clear()
 

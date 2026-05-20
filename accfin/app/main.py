@@ -12,7 +12,9 @@ from app.api.routes import (
     events,
     expense_claims,
     health,
+    internal_jobs,
     mail,
+    mail_escalations,
     metrics,
     notifications,
     reconciliation,
@@ -26,7 +28,7 @@ settings = get_settings()
 app = FastAPI(
     title="AI Finance Operations Platform API",
     version=settings.version,
-    description="Phase 11 — expense management, audit, approvals, workers, reconciliation.",
+    description="Phase 11b — executive email SOP, finance daily log, escalations.",
 )
 
 
@@ -69,6 +71,8 @@ app.include_router(notifications.router)
 app.include_router(events.router)
 app.include_router(audit.router)
 app.include_router(expense_claims.router)
+app.include_router(internal_jobs.router)
+app.include_router(mail_escalations.router)
 
 
 @app.exception_handler(AppHTTPException)

@@ -1,4 +1,5 @@
 from app.models.audit import AuditLog, SystemSetting
+from app.models.executive_mail import CaseEscalation, FinanceActivityLog, PendingOutboundEmail
 from app.models.expense import ExpenseClaim, ExpenseLineItem, ExpensePolicy
 from app.models.base import Base, TimestampMixin
 from app.models.case import Case, CaseAttachment, CaseNote, CaseTimeline, Counterparty
@@ -46,6 +47,9 @@ __all__ = [
     "ExpenseClaim",
     "ExpenseLineItem",
     "ExpensePolicy",
+    "FinanceActivityLog",
+    "CaseEscalation",
+    "PendingOutboundEmail",
     "CoaAccount",
     "JournalEntry",
     "JournalEntryLine",
