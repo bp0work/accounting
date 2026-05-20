@@ -20,6 +20,8 @@ from app.schemas.hermes import (
     GenerateSOAResponse,
     ValidatePOMatchRequest,
     ValidatePOMatchResponse,
+    SuggestMatchesRequest,
+    SuggestMatchesResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,3 +88,11 @@ class HermesClient:
     ) -> ValidatePOMatchResponse:
         data = await self._post("/validate/po-match", request.model_dump(mode="json"))
         return ValidatePOMatchResponse.model_validate(data)
+
+    async def suggest_matches(
+        self, request: SuggestMatchesRequest
+    ) -> SuggestMatchesResponse:
+        data = await self._post(
+            "/reconciliation/suggest-matches", request.model_dump(mode="json")
+        )
+        return SuggestMatchesResponse.model_validate(data)

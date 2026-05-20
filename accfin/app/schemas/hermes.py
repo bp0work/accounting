@@ -186,3 +186,47 @@ class GenerateSOAOutput(BaseModel):
 class GenerateSOAResponse(BaseModel):
     success: bool = True
     output: GenerateSOAOutput | None = None
+
+
+class ReconciliationBankItem(BaseModel):
+    id: UUID
+    transaction_date: date
+    description: str | None = None
+    reference: str | None = None
+    amount: str
+    currency: str = "SGD"
+
+
+class ReconciliationLedgerItem(BaseModel):
+    id: UUID
+    transaction_date: date
+    description: str | None = None
+    reference: str | None = None
+    amount: str
+    currency: str = "SGD"
+
+
+class SuggestMatchesRequest(BaseModel):
+    reconciliation_id: UUID
+    unmatched_bank_items: list[ReconciliationBankItem] = Field(default_factory=list)
+    unmatched_ledger_items: list[ReconciliationLedgerItem] = Field(default_factory=list)
+    tolerance_days: int = 3
+    tolerance_amount_pct: float = 0.01
+
+
+class MatchSuggestion(BaseModel):
+    bank_item_id: UUID
+    ledger_item_id: UUID
+    confidence: float
+    match_reason: str
+
+
+class SuggestMatchesOutput(BaseModel):
+    suggestions: list[MatchSuggestion] = Field(default_factory=list)
+    unresolvable_bank_items: list[UUID] = Field(default_factory=list)
+    unresolvable_ledger_items: list[UUID] = Field(default_factory=list)
+
+
+class SuggestMatchesResponse(BaseModel):
+    success: bool = True
+    output: SuggestMatchesOutput | None = None
