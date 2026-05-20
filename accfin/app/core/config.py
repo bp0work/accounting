@@ -34,6 +34,22 @@ class Settings(BaseSettings):
     privacy_encryption_key: str = Field(alias="FINANCE_PRIVACY_ENCRYPTION_KEY")
     totp_issuer: str = Field(default="mmlogistix-finance", alias="FINANCE_TOTP__ISSUER")
 
+    intake_queue_name: str = Field(default="intake_queue", alias="FINANCE_MAIL__INTAKE_QUEUE")
+    accounts_queue_name: str = Field(default="accounts_queue", alias="FINANCE_ORCHESTRATOR__ACCOUNTS_QUEUE")
+    dead_letter_queue_name: str = Field(
+        default="dead_letter_queue", alias="FINANCE_ORCHESTRATOR__DEAD_LETTER_QUEUE"
+    )
+    retry_queue_name: str = Field(default="retry_queue", alias="FINANCE_ORCHESTRATOR__RETRY_QUEUE")
+    orchestrator_enabled: bool = Field(default=True, alias="FINANCE_ORCHESTRATOR__ENABLED")
+    orchestrator_port: int = Field(default=8003, alias="FINANCE_ORCHESTRATOR_PORT")
+    attachment_storage_path: str = Field(
+        default="/data/attachments", alias="FINANCE_MAIL__ATTACHMENT_STORAGE_PATH"
+    )
+    mail_poll_enabled: bool = Field(default=True, alias="FINANCE_MAIL__POLL_ENABLED")
+    mail_poll_interval_seconds: int = Field(
+        default=60, alias="FINANCE_MAIL__POLL_INTERVAL_SECONDS"
+    )
+
     max_failed_login_attempts: int = Field(default=5)
     lockout_minutes: int = Field(default=30)
     # Sixth failed attempt returns 429 (counter reaches 5 before the 6th call).
@@ -41,7 +57,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.2.0-phase2"
+        return "0.4.0-phase4"
 
 
 @lru_cache

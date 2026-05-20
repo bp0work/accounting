@@ -7,17 +7,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 COPY pyproject.toml README.md ./
 COPY app ./app
-COPY agents ./agents
-COPY workers ./workers
-COPY gateway ./gateway
-COPY migrations ./migrations
-COPY alembic.ini ./
+COPY orchestrator ./orchestrator
 
 RUN pip install --no-cache-dir -e ".[dev]"
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-EXPOSE 8000
+EXPOSE 8003
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "orchestrator.main:app", "--host", "0.0.0.0", "--port", "8003"]
