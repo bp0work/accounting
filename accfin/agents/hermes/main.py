@@ -5,9 +5,26 @@ import httpx
 from fastapi import FastAPI
 
 from agents.hermes.classify import classify_email_stub
-from app.schemas.hermes import ClassifyEmailRequest, ClassifyEmailResponse
+from agents.hermes.extract import (
+    check_duplicate_stub,
+    extract_invoice_stub,
+    extract_payment_advice_stub,
+    generate_soa_stub,
+)
+from app.schemas.hermes import (
+    CheckDuplicateRequest,
+    CheckDuplicateResponse,
+    ClassifyEmailRequest,
+    ClassifyEmailResponse,
+    ExtractInvoiceRequest,
+    ExtractInvoiceResponse,
+    ExtractPaymentAdviceRequest,
+    ExtractPaymentAdviceResponse,
+    GenerateSOARequest,
+    GenerateSOAResponse,
+)
 
-app = FastAPI(title="Hermes", version="0.2.0-phase5-stub")
+app = FastAPI(title="Hermes", version="0.3.0-phase6-stub")
 
 OLLAMA_BASE = os.environ.get("HERMES_OLLAMA_BASE_URL", "http://ollama:11434")
 
@@ -32,5 +49,26 @@ async def health():
 
 @app.post("/classify/email", response_model=ClassifyEmailResponse)
 async def classify_email(request: ClassifyEmailRequest) -> ClassifyEmailResponse:
-    """MVP classifier — rule-based stub; Ollama integration in a later phase."""
     return classify_email_stub(request)
+
+
+@app.post("/extract/invoice", response_model=ExtractInvoiceResponse)
+async def extract_invoice(request: ExtractInvoiceRequest) -> ExtractInvoiceResponse:
+    return extract_invoice_stub(request)
+
+
+@app.post("/extract/payment-advice", response_model=ExtractPaymentAdviceResponse)
+async def extract_payment_advice(
+    request: ExtractPaymentAdviceRequest,
+) -> ExtractPaymentAdviceResponse:
+    return extract_payment_advice_stub(request)
+
+
+@app.post("/validate/duplicate", response_model=CheckDuplicateResponse)
+async def check_duplicate(request: CheckDuplicateRequest) -> CheckDuplicateResponse:
+    return check_duplicate_stub(request)
+
+
+@app.post("/generate/soa", response_model=GenerateSOAResponse)
+async def generate_soa(request: GenerateSOARequest) -> GenerateSOAResponse:
+    return generate_soa_stub(request)

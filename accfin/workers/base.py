@@ -63,10 +63,18 @@ async def signal_retry(
 class QueueConsumer(ABC):
     """BRPOP loop for a single Redis queue."""
 
-    def __init__(self, redis: Redis, queue_name: str, worker_name: str) -> None:
+    def __init__(
+        self,
+        redis: Redis,
+        queue_name: str,
+        worker_name: str,
+        *,
+        accepted_case_types: frozenset[str] | None = None,
+    ) -> None:
         self.redis = redis
         self.queue_name = queue_name
         self.worker_name = worker_name
+        self.accepted_case_types = accepted_case_types
 
     @abstractmethod
     async def handle_raw(self, raw: str, session: AsyncSession) -> dict[str, Any]:
@@ -79,6 +87,10 @@ class QueueConsumer(ABC):
         _key, raw = item
         try:
             payload = json.loads(raw)
+            case_type = payload.get("case_type")
+            if self.accepted_case_types is not None and case_type not in self.accepted_case_types:
+                await self.redis.rpush(self.queue_name, raw)
+                return True
             message_id = payload.get("message_id", "")
             if message_id and not await check_idempotent(self.redis, message_id):
                 logger.info("%s duplicate %s — skip", self.worker_name, message_id)
