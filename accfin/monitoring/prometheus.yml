@@ -1,0 +1,18 @@
+# Local Prometheus scrape config — Phase 10 (`11` Appendix 20)
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: fastapi
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["fastapi:8000"]
+        labels:
+          service: finance-api
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis:6379"]
+        labels:
+          service: redis

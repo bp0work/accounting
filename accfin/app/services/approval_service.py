@@ -16,6 +16,7 @@ from app.repositories.approval import ApprovalRepository
 from app.repositories.case import CaseRepository
 from app.schemas.auth import TokenData
 from app.services.case_service import CaseService
+from app.services.audit_service import AuditService
 from app.services.notification_dispatcher import NotificationDispatcher
 from app.services.event_bus import publish_user_event
 from fastapi import status
@@ -28,6 +29,7 @@ class ApprovalService:
         self._approvals = ApprovalRepository(session)
         self._cases_service = CaseService(session)
         self._notify = NotificationDispatcher(session)
+        self._audit = AuditService(session)
 
     async def request_approval(
         self,
@@ -108,6 +110,17 @@ class ApprovalService:
                 "case_number": case.case_number,
             },
         )
+        await self._audit.record(
+            action="approve",
+            entity_type="approval",
+            entity_id=approval.id,
+            case_id=case.id,
+            case_number=case.case_number,
+            user_id=user.user_id,
+            before_state={"status": "pending"},
+            after_state={"status": "approved"},
+            metadata={"note": note, "journal_entry_id": str(journal_entry_id) if journal_entry_id else None},
+        )
         return approval
 
     async def reject(
@@ -143,6 +156,17 @@ class ApprovalService:
                 "case_number": case.case_number,
                 "reason": reason,
             },
+        )
+        await self._audit.record(
+            action="reject",
+            entity_type="approval",
+            entity_id=approval.id,
+            case_id=case.id,
+            case_number=case.case_number,
+            user_id=user.user_id,
+            before_state={"status": "pending"},
+            after_state={"status": "rejected"},
+            metadata={"reason": reason, "return_to": return_to},
         )
         return approval
 

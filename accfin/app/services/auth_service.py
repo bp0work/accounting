@@ -22,6 +22,7 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services import totp as totp_service
+from app.services.audit_service import AuditService
 
 # In-process login attempt counter (per username) for rate limiting in dev/MVP.
 _login_attempts: defaultdict[str, int] = defaultdict(int)
@@ -62,7 +63,13 @@ class AuthService:
         _login_attempts.pop(username, None)
 
     async def login(
-        self, *, username: str, password: str, totp_code: str | None
+        self,
+        *,
+        username: str,
+        password: str,
+        totp_code: str | None,
+        user_ip: str | None = None,
+        correlation_id: str | None = None,
     ) -> LoginResponse:
         self._check_rate_limit(username)
 
@@ -111,6 +118,17 @@ class AuthService:
             expires_at=expires_at,
         )
         await self._users.record_successful_login(user)
+        audit = AuditService(self._session)
+        await audit.record(
+            action="login",
+            entity_type="user",
+            entity_id=user.id,
+            user_id=user.id,
+            user_name=user.display_name,
+            user_ip=user_ip,
+            after_state={"username": user.username, "role_id": str(user.role_id)},
+            correlation_id=correlation_id,
+        )
         await self._session.commit()
         self._clear_rate_limit(username)
 
@@ -143,8 +161,21 @@ class AuthService:
         )
         return TokenResponse(access_token=access_token, expires_in=expires_in)
 
-    async def logout(self, *, user_id: UUID) -> None:
+    async def logout(
+        self, *, user_id: UUID, user_ip: str | None = None, correlation_id: str | None = None
+    ) -> None:
+        user = await self._users.get_by_id(user_id)
         await self._users.revoke_all_refresh_tokens(user_id)
+        audit = AuditService(self._session)
+        await audit.record(
+            action="logout",
+            entity_type="user",
+            entity_id=user_id,
+            user_id=user_id,
+            user_name=user.display_name if user else None,
+            user_ip=user_ip,
+            correlation_id=correlation_id,
+        )
         await self._session.commit()
 
     async def setup_2fa(self, *, user_id: UUID) -> TwoFactorSetupResponse:

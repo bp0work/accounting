@@ -67,9 +67,12 @@ class Settings(BaseSettings):
     # Sixth failed attempt returns 429 (counter reaches 5 before the 6th call).
     login_rate_limit_attempts: int = Field(default=5)
 
+    prometheus_enabled: bool = Field(default=True, alias="FINANCE_PROMETHEUS__ENABLED")
+    prometheus_path: str = Field(default="/metrics", alias="FINANCE_PROMETHEUS__PATH")
+
     @property
     def version(self) -> str:
-        return "0.9.0-phase9"
+        return "0.10.0-phase10"
 
 
 @lru_cache
