@@ -72,9 +72,20 @@ class Settings(BaseSettings):
     prometheus_enabled: bool = Field(default=True, alias="FINANCE_PROMETHEUS__ENABLED")
     prometheus_path: str = Field(default="/metrics", alias="FINANCE_PROMETHEUS__PATH")
 
+    internal_cron_token: str = Field(default="", alias="FINANCE_INTERNAL_CRON__TOKEN")
+    mail_action_secret: str = Field(default="", alias="FINANCE_MAIL_ACTION__SECRET")
+    hash_secret: str = Field(default="", alias="FINANCE_HASH_SECRET")
+    daily_log_recipient: str = Field(
+        default="cfo.mmlogistix@bp0.work", alias="FINANCE_DAILY_LOG_RECIPIENT"
+    )
+    daily_log_timezone: str = Field(default="Asia/Singapore", alias="FINANCE_DAILY_LOG_TIMEZONE")
+    daily_log_csv_utf8_bom: bool = Field(default=True, alias="FINANCE_DAILY_LOG__CSV_UTF8_BOM")
+    wasabi_prefix_logs: str = Field(default="logs/", alias="FINANCE_WASABI__PREFIX_LOGS")
+    smtp_enabled: bool = Field(default=False, alias="FINANCE_SMTP__ENABLED")
+
     @property
     def version(self) -> str:
-        return "0.11.0-phase11"
+        return "0.11.0-phase11b"
 
 
 @lru_cache
