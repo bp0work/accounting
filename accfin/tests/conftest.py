@@ -23,6 +23,8 @@ load_dotenv(_env_path)
 _db_url = os.getenv("FINANCE_DATABASE_URL", "")
 if "@db:" in _db_url:
     os.environ["FINANCE_DATABASE_URL"] = _db_url.replace("@db:", "@localhost:")
+if os.getenv("FINANCE_REDIS__HOST") == "redis":
+    os.environ["FINANCE_REDIS__HOST"] = "localhost"
 
 if os.getenv("FINANCE_PRIVACY_ENCRYPTION_KEY", "").startswith("["):
     os.environ["FINANCE_PRIVACY_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
@@ -33,6 +35,7 @@ get_settings.cache_clear()
 
 ROLE_FINANCE_OFFICER = uuid.UUID("00000000-0000-0000-0000-000000000004")
 ROLE_ACCOUNTS_CLERK = uuid.UUID("00000000-0000-0000-0000-000000000005")
+ROLE_AUDITOR = uuid.UUID("00000000-0000-0000-0000-000000000006")
 
 TEST_PASSWORD = "CorrectHorseBattery1!"
 
@@ -49,6 +52,17 @@ def _database_configured() -> bool:
 
 
 @pytest.fixture(autouse=True)
+def _fake_redis() -> None:
+    try:
+        import fakeredis.aioredis
+    except ImportError:
+        return
+    from app.core import redis_client
+
+    redis_client._redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+
+@pytest.fixture(autouse=True)
 async def _reset_db_engine() -> AsyncGenerator[None, None]:
     """Avoid asyncpg 'different loop' errors when pytest creates new event loops."""
     yield
@@ -56,6 +70,9 @@ async def _reset_db_engine() -> AsyncGenerator[None, None]:
         await database._engine.dispose()
     database._engine = None
     database._session_factory = None
+    from app.core import redis_client
+
+    redis_client._redis = None
     get_settings.cache_clear()
     from app.core.crypto import reset_fernet_cache
 
@@ -108,6 +125,24 @@ async def clerk_user(db_session: AsyncSession) -> User:
         email=f"clerk_{suffix}@example.com",
         password_hash=hash_password(TEST_PASSWORD),
         role_id=ROLE_ACCOUNTS_CLERK,
+        status="active",
+        two_factor_enabled=False,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    return user
+
+
+@pytest.fixture
+async def auditor_user(db_session: AsyncSession) -> User:
+    suffix = uuid.uuid4().hex[:8]
+    user = User(
+        id=uuid.uuid4(),
+        username=f"auditor_{suffix}",
+        display_name="Auditor User",
+        email=f"auditor_{suffix}@example.com",
+        password_hash=hash_password(TEST_PASSWORD),
+        role_id=ROLE_AUDITOR,
         status="active",
         two_factor_enabled=False,
     )
