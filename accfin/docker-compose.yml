@@ -27,6 +27,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      FINANCE_MAIL__ATTACHMENT_STORAGE_PATH: /data/attachments
+    volumes:
+      - attachment-data:/data/attachments
     ports:
       - "8000:8000"
     networks:
@@ -47,6 +51,35 @@ services:
       - "traefik.http.routers.fastapi.rule=Host(`api.localhost`)"
       - "traefik.http.routers.fastapi.entrypoints=web"
       - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: gateway
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      FINANCE_MAIL__POLL_ENABLED: "false"
+      FINANCE_MAIL__ATTACHMENT_STORAGE_PATH: /data/attachments
+    ports:
+      - "8002:8002"
+    volumes:
+      - attachment-data:/data/attachments
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   hermes:
     build:
@@ -99,6 +132,8 @@ services:
     image: redis:7-alpine
     container_name: redis
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     command: >
       redis-server
       --requirepass ${FINANCE_REDIS__PASSWORD}
@@ -140,3 +175,4 @@ volumes:
   db-data:
   redis-data:
   ollama-models:
+  attachment-data:
