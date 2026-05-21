@@ -5,19 +5,44 @@ name: accfin
 
 services:
   traefik:
-    profiles: [proxy]
     image: traefik:v3.0
     container_name: traefik
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "80:80"
-      - "8080:8080"
+      - "443:443"
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - frontend
-      - backend
+
+  finance-ui:
+    build:
+      context: ../finance-ui
+      dockerfile: Dockerfile
+      args:
+        PUBLIC_API_URL: https://finance.bp0.work
+        PUBLIC_SSE_URL: https://finance.bp0.work/events/stream
+    container_name: finance-ui
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      NODE_ENV: production
+    networks:
+      - frontend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.finance-ui.rule=Host(`admin.bp0.work`)"
+      - "traefik.http.routers.finance-ui.entrypoints=websecure"
+      - "traefik.http.routers.finance-ui.tls=true"
+      - "traefik.http.routers.finance-ui.tls.certresolver=letsencrypt"
+      - "traefik.http.services.finance-ui.loadbalancer.server.port=3000"
 
   fastapi:
     build:
@@ -34,6 +59,7 @@ services:
     ports:
       - "8000:8000"
     networks:
+      - frontend
       - backend
     depends_on:
       db:
@@ -48,8 +74,10 @@ services:
       start_period: 40s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.fastapi.rule=Host(`api.localhost`)"
-      - "traefik.http.routers.fastapi.entrypoints=web"
+      - "traefik.http.routers.fastapi.rule=Host(`finance.bp0.work`)"
+      - "traefik.http.routers.fastapi.entrypoints=websecure"
+      - "traefik.http.routers.fastapi.tls=true"
+      - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
       - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
 
   accounts-worker:

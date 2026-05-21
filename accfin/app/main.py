@@ -51,6 +51,7 @@ _cors_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://finance.bp0.work",
+    "https://admin.bp0.work",
 ]
 app.add_middleware(
     CORSMiddleware,

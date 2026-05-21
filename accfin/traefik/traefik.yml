@@ -1,12 +1,50 @@
+# Production Traefik — bp0.work (VPS 153.92.4.121)
+# DNS: finance.bp0.work, admin.bp0.work → VPS before first certificate issue.
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
 api:
   dashboard: true
-  insecure: true
+  insecure: false
 
 entryPoints:
   web:
     address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers@file
 
 providers:
+  docker:
+    endpoint: unix:///var/run/docker.sock
+    exposedByDefault: false
+    network: frontend
+    watch: true
   file:
     directory: /etc/traefik/dynamic
     watch: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: system@bp0.work
+      storage: /letsencrypt/acme.json
+      tlsChallenge: {}
+
+log:
+  level: INFO
+
+accessLog: {}
