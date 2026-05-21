@@ -20,6 +20,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - frontend
+    labels:
+      - "traefik.docker.network=accfin_frontend"
 
   finance-ui:
     build:
@@ -73,6 +75,7 @@ services:
       retries: 3
       start_period: 40s
     labels:
+      - "traefik.docker.network=accfin_frontend"
       - "traefik.enable=true"
       - "traefik.http.routers.fastapi.rule=Host(`finance.bp0.work`)"
       - "traefik.http.routers.fastapi.entrypoints=websecure"
