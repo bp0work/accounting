@@ -5,6 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
+| **0.12.6-gateway-imap-poller** | 2026-05-20 | *(this commit)* | Mail Gateway: enable `FINANCE_MAIL__POLL_ENABLED` in compose; fix IMAP poller async SQLAlchemy sessions (`gateway/imap/poller.py` — per-mailbox `async with session_factory()`, plain IMAP settings for `asyncio.to_thread`). Migration head `20260530_047`. |
 | **0.12.5-finance-dashboard** | 2026-05-22 | `51b30d4` | Finance oversight UI: dashboard, all-cases list, CSV `GET /cases/export`, branding **mmlogistix Finance Operations**. finance-ui `0.12.4-finance-dashboard`. |
 | **0.12.4-client-auth** | 2026-05-22 | `353f9a9`, `4adfb9d` | finance-ui: `ssr = false` on authenticated routes; `goto()` after login (`localStorage` JWT). |
 | **0.12.3-mmlogistix-branding** | 2026-05-20 | `dc3d0b0` | Product name **mmlogistix Finance** (replaces LogiScore Finance). finance-ui `0.12.2-mmlogistix-branding`. |
@@ -16,6 +17,6 @@ Finance-ui package version: `finance-ui/package.json`.
 | *(infra, same API)* | 2026-05-19 | `8a8564e` | Production Traefik HTTPS, Let's Encrypt, finance-ui + fastapi routing (superseded by 0.12.0+). |
 | **0.11.0-phase11b** | 2026-05-19 | `43430d2` | Phase 11b: executive email SOP, migrations `045`–`046`, daily log job, escalations. |
 
-**Spec alignment:** `platform_dox/11` v2.19+, `14` v2.16+, `15` v2.12+, `05` v1.3.12+, `00` v2.37+.
+**Spec alignment:** `platform_dox/11` v2.22+, `14` v2.19+, `17` v2.10+, `15` v2.12+, `05` v1.3.12+, `00` v2.39+.
 
 **Production checklist:** `PRODUCTION_DEPLOYMENT_CHECKLIST.md` (Gate E).

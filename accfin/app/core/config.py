@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.12.5-finance-dashboard"
+        return "0.12.6-gateway-imap-poller"
 
     @property
     def edge_public_base_url(self) -> str:
