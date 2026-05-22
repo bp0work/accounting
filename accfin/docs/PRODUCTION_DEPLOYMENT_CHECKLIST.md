@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.11.0-phase11b` (migrations `001`–`046`)
+**Target version:** `0.12.0-url-structure` (migrations `001`–`046`)
 
 ---
 
@@ -105,7 +105,7 @@ Example (`11` §17.5):
 curl -sS -X POST \
   -H "Authorization: Bearer ${FINANCE_INTERNAL_CRON__TOKEN}" \
   -H "X-Request-ID: $(uuidgen)" \
-  https://api.bp0.work/internal/jobs/finance-daily-log
+  http://fastapi:8000/internal/jobs/finance-daily-log
 ```
 
 Configure `systemd` timer or host cron; verify idempotent `skipped` on second same-day run.
@@ -114,7 +114,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` | `200`, version `0.11.0-phase11b` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.12.0-url-structure` |
 | E4.2 | `GET /metrics` (if enabled) | Prometheus scrape OK |
 | E4.3 | Login + `GET /mail/status` | Executive/manager mailbox counts |
 | E4.4 | Cron job (dry run with `force=true` in staging only) | CSV path + `row_count` |
@@ -125,7 +125,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | # | Item | Done |
 |---|------|------|
 | E5.1 | No prototype Admin UI on port **8080** in production | ☐ |
-| E5.2 | Traefik routes: `api.bp0.work`, `finance.bp0.work` TLS valid | ☐ |
+| E5.2 | Traefik: `finance.mmlogistix.bp0.work` (UI + API paths); DNS for post-MVP admin hosts | ☐ |
 | E5.3 | Wasabi `logs/finance_daily_{date}.csv` upload verified (when credentials live) | ☐ |
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
 

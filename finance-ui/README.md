@@ -21,4 +21,4 @@ Open http://localhost:5173 — Vite proxies API calls to FastAPI on port 8000.
 | `/approvals/{id}` | Approve / reject |
 | `/settings/notifications` | Notification preferences |
 
-Host (production): `finance.bp0.work`
+Host (production): `https://finance.mmlogistix.bp0.work` (API on same origin; no `api.bp0.work`)

@@ -1,0 +1,26 @@
+# API path routing on Approval UI host — FastAPI has no public subdomain (`14` §9.0).
+http:
+  routers:
+    finance-api:
+      rule: >-
+        Host(`finance.mmlogistix.bp0.work`) && (
+          PathPrefix(`/auth`) || PathPrefix(`/mail`) || PathPrefix(`/approvals`) ||
+          PathPrefix(`/cases`) || PathPrefix(`/audit-logs`) || PathPrefix(`/events`) ||
+          PathPrefix(`/health`) || PathPrefix(`/metrics`) || PathPrefix(`/internal`) ||
+          PathPrefix(`/expense-claims`) || PathPrefix(`/reconciliation`) ||
+          PathPrefix(`/notification`) || PathPrefix(`/users`) || PathPrefix(`/workflow`) ||
+          PathPrefix(`/policies`)
+        )
+      entryPoints:
+        - websecure
+      service: finance-api
+      tls:
+        certResolver: letsencrypt
+      priority: 100
+      middlewares:
+        - security-headers@file
+  services:
+    finance-api:
+      loadBalancer:
+        servers:
+          - url: http://fastapi:8000

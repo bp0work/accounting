@@ -3,8 +3,8 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install
 COPY . .
-ARG PUBLIC_API_URL=https://finance.bp0.work
-ARG PUBLIC_SSE_URL=https://finance.bp0.work/events/stream
+ARG PUBLIC_API_URL=https://finance.mmlogistix.bp0.work
+ARG PUBLIC_SSE_URL=https://finance.mmlogistix.bp0.work/events/stream
 ENV PUBLIC_API_URL=${PUBLIC_API_URL} PUBLIC_SSE_URL=${PUBLIC_SSE_URL}
 RUN npm run build
 

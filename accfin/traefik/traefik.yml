@@ -1,5 +1,6 @@
 # Production Traefik — bp0.work (VPS 153.92.4.121)
-# DNS: finance.bp0.work, admin.bp0.work → VPS before first certificate issue.
+# DNS (MVP): finance.mmlogistix.bp0.work → VPS. Post-MVP: admin.bp0.work, admin.mmlogistix.bp0.work.
+# FastAPI: internal only; API paths routed via traefik/dynamic/api-routes.yml.
 
 global:
   checkNewVersion: false

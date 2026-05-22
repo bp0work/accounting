@@ -83,9 +83,38 @@ class Settings(BaseSettings):
     wasabi_prefix_logs: str = Field(default="logs/", alias="FINANCE_WASABI__PREFIX_LOGS")
     smtp_enabled: bool = Field(default=False, alias="FINANCE_SMTP__ENABLED")
 
+    internal_api_base_url: str = Field(
+        default="http://fastapi:8000", alias="FINANCE_INTERNAL__API_BASE_URL"
+    )
+    public_app_host: str = Field(
+        default="finance.mmlogistix.bp0.work", alias="FINANCE_PUBLIC__APP_HOST"
+    )
+    public_platform_admin_host: str = Field(
+        default="admin.bp0.work", alias="FINANCE_PUBLIC__PLATFORM_ADMIN_HOST"
+    )
+    public_client_admin_host: str = Field(
+        default="admin.mmlogistix.bp0.work", alias="FINANCE_PUBLIC__CLIENT_ADMIN_HOST"
+    )
+
     @property
     def version(self) -> str:
-        return "0.11.0-phase11b"
+        return "0.12.0-url-structure"
+
+    @property
+    def edge_public_base_url(self) -> str:
+        """HTTPS origin for browser and signed email links (API paths on same host)."""
+        return f"https://{self.public_app_host}"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            self.edge_public_base_url,
+            f"https://{self.public_platform_admin_host}",
+            f"https://{self.public_client_admin_host}",
+        ]
+        return origins
 
 
 @lru_cache

@@ -28,8 +28,8 @@ services:
       context: ../finance-ui
       dockerfile: Dockerfile
       args:
-        PUBLIC_API_URL: https://finance.bp0.work
-        PUBLIC_SSE_URL: https://finance.bp0.work/events/stream
+        PUBLIC_API_URL: https://finance.mmlogistix.bp0.work
+        PUBLIC_SSE_URL: https://finance.mmlogistix.bp0.work/events/stream
     container_name: finance-ui
     restart: unless-stopped
     environment:
@@ -40,7 +40,8 @@ services:
       - frontend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.finance-ui.rule=Host(`admin.bp0.work`)"
+      - "traefik.docker.network=accfin_frontend"
+      - "traefik.http.routers.finance-ui.rule=Host(`finance.mmlogistix.bp0.work`)"
       - "traefik.http.routers.finance-ui.entrypoints=websecure"
       - "traefik.http.routers.finance-ui.tls=true"
       - "traefik.http.routers.finance-ui.tls.certresolver=letsencrypt"
@@ -75,13 +76,7 @@ services:
       retries: 3
       start_period: 40s
     labels:
-      - "traefik.docker.network=accfin_frontend"
-      - "traefik.enable=true"
-      - "traefik.http.routers.fastapi.rule=Host(`finance.bp0.work`)"
-      - "traefik.http.routers.fastapi.entrypoints=websecure"
-      - "traefik.http.routers.fastapi.tls=true"
-      - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
-      - "traefik.http.services.fastapi.loadbalancer.server.port=8000"
+      - "traefik.enable=false"
 
   accounts-worker:
     build:

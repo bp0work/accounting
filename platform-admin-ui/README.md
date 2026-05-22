@@ -2,4 +2,4 @@
 
 **Phase 2+** — tenant registry, Client Admin emails. See `platform_dox/15` §8.11.
 
-Host: `admin.bp0.work`.
+Host: `https://admin.bp0.work` (post-MVP).

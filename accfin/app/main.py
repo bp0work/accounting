@@ -28,7 +28,7 @@ settings = get_settings()
 app = FastAPI(
     title="AI Finance Operations Platform API",
     version=settings.version,
-    description="Phase 11b — executive email SOP, finance daily log, escalations.",
+    description="Production URL structure — finance.mmlogistix.bp0.work; FastAPI internal only.",
 )
 
 
@@ -47,15 +47,9 @@ async def prometheus_request_metrics(request: Request, call_next):
         return response
     return await call_next(request)
 
-_cors_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://finance.bp0.work",
-    "https://admin.bp0.work",
-]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
