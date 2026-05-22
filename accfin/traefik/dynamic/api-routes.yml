@@ -1,4 +1,3 @@
-# API path routing on Approval UI host — FastAPI has no public subdomain (`14` §9.0).
 http:
   routers:
     finance-api:
@@ -13,14 +12,12 @@ http:
         )
       entryPoints:
         - websecure
-      service: finance-api
       tls:
         certResolver: letsencrypt
+      service: fastapi-service
       priority: 100
-      middlewares:
-        - security-headers@file
   services:
-    finance-api:
+    fastapi-service:
       loadBalancer:
         servers:
           - url: http://fastapi:8000
