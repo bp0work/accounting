@@ -125,7 +125,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | # | Item | Done |
 |---|------|------|
 | E5.1 | No prototype Admin UI on port **8080** in production | ☐ |
-| E5.2 | Traefik: `finance.mmlogistix.bp0.work` (UI via Docker labels; API via `traefik/dynamic/api-routes.yml` → `fastapi-service`); DNS for post-MVP admin hosts | ☐ |
+| E5.2 | Traefik: `finance.mmlogistix.bp0.work` (UI via Docker labels; API via `traefik/dynamic/api-routes.yml` → `finance-api` service); DNS for post-MVP admin hosts | ☐ |
 | E5.3 | Wasabi `logs/finance_daily_{date}.csv` upload verified (when credentials live) | ☐ |
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
 
