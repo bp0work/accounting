@@ -1,6 +1,6 @@
 # Traefik dynamic configuration (`accfin/traefik/dynamic/`)
 
-**Deploy version:** `0.12.2-traefik-ui-root` (see `app/core/config.py` `version` property).
+**Deploy version:** `0.12.4-client-auth` (see `app/core/config.py` and `docs/DEPLOYMENT_VERSION_HISTORY.md`).
 
 Mounted read-only at `/etc/traefik/dynamic` (see `docker-compose.yml` → `traefik` service).
 

@@ -2,7 +2,9 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.12.3-mmlogistix-branding` (migrations `001`–`046`; finance-ui `0.12.2-mmlogistix-branding`)
+**Target version:** `0.12.4-client-auth` (migrations `001`–`046`; finance-ui `0.12.3-client-auth`)
+
+See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
 ---
 
@@ -90,6 +92,9 @@ alembic current   # expect head: 20260529_046
 | `FINANCE_MAIL_ACTION__SECRET` | Escalation / outbound signed links |
 | `FINANCE_HERMES_API_KEY` | Hermes service auth |
 | `FINANCE_WASABI__ACCESS_KEY_ID` / `SECRET_ACCESS_KEY` | Offsite logs (`bp0workacc`) |
+| `FINANCE_INTERNAL__API_BASE_URL` | `http://fastapi:8000` (cron; no public API host) |
+| `FINANCE_PUBLIC__APP_HOST` | `finance.mmlogistix.bp0.work` |
+| `FINANCE_LETS_ENCRYPT_EMAIL` | `system@bp0.work` (Traefik ACME) |
 
 Generate: `python scripts/generate-keys.py`
 
@@ -114,8 +119,9 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.12.3-mmlogistix-branding` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.12.4-client-auth` |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
+| E4.1c | Browser login → `/approvals` | Pending approvals load (client-side auth; not SSR 401) |
 | E4.2 | `GET /metrics` (if enabled) | Prometheus scrape OK |
 | E4.3 | Login + `GET /mail/status` | Executive/manager mailbox counts |
 | E4.4 | Cron job (dry run with `force=true` in staging only) | CSV path + `row_count` |
@@ -126,7 +132,8 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | # | Item | Done |
 |---|------|------|
 | E5.1 | No prototype Admin UI on port **8080** in production | ☐ |
-| E5.2 | Traefik: `GET /` → finance-ui; API prefixes only in `api-routes.yml` (no `PathPrefix('/')`, priority 100); finance-ui priority 1 | ☐ |
+| E5.2 | Traefik v2.11; `GET /` → finance-ui; `api-routes.yml` API prefixes only (priority 100); finance-ui priority 1 | ☐ |
+| E5.2a | DNS `finance.mmlogistix.bp0.work` → VPS; TLS valid (`system@bp0.work`) | ☐ |
 | E5.3 | Wasabi `logs/finance_daily_{date}.csv` upload verified (when credentials live) | ☐ |
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
 
@@ -146,7 +153,9 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | Document | Topic |
 |----------|--------|
+| `DEPLOYMENT_VERSION_HISTORY.md` | Deploy version timeline |
 | `11_Deployment_Operations_Runbook.md` §17.5, §20.0 | Gates, compose, daily log |
+| `traefik/dynamic/README.md` | API path routing on finance host |
 | `05_API_Specification.md` §8.8a, §19.1 | Escalation + cron APIs |
 | `06_Database_Schema_Design.md` §7.4–§7.6 | SOP tables |
 | `17_Worker_Specifications.md` §10 | Executive email SOP |
