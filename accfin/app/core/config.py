@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.12.0-url-structure"
+        return "0.12.1-traefik-routes"
 
     @property
     def edge_public_base_url(self) -> str:
