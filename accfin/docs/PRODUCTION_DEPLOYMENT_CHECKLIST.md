@@ -68,7 +68,7 @@ Reference: `17_Worker_Specifications.md` §2.1.1–§10.
 
 ```bash
 cd accfin && alembic upgrade head
-alembic current   # expect head: 20260523_047
+alembic current   # expect head: 20260530_047
 ```
 
 | Migration band | Purpose |

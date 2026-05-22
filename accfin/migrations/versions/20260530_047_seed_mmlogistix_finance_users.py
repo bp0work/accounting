@@ -1,6 +1,6 @@
 """seed_mmlogistix_finance_users
 
-Revision ID: 20260523_047
+Revision ID: 20260530_047
 Revises: 20260529_046
 
 Seed CFO and Finance Manager users for mmlogistix tenant (finance oversight UI).
@@ -10,7 +10,7 @@ Dev password: ChangeMeOnFirstLogin! — rotate on first login.
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20260523_047"
+revision = "20260530_047"
 down_revision = "20260529_046"
 branch_labels = None
 depends_on = None
