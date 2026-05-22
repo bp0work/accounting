@@ -230,7 +230,7 @@ services:
     env_file:
       - .env
     environment:
-      FINANCE_MAIL__POLL_ENABLED: "false"
+      FINANCE_MAIL__POLL_ENABLED: "true"
       FINANCE_MAIL__ATTACHMENT_STORAGE_PATH: /data/attachments
     ports:
       - "8002:8002"
