@@ -68,7 +68,7 @@ Reference: `17_Worker_Specifications.md` §2.1.1–§10.
 
 ```bash
 cd accfin && alembic upgrade head
-alembic current   # expect head: 20260529_046
+alembic current   # expect head: 20260523_047
 ```
 
 | Migration band | Purpose |
@@ -78,6 +78,7 @@ alembic current   # expect head: 20260529_046
 | `040`–`044` | Expense management |
 | `045` | `finance_activity_log`, SOP seeds, notification templates |
 | `046` | `case_escalations`, `pending_outbound_emails` |
+| `047` | mmlogistix CFO + Finance Manager users (`cfo.mmlogistix`, `finmanager.mmlogistix`) |
 
 ### E2 — Required secrets (`.env` from `.env.example`)
 

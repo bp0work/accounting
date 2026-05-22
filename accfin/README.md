@@ -22,10 +22,12 @@ docker compose run --rm fastapi alembic upgrade head
 
 **Seed logins** (password `ChangeMeOnFirstLogin!` — change immediately):
 
-| Email | Role |
-|-------|------|
-| `system@bp0.work` | platform_admin |
-| `system.mmlogistix@bp0.work` | client_admin (tenant: mmlogistix) |
+| Username | Email | Role |
+|----------|-------|------|
+| `system` | `system@bp0.work` | platform_admin |
+| `system.mmlogistix` | `system.mmlogistix@bp0.work` | client_admin (tenant: mmlogistix) |
+| `cfo.mmlogistix` | `cfo.mmlogistix@bp0.work` | cfo (tenant: mmlogistix) |
+| `finmanager.mmlogistix` | `fin.mmlogistix@bp0.work` | finance_manager (tenant: mmlogistix) |
 
 ## Local environment
 
