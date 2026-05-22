@@ -1,5 +1,6 @@
 <script lang="ts">
   import { setToken } from '$lib/api/client';
+  import { APP_TITLE } from '$lib/branding';
 
   let username = '';
   let password = '';
@@ -24,7 +25,7 @@
 </script>
 
 <h1>Sign in</h1>
-<p>Approval UI — Phase 9</p>
+<p>{APP_TITLE}</p>
 
 {#if error}<p style="color: #b91c1c;">{error}</p>{/if}
 

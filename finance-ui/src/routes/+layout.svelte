@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { getToken } from '$lib/api/client';
+  import { APP_TITLE } from '$lib/branding';
 
   $: isLogin = $page.url.pathname === '/login';
   $: authed = !!getToken();
@@ -14,8 +15,12 @@
   });
 </script>
 
+<svelte:head>
+  <title>{APP_TITLE}</title>
+</svelte:head>
+
 <header style="padding: 1rem; border-bottom: 1px solid #e2e8f0; background: #fff;">
-  <strong>LogiScore Finance</strong>
+  <strong>{APP_TITLE}</strong>
   {#if authed}
     <nav style="display: inline-flex; gap: 1rem; margin-left: 2rem;">
       <a href="/approvals">Approvals</a>

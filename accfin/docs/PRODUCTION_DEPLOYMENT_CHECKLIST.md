@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.12.2-traefik-ui-root` (migrations `001`–`046`)
+**Target version:** `0.12.3-mmlogistix-branding` (migrations `001`–`046`; finance-ui `0.12.2-mmlogistix-branding`)
 
 ---
 
@@ -114,7 +114,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.12.2-traefik-ui-root` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.12.3-mmlogistix-branding` |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
 | E4.2 | `GET /metrics` (if enabled) | Prometheus scrape OK |
 | E4.3 | Login + `GET /mail/status` | Executive/manager mailbox counts |

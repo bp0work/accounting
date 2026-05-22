@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.12.2-traefik-ui-root"
+        return "0.12.3-mmlogistix-branding"
 
     @property
     def edge_public_base_url(self) -> str:
