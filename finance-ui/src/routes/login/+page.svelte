@@ -18,7 +18,7 @@
       if (!res.ok) throw new Error(data?.error?.message || 'Login failed');
       setToken(data.access_token);
       const { goto } = await import('$app/navigation');
-      await goto('/approvals');
+      await goto('/dashboard');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Login failed';
     }

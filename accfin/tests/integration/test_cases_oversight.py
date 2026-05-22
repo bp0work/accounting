@@ -1,0 +1,56 @@
+"""Finance oversight: dashboard and CSV export."""
+
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from uuid import uuid4
+
+import pytest
+from httpx import AsyncClient
+
+from app.models.case import Case
+
+
+@pytest.mark.integration
+async def test_cases_dashboard_and_export(
+    async_client: AsyncClient, db_session, auth_headers
+) -> None:
+    now = datetime.now(UTC)
+    case = Case(
+        case_number=f"CAS-EXP-{uuid4().hex[:8]}",
+        type="ap_invoice",
+        status="processing",
+        subject="Export test case",
+        counterparty_name="Acme Pte Ltd",
+        amount_value=Decimal("99.50"),
+        amount_currency="SGD",
+        created_at=now,
+        sla_deadline=now - timedelta(hours=1),
+        sla_status="breached",
+    )
+    db_session.add(case)
+    await db_session.commit()
+
+    dash = await async_client.get("/cases/dashboard", headers=auth_headers)
+    assert dash.status_code == 200
+    body = dash.json()
+    assert "queue_depths" in body
+    assert "cases_by_status" in body
+    assert body["overdue_count"] >= 1
+
+    today = now.date().isoformat()
+    export = await async_client.get(
+        f"/cases/export?date_from={today}&date_to={today}",
+        headers=auth_headers,
+    )
+    assert export.status_code == 200
+    assert "text/csv" in export.headers.get("content-type", "")
+    assert "attachment" in export.headers.get("content-disposition", "")
+    assert "case_number" in export.text
+    assert case.case_number in export.text
+
+    listed = await async_client.get("/cases?limit=10", headers=auth_headers)
+    assert listed.status_code == 200
+    row = next((r for r in listed.json()["data"] if r["case_number"] == case.case_number), None)
+    assert row is not None
+    assert row["is_overdue"] is True
+    assert row["processing_time_minutes"] is not None

@@ -38,8 +38,20 @@ class CaseService:
             raise AppHTTPException(status.HTTP_404_NOT_FOUND, "CASE_NOT_FOUND", "Case not found")
         return case
 
-    async def list_cases(self, *, limit: int = 50, status_filter: str | None = None):
-        return await self._cases.list_cases(limit=limit, status=status_filter)
+    async def list_cases(
+        self,
+        *,
+        limit: int = 50,
+        status_filter: str | None = None,
+        date_from=None,
+        date_to=None,
+    ):
+        return await self._cases.list_cases(
+            limit=limit,
+            status=status_filter,
+            date_from=date_from,
+            date_to=date_to,
+        )
 
     def _actor_from_token(self, user: TokenData | None) -> ActorContext | None:
         if user is None:

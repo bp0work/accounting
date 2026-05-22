@@ -25,10 +25,29 @@ class CaseResponse(BaseModel):
     risk_flags: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+    completed_at: datetime | None = None
+    sla_deadline: datetime | None = None
+    processing_time_minutes: int | None = None
+    is_overdue: bool = False
 
 
 class CaseListResponse(BaseModel):
     data: list[CaseResponse]
+
+
+class QueueStatusResponse(BaseModel):
+    intake_queue: int
+    accounts_queue: int
+    dead_letter_queue: int
+    retry_queue_pending: int
+
+
+class CaseDashboardResponse(BaseModel):
+    queue_depths: QueueStatusResponse
+    cases_by_status: dict[str, int]
+    average_processing_time_minutes: float | None
+    overdue_count: int
+    overdue_cases: list[CaseResponse]
 
 
 class CaseStatusTransitionRequest(BaseModel):
@@ -65,8 +84,3 @@ class PolicyEvaluateResponse(BaseModel):
     matched_policies: int
 
 
-class QueueStatusResponse(BaseModel):
-    intake_queue: int
-    accounts_queue: int
-    dead_letter_queue: int
-    retry_queue_pending: int

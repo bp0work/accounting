@@ -8,7 +8,7 @@
   import { getToken } from '$lib/api/client';
 
   onMount(() => {
-    goto(getToken() ? '/approvals' : '/login');
+    goto(getToken() ? '/dashboard' : '/login');
   });
 </script>
 

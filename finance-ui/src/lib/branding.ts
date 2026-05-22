@@ -1,2 +1,2 @@
-/** Approval UI product name — `15` §3.0, `18` notification templates. */
-export const APP_TITLE = 'mmlogistix Finance';
+/** Finance oversight UI — CFO / Finance Manager monitoring (`15` §2.1). */
+export const APP_TITLE = 'mmlogistix Finance Operations';

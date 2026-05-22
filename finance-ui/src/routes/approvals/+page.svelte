@@ -4,35 +4,101 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { listApprovals, type ApprovalItem } from '$lib/api/approvals';
+  import { listCases, type CaseItem } from '$lib/api/cases';
 
-  let items: ApprovalItem[] = [];
+  let items: CaseItem[] = [];
   let error = '';
 
   onMount(async () => {
     try {
-      const res = await listApprovals(true);
+      const res = await listCases(200);
       items = res.data;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
     }
   });
+
+  function formatAmount(c: CaseItem) {
+    if (c.amount_value == null) return '—';
+    return `${c.amount_currency} ${c.amount_value}`;
+  }
 </script>
 
-<h1>My pending approvals</h1>
-{#if error}<p style="color: #b91c1c;">{error}</p>{/if}
+<h1>Cases & Approvals</h1>
+<p class="subtitle">All cases — monitoring view for finance leadership (not a personal task queue).</p>
 
-{#if items.length === 0}
-  <p>No pending approvals.</p>
+{#if error}<p class="error">{error}</p>{/if}
+
+{#if items.length === 0 && !error}
+  <p>No cases found.</p>
 {:else}
-  {#each items as item}
-    <a href={`/approvals/${item.id}`} class="card" style="display: block; text-decoration: none; color: inherit;">
-      <strong>{item.case_number}</strong> — {item.case_type}
-      <div>{item.subject || 'No subject'}</div>
-      {#if item.amount}
-        <div>{item.amount.currency} {item.amount.value}</div>
-      {/if}
-      <div>Status: {item.status}</div>
-    </a>
-  {/each}
+  <div class="table-wrap card">
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Case</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Counterparty</th>
+          <th>Amount</th>
+          <th>Processing</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each items as item}
+          <tr class:overdue={item.is_overdue}>
+            <td class="indicator" title={item.is_overdue ? 'Overdue (past SLA)' : 'On track'}>
+              {item.is_overdue ? '⚠' : '·'}
+            </td>
+            <td>
+              <a href={`/cases/${item.id}`}>{item.case_number}</a>
+            </td>
+            <td>{item.type}</td>
+            <td>{item.status}</td>
+            <td>{item.counterparty_name || '—'}</td>
+            <td>{formatAmount(item)}</td>
+            <td>{item.processing_time_minutes != null ? `${item.processing_time_minutes} min` : '—'}</td>
+            <td>{new Date(item.created_at).toLocaleDateString()}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
 {/if}
+
+<style>
+  .subtitle {
+    color: #64748b;
+  }
+  .error {
+    color: #b91c1c;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    padding: 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  tr.overdue {
+    background: #fef2f2;
+  }
+  .indicator {
+    width: 2rem;
+    text-align: center;
+    font-size: 1.1rem;
+  }
+  tr.overdue .indicator {
+    color: #b91c1c;
+  }
+</style>

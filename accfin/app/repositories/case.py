@@ -1,6 +1,6 @@
 """Case persistence — Phase 4."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -8,8 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.case import Case, CaseTimeline
+from app.models.ledger import JournalEntry
 from app.models.mail import Email
+from app.models.user import User
 from app.models.workflow import WorkflowDefinition, WorkflowInstance, WorkflowTransition
+from app.services.case_metrics import TERMINAL_STATUSES
 
 
 class CaseRepository:
@@ -33,12 +36,90 @@ class CaseRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_cases(self, *, limit: int = 50, status: str | None = None) -> list[Case]:
+    def _date_range_filter(self, q, *, date_from: date | None, date_to: date | None):
+        if date_from is not None:
+            start = datetime.combine(date_from, time.min, tzinfo=UTC)
+            q = q.where(Case.created_at >= start)
+        if date_to is not None:
+            end = datetime.combine(date_to, time.min, tzinfo=UTC) + timedelta(days=1)
+            q = q.where(Case.created_at < end)
+        return q
+
+    async def list_cases(
+        self,
+        *,
+        limit: int = 50,
+        status: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[Case]:
         q = select(Case).order_by(Case.created_at.desc()).limit(limit)
         if status:
             q = q.where(Case.status == status)
+        q = self._date_range_filter(q, date_from=date_from, date_to=date_to)
         result = await self._session.execute(q)
         return list(result.scalars().all())
+
+    async def count_by_status(self) -> dict[str, int]:
+        result = await self._session.execute(
+            select(Case.status, func.count()).group_by(Case.status)
+        )
+        return {row[0]: int(row[1]) for row in result.all()}
+
+    async def average_processing_minutes_completed(self) -> float | None:
+        result = await self._session.execute(
+            select(
+                func.avg(
+                    func.extract(
+                        "epoch",
+                        Case.completed_at - Case.created_at,
+                    )
+                )
+            ).where(Case.completed_at.isnot(None))
+        )
+        avg_seconds = result.scalar_one_or_none()
+        if avg_seconds is None:
+            return None
+        return round(float(avg_seconds) / 60.0, 1)
+
+    async def list_overdue_cases(self, *, limit: int = 20) -> list[Case]:
+        now = datetime.now(UTC)
+        q = (
+            select(Case)
+            .where(
+                Case.status.notin_(tuple(TERMINAL_STATUSES)),
+                Case.sla_deadline.isnot(None),
+                Case.sla_deadline < now,
+            )
+            .order_by(Case.sla_deadline.asc())
+            .limit(limit)
+        )
+        result = await self._session.execute(q)
+        return list(result.scalars().all())
+
+    async def list_cases_for_export(
+        self, *, date_from: date, date_to: date
+    ) -> list[tuple[Case, JournalEntry | None, str | None]]:
+        """Cases in range with latest posted (or any) journal entry per case."""
+        q = select(Case).order_by(Case.created_at.asc())
+        q = self._date_range_filter(q, date_from=date_from, date_to=date_to)
+        result = await self._session.execute(q)
+        cases = list(result.scalars().all())
+        rows: list[tuple[Case, JournalEntry | None, str | None]] = []
+        for case in cases:
+            je_result = await self._session.execute(
+                select(JournalEntry, User.email)
+                .outerjoin(User, User.id == JournalEntry.posted_by)
+                .where(JournalEntry.case_id == case.id)
+                .order_by(JournalEntry.created_at.desc())
+                .limit(1)
+            )
+            row = je_result.first()
+            if row:
+                rows.append((case, row[0], row[1]))
+            else:
+                rows.append((case, None, None))
+        return rows
 
     async def get_email(self, email_id: UUID) -> Email | None:
         result = await self._session.execute(select(Email).where(Email.id == email_id))
