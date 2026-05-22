@@ -28,7 +28,7 @@ settings = get_settings()
 app = FastAPI(
     title="AI Finance Operations Platform API",
     version=settings.version,
-    description="finance.mmlogistix.bp0.work (UI + edge API); Traefik api-routes.yml; FastAPI internal.",
+    description="finance.mmlogistix.bp0.work — UI at /; API path prefixes via Traefik only.",
 )
 
 

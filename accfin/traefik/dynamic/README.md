@@ -1,14 +1,23 @@
 # Traefik dynamic configuration (`accfin/traefik/dynamic/`)
 
-**Deploy version:** `0.12.1-traefik-routes` (see `app/core/config.py` `version` property).
+**Deploy version:** `0.12.2-traefik-ui-root` (see `app/core/config.py` `version` property).
 
 Mounted read-only at `/etc/traefik/dynamic` (see `docker-compose.yml` → `traefik` service).
 
+## Routing on `finance.mmlogistix.bp0.work`
+
+| Traffic | Router | Priority | Backend |
+|---------|--------|----------|---------|
+| `/` and SvelteKit pages (`/login`, `/approvals`, …) | `finance-ui` (Docker labels) | **1** | `finance-ui:3000` |
+| API path prefixes only (see below) | `finance-api` (`api-routes.yml`) | **100** | `http://fastapi:8000` |
+
+**Do not** add `PathPrefix(\`/\`)` to `api-routes.yml` — in Traefik that matches every path and sends `/` to FastAPI instead of the Approval UI.
+
 | File | Purpose |
 |------|---------|
-| `api-routes.yml` | Routes API path prefixes on `finance.mmlogistix.bp0.work` to `http://fastapi:8000`. **`rule` must be a single quoted line** (YAML `>-` folded blocks break routing on VPS). Router `finance-api` → service **`finance-api`** (`http.services.finance-api`). Middleware: `security-headers@file`. |
-| `security.yml` | Shared `security-headers` middleware (also applied on `websecure` in `traefik.yml`). |
+| `api-routes.yml` | Single-line `rule` with explicit API prefixes only (`/auth`, `/mail`, `/approvals`, …). Router `finance-api` → service **`finance-api`**. No root path. |
+| `security.yml` | Shared `security-headers` middleware (also on `websecure` in `traefik.yml`). |
 
-FastAPI has **no** public hostname; the `fastapi` container uses `traefik.enable=false`. After editing `api-routes.yml`, recreate the `traefik` container or wait for the file provider watch.
+FastAPI has **no** public hostname; `fastapi` uses `traefik.enable=false`. After edits, recreate `traefik` and `finance-ui`.
 
 Authoritative spec: `platform_dox/11_Deployment_Operations_Runbook.md` §5, `14_Environment_and_Configuration_Reference.md` §9.0.

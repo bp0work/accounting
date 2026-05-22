@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.12.1-traefik-routes` (migrations `001`–`046`)
+**Target version:** `0.12.2-traefik-ui-root` (migrations `001`–`046`)
 
 ---
 
@@ -114,7 +114,8 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.12.1-traefik-routes` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.12.2-traefik-ui-root` |
+| E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
 | E4.2 | `GET /metrics` (if enabled) | Prometheus scrape OK |
 | E4.3 | Login + `GET /mail/status` | Executive/manager mailbox counts |
 | E4.4 | Cron job (dry run with `force=true` in staging only) | CSV path + `row_count` |
@@ -125,7 +126,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | # | Item | Done |
 |---|------|------|
 | E5.1 | No prototype Admin UI on port **8080** in production | ☐ |
-| E5.2 | Traefik: `finance.mmlogistix.bp0.work` (UI via Docker labels; API via `traefik/dynamic/api-routes.yml` — **single-line** `rule`, service `finance-api`); DNS for post-MVP admin hosts | ☐ |
+| E5.2 | Traefik: `GET /` → finance-ui; API prefixes only in `api-routes.yml` (no `PathPrefix('/')`, priority 100); finance-ui priority 1 | ☐ |
 | E5.3 | Wasabi `logs/finance_daily_{date}.csv` upload verified (when credentials live) | ☐ |
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
 

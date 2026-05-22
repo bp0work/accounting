@@ -42,6 +42,7 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=accfin_frontend"
       - "traefik.http.routers.finance-ui.rule=Host(`finance.mmlogistix.bp0.work`)"
+      - "traefik.http.routers.finance-ui.priority=1"
       - "traefik.http.routers.finance-ui.entrypoints=websecure"
       - "traefik.http.routers.finance-ui.tls=true"
       - "traefik.http.routers.finance-ui.tls.certresolver=letsencrypt"
