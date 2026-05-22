@@ -5,7 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.12.5-finance-dashboard** | 2026-05-22 | *(pending)* | Finance oversight UI: dashboard, all-cases list, CSV `GET /cases/export`, branding **mmlogistix Finance Operations**. finance-ui `0.12.4-finance-dashboard`. |
+| **0.12.5-finance-dashboard** | 2026-05-22 | `51b30d4` | Finance oversight UI: dashboard, all-cases list, CSV `GET /cases/export`, branding **mmlogistix Finance Operations**. finance-ui `0.12.4-finance-dashboard`. |
 | **0.12.4-client-auth** | 2026-05-22 | `353f9a9`, `4adfb9d` | finance-ui: `ssr = false` on authenticated routes; `goto()` after login (`localStorage` JWT). |
 | **0.12.3-mmlogistix-branding** | 2026-05-20 | `dc3d0b0` | Product name **mmlogistix Finance** (replaces LogiScore Finance). finance-ui `0.12.2-mmlogistix-branding`. |
 | **0.12.2-traefik-ui-root** | 2026-05-20 | `d354943` | `/` → finance-ui (priority 1); API prefixes only in `api-routes.yml` (no `PathPrefix('/')`). |
