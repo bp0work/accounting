@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.12.3-mmlogistix-branding"
+        return "0.12.4-client-auth"
 
     @property
     def edge_public_base_url(self) -> str:
