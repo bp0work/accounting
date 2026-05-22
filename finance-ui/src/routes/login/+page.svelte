@@ -17,7 +17,8 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || 'Login failed');
       setToken(data.access_token);
-      window.location.href = '/approvals';
+      const { goto } = await import('$app/navigation');
+      await goto('/approvals');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Login failed';
     }

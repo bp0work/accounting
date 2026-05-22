@@ -2,7 +2,9 @@
 
 **Product name:** mmlogistix Finance (Approval UI). See `platform_dox/15_Approval_UI_Specification.md`.
 
-**Package version:** `0.12.2-mmlogistix-branding`
+**Package version:** `0.12.3-client-auth`
+
+Authenticated routes (`/approvals`, `/settings/*`) set `export const ssr = false` so API calls run in the browser with the JWT from `localStorage`.
 
 ## Dev setup
 

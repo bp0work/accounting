@@ -8,9 +8,10 @@
   $: isLogin = $page.url.pathname === '/login';
   $: authed = !!getToken();
 
-  onMount(() => {
+  onMount(async () => {
     if (!isLogin && !getToken()) {
-      window.location.href = '/login';
+      const { goto } = await import('$app/navigation');
+      await goto('/login');
     }
   });
 </script>
