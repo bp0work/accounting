@@ -21,6 +21,7 @@ from app.schemas.case import (
     CaseDashboardResponse,
     CaseListResponse,
     CaseResponse,
+    CaseRetryResponse,
     CaseStatusTransitionRequest,
     CaseStatusTransitionResponse,
     QueueStatusResponse,
@@ -153,6 +154,16 @@ async def transition_case_status(
         trigger=body.trigger,
         guard_failed=result.guard_failed,
     )
+
+
+@router.post("/cases/{case_id}/retry", response_model=CaseRetryResponse)
+async def retry_case(
+    case_id: UUID,
+    user: TokenData = Depends(require_permission("cases:write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> CaseRetryResponse:
+    service = CaseService(session)
+    return await service.retry_case(case_id, user=user)
 
 
 @router.get("/cases/{case_id}/timeline")

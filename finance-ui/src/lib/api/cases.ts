@@ -62,6 +62,18 @@ export function fetchCaseTimeline(caseId: string) {
   return apiFetch<TimelineEntry[]>(`/cases/${caseId}/timeline`);
 }
 
+export type CaseRetryResult = {
+  case_id: string;
+  case_number: string;
+  message_id: string;
+  status: string;
+  previous_status: string;
+};
+
+export function retryCase(caseId: string) {
+  return apiFetch<CaseRetryResult>(`/cases/${caseId}/retry`, { method: 'POST' });
+}
+
 export function exportCasesCsv(dateFrom: string, dateTo: string) {
   const q = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
   return downloadCsv(`/cases/export?${q}`, `transactions_${dateFrom}_${dateTo}.csv`);

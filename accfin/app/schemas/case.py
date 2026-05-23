@@ -69,6 +69,14 @@ class CaseStatusTransitionResponse(BaseModel):
     guard_failed: str | None = None
 
 
+class CaseRetryResponse(BaseModel):
+    case_id: UUID
+    case_number: str
+    message_id: str
+    status: str
+    previous_status: str
+
+
 class TimelineEntryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.2-case-visibility"
+        return "0.13.3-case-retry-hermes-timeout"
 
     @property
     def edge_public_base_url(self) -> str:

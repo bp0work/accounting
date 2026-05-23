@@ -15,6 +15,10 @@ from app.repositories.policy import PolicyRepository
 from fastapi import status
 
 from app.schemas.auth import TokenData
+from app.schemas.case import CaseRetryResponse
+from app.services.queue_router import enqueue_accounts
+
+RETRYABLE_STATUSES = frozenset({"exception", "manual_review"})
 
 
 @dataclass
@@ -136,3 +140,60 @@ class CaseService:
         await self._session.commit()
         await self._session.refresh(case)
         return result
+
+    async def retry_case(self, case_id: UUID, *, user: TokenData) -> CaseRetryResponse:
+        case = await self.get_case(case_id)
+        if case.status not in RETRYABLE_STATUSES:
+            raise AppHTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "CASE_NOT_RETRYABLE",
+                f"Case in status '{case.status}' cannot be retried; "
+                f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))}",
+            )
+
+        previous_status = case.status
+        meta = dict(case.workflow_metadata or {})
+        for key in ("error_message", "error_reason", "error_type", "reason_code", "reason"):
+            meta.pop(key, None)
+        meta.update(
+            {
+                "current_stage": "processing",
+                "reprocess_requested": True,
+                "manual_retry": True,
+            }
+        )
+        case.workflow_metadata = meta
+        case.status = "classified"
+
+        message_id = await enqueue_accounts(
+            case_id=case.id,
+            case_type=case.type,
+            case_number=case.case_number,
+            email_id=case.email_id,
+            priority=case.priority or "medium",
+            stp_eligible=bool(case.stp_eligible),
+            confidence_score=float(case.confidence_score or 0),
+            source="case-retry",
+        )
+
+        await self._cases.add_timeline(
+            case_id=case.id,
+            event_type="case_retry",
+            from_status=previous_status,
+            to_status="classified",
+            actor=str(user.user_id),
+            description="Manual retry — requeued to accounts_queue",
+            metadata={"queue_message_id": message_id},
+            actor_user_id=user.user_id,
+        )
+
+        await self._session.commit()
+        await self._session.refresh(case)
+
+        return CaseRetryResponse(
+            case_id=case.id,
+            case_number=case.case_number,
+            message_id=message_id,
+            status=case.status,
+            previous_status=previous_status,
+        )

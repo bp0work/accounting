@@ -22,6 +22,7 @@ async def enqueue_accounts(
     stp_eligible: bool = False,
     confidence_score: float = 0.0,
     retry_count: int = 0,
+    source: str = "accounts-worker",
 ) -> str:
     message_id = str(uuid4())
     payload = {
@@ -40,7 +41,7 @@ async def enqueue_accounts(
             "previous_error": None,
             "previous_error_type": None,
         },
-        "source": "accounts-worker",
+        "source": source,
     }
     redis = get_redis()
     await redis.rpush(get_settings().accounts_queue_name, json.dumps(payload))

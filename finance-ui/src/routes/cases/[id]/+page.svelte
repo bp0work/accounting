@@ -5,11 +5,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { fetchCase, fetchCaseTimeline, type CaseItem, type TimelineEntry } from '$lib/api/cases';
+  import {
+    fetchCase,
+    fetchCaseTimeline,
+    retryCase,
+    type CaseItem,
+    type TimelineEntry,
+  } from '$lib/api/cases';
 
   let item: CaseItem | null = null;
   let timeline: TimelineEntry[] = [];
   let error = '';
+  let retrying = false;
+  let retryMessage = '';
+
+  const retryableStatuses = new Set(['exception', 'manual_review']);
 
   $: id = $page.params.id;
 
@@ -17,10 +27,27 @@
 
   async function load() {
     error = '';
+    retryMessage = '';
     try {
       [item, timeline] = await Promise.all([fetchCase(id), fetchCaseTimeline(id)]);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
+    }
+  }
+
+  async function handleRetry() {
+    if (!item || retrying) return;
+    retrying = true;
+    retryMessage = '';
+    error = '';
+    try {
+      const result = await retryCase(id);
+      retryMessage = `Requeued as ${result.status} (was ${result.previous_status}).`;
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Retry failed';
+    } finally {
+      retrying = false;
     }
   }
 
@@ -61,6 +88,7 @@
       processing_completed: 'Processing completed',
       status_change: 'Status / policy / extraction',
       exception_raised: 'Escalation / exception',
+      case_retry: 'Manual retry',
       journal_linked: 'Journal posted',
       approval_requested: 'Approval requested',
     };
@@ -153,6 +181,20 @@
   }
   .hint {
     color: #64748b;
+  }
+  .retry {
+    margin-top: 0.75rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid #ea580c;
+    border-radius: 6px;
+    background: #fff7ed;
+    color: #c2410c;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .retry:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
   .timeline h2 {
     margin-top: 0;

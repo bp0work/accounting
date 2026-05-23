@@ -39,7 +39,7 @@ class HermesError(Exception):
 
 
 class HermesClient:
-    def __init__(self, base_url: str | None = None, *, timeout: float = 30.0) -> None:
+    def __init__(self, base_url: str | None = None, *, timeout: float = 120.0) -> None:
         settings = get_settings()
         self._base_url = (base_url or settings.hermes_base_url).rstrip("/")
         self._timeout = timeout
