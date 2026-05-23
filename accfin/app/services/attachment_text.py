@@ -11,6 +11,13 @@ PDF_MIME = "application/pdf"
 IMAGE_MIMES = frozenset({"image/jpeg", "image/jpg", "image/png"})
 
 
+def sanitize_extracted_text(text: str | None) -> str | None:
+    """Remove NUL bytes — PostgreSQL text columns reject \\x00."""
+    if not text:
+        return text
+    return text.replace("\x00", "")
+
+
 def extract_pdf_text(content: bytes) -> str:
     try:
         from pypdf import PdfReader
@@ -23,7 +30,7 @@ def extract_pdf_text(content: bytes) -> str:
         text = page.extract_text() or ""
         if text.strip():
             parts.append(text.strip())
-    return "\n\n".join(parts)
+    return sanitize_extracted_text("\n\n".join(parts)) or ""
 
 
 def extract_attachment_text_sync(*, content: bytes, mime_type: str) -> str | None:
@@ -31,7 +38,8 @@ def extract_attachment_text_sync(*, content: bytes, mime_type: str) -> str | Non
     mime = (mime_type or "").lower()
     if mime == PDF_MIME:
         try:
-            return extract_pdf_text(content) or None
+            text = extract_pdf_text(content) or None
+            return sanitize_extracted_text(text)
         except Exception:
             logger.exception("PDF text extraction failed")
             return None

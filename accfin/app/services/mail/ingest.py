@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.mail import Email, EmailAttachment, MailGatewayConfig
-from app.services.attachment_text import extract_attachment_text_sync
+from app.services.attachment_text import extract_attachment_text_sync, sanitize_extracted_text
 from app.services.mail.dedup import EmailDedupService
 from app.services.mail.intake_queue import enqueue_intake
 from app.services.mail.parser import ParsedEmail
@@ -95,6 +95,7 @@ class MailIngestService:
             extracted_text = extract_attachment_text_sync(
                 content=att.content, mime_type=att.mime_type
             )
+            extracted_text = sanitize_extracted_text(extracted_text)
             self._session.add(
                 EmailAttachment(
                     email_id=email.id,

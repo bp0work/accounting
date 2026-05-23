@@ -1,6 +1,6 @@
 # Traefik dynamic configuration (`accfin/traefik/dynamic/`)
 
-**Deploy version:** `0.12.8-finance-token-refresh` (see `app/core/config.py` and `docs/DEPLOYMENT_VERSION_HISTORY.md`).
+**Deploy version:** `0.12.9-mail-pdf-sanitize` (see `app/core/config.py` and `docs/DEPLOYMENT_VERSION_HISTORY.md`).
 
 Mounted read-only at `/etc/traefik/dynamic` (see `docker-compose.yml` → `traefik` service).
 

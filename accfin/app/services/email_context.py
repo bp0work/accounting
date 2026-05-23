@@ -16,6 +16,7 @@ from app.services.attachment_text import (
     IMAGE_MIMES,
     extract_attachment_text_sync,
     is_image_mime,
+    sanitize_extracted_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ async def ensure_attachment_texts(
                 logger.exception("Image OCR via Hermes failed for %s", att.filename)
 
         if text and text.strip():
-            att.extracted_text = text.strip()
+            att.extracted_text = sanitize_extracted_text(text.strip())
             changed = True
 
     if changed:
