@@ -5,7 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.13.0-executive-mail-sop** | 2026-05-20 | *(pending)* | Manager-first processing failure escalation (`ExecutiveMailService`); sender ack with `[CAS-…]` after case_number; failure notify only on manager reject; `finance_activity_log` at ingest/classify/workers. |
+| **0.13.0-executive-mail-sop** | 2026-05-20 | `4bf72a5` | Manager-first processing failure escalation (`ExecutiveMailService`); sender ack with `[CAS-…]` after case_number; failure notify only on manager reject; `finance_activity_log` at ingest/classify/workers. |
 | **0.12.9-mail-pdf-sanitize** | 2026-05-20 | `a4717ce` | Strip NUL bytes from PDF `extracted_text` before DB insert (`sanitize_extracted_text` in ingest + email_context). Fixes PostgreSQL `CharacterNotInRepertoireError`. |
 | **0.12.8-finance-token-refresh** | 2026-05-20 | `2dfe475` | finance-ui silent JWT refresh: store access + refresh in `localStorage`; proactive `POST /auth/refresh` within 2 min of expiry; redirect `/login` on failure. Package `0.12.5-finance-token-refresh`. |
 | **0.12.7-ollama-extraction** | 2026-05-20 | `e3e0a1f` | Hermes Ollama extraction (`qwen2.5:7b`): `/extract/invoice`, `/extract/expense-claim`, `/extract/document-text`; mailbox-first classification (`accar`/`accap`/`accexp`); PDF text at ingest via pypdf. |
