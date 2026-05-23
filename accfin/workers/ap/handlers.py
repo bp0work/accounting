@@ -32,6 +32,7 @@ from workers.ap.extraction import (
     has_critical_missing,
     resolve_expense_account_code,
 )
+from workers.common.processing_failure import route_processing_failure
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,12 @@ class APWorkerService:
             .options(selectinload(Case.workflow_instance))
             .where(Case.id == case_id)
         )
+        return result.scalar_one_or_none()
+
+    async def _email_for_case(self, case: Case) -> Email | None:
+        if not case.email_id:
+            return None
+        result = await self._session.execute(select(Email).where(Email.id == case.email_id))
         return result.scalar_one_or_none()
 
     async def _attachment_text(self, email_id: UUID | None) -> tuple[str, UUID | None, str]:
@@ -379,16 +386,30 @@ class APWorkerService:
         )
 
     async def _route_manual(self, case: Case, reason: str) -> dict:
-        case.status = "manual_review"
-        await self._session.flush()
-        return {"status": "manual_review", "reason": reason, "case_id": str(case.id)}
+        email = await self._email_for_case(case)
+        return await route_processing_failure(
+            self._session,
+            case,
+            email=email,
+            reason_code="manual_review",
+            summary="Processing requires manager review",
+            error_detail=reason,
+            actor_name="ap-worker",
+        )
 
     async def _route_exception(self, case: Case, error_type: str, msg: str) -> dict:
-        case.status = "exception"
+        email = await self._email_for_case(case)
         case.workflow_metadata = {
             **(case.workflow_metadata or {}),
             "error_type": error_type,
             "error_message": msg,
         }
-        await self._session.flush()
-        return {"status": "exception", "error": error_type, "case_id": str(case.id)}
+        return await route_processing_failure(
+            self._session,
+            case,
+            email=email,
+            reason_code=error_type,
+            summary="Worker processing error",
+            error_detail=msg,
+            actor_name="ap-worker",
+        )

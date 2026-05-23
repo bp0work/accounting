@@ -17,6 +17,7 @@ from app.models.executive_mail import CaseEscalation
 from app.repositories.case import CaseRepository
 from app.repositories.executive_mail import CaseEscalationRepository
 from app.schemas.executive_mail import EscalationRespondResult
+from app.services.executive_mail_service import ExecutiveMailService
 
 
 class EscalationService:
@@ -24,6 +25,7 @@ class EscalationService:
         self._session = session
         self._repo = CaseEscalationRepository(session)
         self._cases = CaseRepository(session)
+        self._executive_mail = ExecutiveMailService(session)
 
     async def respond(
         self,
@@ -73,10 +75,12 @@ class EscalationService:
             row.responded_by_email = responder
             row.manager_comment = comment
             case = await self._cases.get(row.case_id)
-            if case and case.workflow_metadata is not None:
-                meta = dict(case.workflow_metadata)
-                meta["manager_decision"] = "approved"
-                case.workflow_metadata = meta
+            if case:
+                await self._executive_mail.resume_after_manager_approve(
+                    case=case,
+                    escalation=row,
+                    actor_name=responder,
+                )
 
         elif action == "reject":
             row.status = "rejected"
@@ -86,6 +90,39 @@ class EscalationService:
             case = await self._cases.get(row.case_id)
             if case:
                 case.status = "rejected"
+                meta = dict(case.workflow_metadata or {})
+                meta["manager_decision"] = "rejected"
+                meta["escalation_pending"] = False
+                case.workflow_metadata = meta
+
+                email = None
+                if row.email_id:
+                    email = await self._cases.get_email(row.email_id)
+                elif case.email_id:
+                    email = await self._cases.get_email(case.email_id)
+
+                error_reason = (row.context or {}).get("error_reason") or row.summary
+                if email is not None:
+                    await self._executive_mail.queue_failure_notification(
+                        case=case,
+                        email=email,
+                        reason=error_reason,
+                        manager_comment=comment,
+                    )
+
+                await self._executive_mail.log_step(
+                    action="manager_rejected",
+                    summary=f"[{case.case_number}] Manager rejected escalation",
+                    actor_type="manager",
+                    actor_name=responder,
+                    mailbox_id=row.originating_mailbox_id,
+                    case_id=case.id,
+                    email_id=email.id if email else None,
+                    metadata={
+                        "escalation_id": str(row.id),
+                        "manager_comment": comment,
+                    },
+                )
 
         elif action == "escalate":
             manager_mailbox = await self._repo.get_mailbox_by_email(row.target_email)
@@ -122,6 +159,24 @@ class EscalationService:
                 token_expires_at=expires,
             )
             await self._repo.create(child)
+            case = await self._cases.get(row.case_id)
+            if case:
+                await self._executive_mail.log_step(
+                    action="escalated",
+                    summary=(
+                        f"[{case.case_number}] Escalation forwarded to {target_email}"
+                    ),
+                    actor_type="manager",
+                    actor_name=responder,
+                    mailbox_id=row.originating_mailbox_id,
+                    case_id=case.id,
+                    email_id=row.email_id,
+                    metadata={
+                        "parent_escalation_id": str(row.id),
+                        "child_escalation_id": str(child_id),
+                        "target_email": target_email,
+                    },
+                )
             _ = wire  # outbound email dispatch deferred to notification worker
 
         await self._session.commit()

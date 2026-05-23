@@ -21,6 +21,7 @@ from app.schemas.hermes import (
     CounterpartyHint,
 )
 from app.services.email_context import ensure_attachment_texts
+from app.services.executive_mail_service import ExecutiveMailService
 from app.services.queue_router import enqueue_accounts, enqueue_dead_letter, schedule_retry
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ class ClassificationService:
         self._cases = CaseRepository(session)
         self._hermes = hermes or HermesClient()
         self._machine = CaseStateMachine()
+        self._executive_mail = ExecutiveMailService(session)
 
     async def process_intake(self, raw: str) -> dict:
         payload = json.loads(raw)
@@ -188,6 +190,14 @@ class ClassificationService:
         )
 
         if case.status == "classified":
+            await self._executive_mail.log_step(
+                action="classified",
+                summary=f"[{case.case_number}] Classified as {case_type} (confidence {confidence:.2f})",
+                actor_name="accounts-worker",
+                case_id=case.id,
+                email_id=email.id,
+            )
+            await self._executive_mail.queue_acknowledgement(case=case, email=email)
             await enqueue_accounts(
                 case_id=case.id,
                 case_type=case.type,
@@ -199,21 +209,88 @@ class ClassificationService:
             )
             return {"status": "routed", "case_id": str(case.id), "case_number": case.case_number}
 
+        await self._executive_mail.log_step(
+            action="classified",
+            summary=f"[{case.case_number}] Classified as {case_type} — manual review required",
+            actor_name="accounts-worker",
+            case_id=case.id,
+            email_id=email.id,
+        )
+        await self._executive_mail.queue_acknowledgement(case=case, email=email)
+        await self._executive_mail.escalate_to_manager(
+            case=case,
+            email=email,
+            reason_code="classification_failed",
+            summary="Classification requires manager review",
+            error_detail=f"Low confidence ({confidence:.2f}) or case type {case_type}",
+            actor_name="accounts-worker",
+        )
         return {"status": "manual_review", "case_id": str(case.id), "case_number": case.case_number}
 
     async def _handle_hermes_failure(self, email: Email, payload: dict, exc: HermesError) -> dict:
         logger.warning("Hermes classification failed: %s", exc)
-        email.status = "failed"
-        await self._session.flush()
         retry_count = int(payload.get("retry_count", 0))
         if retry_count < 3:
+            email.status = "queued"
+            await self._session.flush()
             await schedule_retry(
                 payload={"raw": json.dumps(payload), "retry_count": retry_count + 1},
                 delay_seconds=60 * (2**retry_count),
             )
             return {"status": "retry_scheduled", "error": exc.error_code}
+
+        case_number = await self._cases.generate_case_number()
+        now = datetime.now(UTC)
+        case = Case(
+            case_number=case_number,
+            type="general_inquiry",
+            status="on_hold",
+            priority="medium",
+            subject=email.subject,
+            description=email.body_preview,
+            email_id=email.id,
+            classification_metadata={
+                "source": "intake",
+                "classification_failed": True,
+                "error_code": exc.error_code,
+            },
+            workflow_metadata={"current_stage": "classification", "worker": "accounts-worker"},
+            sla_deadline=now + timedelta(hours=24),
+            sla_status="on_track",
+        )
+        self._session.add(case)
+        await self._session.flush()
+
+        email.status = "failed"
+        email.case_id = case.id
+        email.case_number = case.case_number
+        await self._session.flush()
+
+        await self._executive_mail.log_step(
+            action="email_received",
+            summary=f"[{case.case_number}] Intake failed classification after retries",
+            actor_name="accounts-worker",
+            case_id=case.id,
+            email_id=email.id,
+            metadata={"error_code": exc.error_code},
+        )
+        await self._executive_mail.queue_acknowledgement(case=case, email=email)
+        await self._executive_mail.escalate_to_manager(
+            case=case,
+            email=email,
+            reason_code=exc.error_code,
+            summary="Email classification failed",
+            error_detail=str(exc),
+            actor_name="accounts-worker",
+        )
+
         await enqueue_dead_letter(payload=payload, reason=exc.error_code)
-        return {"status": "failed", "error": exc.error_code}
+        return {
+            "status": "escalated_to_manager",
+            "error": exc.error_code,
+            "case_id": str(case.id),
+            "case_number": case.case_number,
+        }
 
     async def _load_attachments(self, email_id: UUID) -> list[AttachmentInput]:
         result = await self._session.execute(

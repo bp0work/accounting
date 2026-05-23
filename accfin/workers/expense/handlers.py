@@ -22,7 +22,9 @@ from app.repositories.ledger import LedgerRepository
 from app.schemas.hermes import ExtractExpenseClaimRequest
 from app.services.approval_service import ApprovalService
 from app.services.email_context import ensure_attachment_texts
+from app.services.executive_mail_service import ExecutiveMailService
 from app.services.expense_policy_evaluator import evaluate_expense_claim
+from workers.common.processing_failure import route_processing_failure
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,7 @@ class ExpenseWorkerService:
         self._expense = ExpenseRepository(session)
         self._ledger = LedgerRepository(session)
         self._approvals = ApprovalService(session)
+        self._executive_mail = ExecutiveMailService(session)
 
     async def process_accounts_message(self, message: dict) -> dict:
         if message.get("case_type") != "expense_claim":
@@ -291,18 +294,30 @@ class ExpenseWorkerService:
         self, case: Case, claim: ExpenseClaim, error_type: str
     ) -> dict:
         claim.status = "manual_review"
-        case.status = "manual_review"
         case.workflow_metadata = {
             **(case.workflow_metadata or {}),
             "error_type": error_type,
         }
+        email = None
+        if case.email_id:
+            result = await self._session.execute(
+                select(Email).where(Email.id == case.email_id)
+            )
+            email = result.scalar_one_or_none()
         await self._cases.add_timeline(
             case_id=case.id,
             event_type="processing_completed",
             from_status="processing",
-            to_status="manual_review",
+            to_status="on_hold",
             actor="expense-worker",
-            description=f"Routed to manual review: {error_type}",
+            description=f"Escalated to manager: {error_type}",
         )
-        await self._session.flush()
-        return {"status": "manual_review", "case_id": str(case.id), "error_type": error_type}
+        return await route_processing_failure(
+            self._session,
+            case,
+            email=email,
+            reason_code=error_type,
+            summary="Expense claim requires manager review",
+            error_detail=error_type,
+            actor_name="expense-worker",
+        )

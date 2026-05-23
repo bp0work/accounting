@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.mail import Email, EmailAttachment, MailGatewayConfig
 from app.services.attachment_text import extract_attachment_text_sync, sanitize_extracted_text
+from app.services.executive_mail_service import ExecutiveMailService
 from app.services.mail.dedup import EmailDedupService
 from app.services.mail.intake_queue import enqueue_intake
 from app.services.mail.parser import ParsedEmail
@@ -17,6 +18,7 @@ class MailIngestService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._dedup = EmailDedupService(session)
+        self._executive_mail = ExecutiveMailService(session)
 
     async def ingest(
         self,
@@ -112,6 +114,19 @@ class MailIngestService:
         email.attachment_count = count
         email.status = "queued"
         await self._session.flush()
+
+        await self._executive_mail.log_step(
+            action="email_received",
+            summary=f"Email received from {parsed.from_address}: {parsed.subject[:120]}",
+            actor_type="system",
+            actor_name="mail-gateway",
+            mailbox_id=mailbox.id,
+            email_id=email.id,
+            metadata={
+                "from_address": parsed.from_address,
+                "attachment_count": count,
+            },
+        )
 
         await enqueue_intake(email_id=email.id, mailbox=mailbox.email_address)
         email.processed_at = datetime.now(UTC)

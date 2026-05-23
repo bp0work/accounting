@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.12.9-mail-pdf-sanitize"
+        return "0.13.0-executive-mail-sop"
 
     @property
     def edge_public_base_url(self) -> str:

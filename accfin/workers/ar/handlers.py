@@ -27,12 +27,14 @@ from app.schemas.hermes import (
 )
 from app.services.approval_service import ApprovalService
 from app.services.email_context import build_extraction_context
+from app.services.executive_mail_service import ExecutiveMailService
 from workers.ar.extraction import (
     compute_invoice_risk_flags,
     compute_payment_risk_flags,
     evaluate_extraction_path,
     has_critical_missing,
 )
+from workers.common.processing_failure import route_processing_failure
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,7 @@ class ARWorkerService:
         self._ledger = LedgerRepository(session)
         self._approvals = ApprovalService(session)
         self._policy = PolicyEngine()
+        self._executive_mail = ExecutiveMailService(session)
 
     async def process_accounts_message(self, message: dict) -> dict:
         case_type = message.get("case_type")
@@ -69,6 +72,19 @@ class ARWorkerService:
             .where(Case.id == case_id)
         )
         return result.scalar_one_or_none()
+
+    async def _email_for_case(self, case: Case) -> Email | None:
+        if not case.email_id:
+            return None
+        result = await self._session.execute(select(Email).where(Email.id == case.email_id))
+        return result.scalar_one_or_none()
+
+    async def _mailbox_id_for_case(self, case: Case) -> UUID | None:
+        email = await self._email_for_case(case)
+        if email is None:
+            return None
+        mailbox = await self._executive_mail.get_mailbox_for_address(email.mailbox_address)
+        return mailbox.id if mailbox else None
 
     async def _attachment_text(self, email_id: UUID | None) -> tuple[str, UUID | None, str]:
         if not email_id:
@@ -124,6 +140,14 @@ class ARWorkerService:
                 )
             ]
         )
+        mailbox_id = await self._mailbox_id_for_case(case)
+        await self._executive_mail.log_policy_check(
+            case=case,
+            mailbox_id=mailbox_id,
+            passed=policy_action.get("type") != "block",
+            policy_action=policy_action,
+            actor_name="ar-worker",
+        )
         tier = int(policy_action.get("tier", 2))
         stp = message.get("stp_eligible", False) and policy_action.get("type") == "auto_release"
         final_status = evaluate_extraction_path(
@@ -159,6 +183,17 @@ class ARWorkerService:
             "missing_fields": inv.missing_fields,
         }
         await self._timeline_completed(case, "ar_invoice", inv.invoice_number, final_status, journal_id)
+        if journal_id and final_status == "posted":
+            await self._executive_mail.log_journal_posted(
+                case=case,
+                mailbox_id=mailbox_id,
+                journal_entry_id=UUID(journal_id),
+                debits=[{"account": "1300", "amount": str(amount)}],
+                credits=[
+                    {"account": "4100", "amount": str(amount - Decimal(inv.tax_amount or "0"))},
+                ],
+                actor_name="ar-worker",
+            )
         await self._session.flush()
 
         if final_status == "pending_approval":
@@ -400,16 +435,30 @@ class ARWorkerService:
         )
 
     async def _route_manual(self, case: Case, reason: str) -> dict:
-        case.status = "manual_review"
-        await self._session.flush()
-        return {"status": "manual_review", "reason": reason, "case_id": str(case.id)}
+        email = await self._email_for_case(case)
+        return await route_processing_failure(
+            self._session,
+            case,
+            email=email,
+            reason_code="manual_review",
+            summary="Processing requires manager review",
+            error_detail=reason,
+            actor_name="ar-worker",
+        )
 
     async def _route_exception(self, case: Case, error_type: str, msg: str) -> dict:
-        case.status = "exception"
+        email = await self._email_for_case(case)
         case.workflow_metadata = {
             **(case.workflow_metadata or {}),
             "error_type": error_type,
             "error_message": msg,
         }
-        await self._session.flush()
-        return {"status": "exception", "error": error_type, "case_id": str(case.id)}
+        return await route_processing_failure(
+            self._session,
+            case,
+            email=email,
+            reason_code=error_type,
+            summary="Worker processing error",
+            error_detail=msg,
+            actor_name="ar-worker",
+        )
