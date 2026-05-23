@@ -1,6 +1,6 @@
 # Traefik dynamic configuration (`accfin/traefik/dynamic/`)
 
-**Deploy version:** `0.13.3-case-retry-hermes-timeout` (see `app/core/config.py` and `docs/DEPLOYMENT_VERSION_HISTORY.md`).
+**Deploy version:** `0.13.4-ollama-healthcheck-wget` (see `app/core/config.py` and `docs/DEPLOYMENT_VERSION_HISTORY.md`).
 
 Mounted read-only at `/etc/traefik/dynamic` (see `docker-compose.yml` → `traefik` service).
 

@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.3-case-retry-hermes-timeout"
+        return "0.13.4-ollama-healthcheck-wget"
 
     @property
     def edge_public_base_url(self) -> str:
