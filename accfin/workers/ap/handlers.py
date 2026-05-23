@@ -25,6 +25,7 @@ from app.schemas.hermes import (
     ValidatePOMatchRequest,
 )
 from app.services.approval_service import ApprovalService
+from app.services.email_context import build_extraction_context
 from workers.ap.extraction import (
     compute_ap_invoice_risk_flags,
     evaluate_extraction_path,
@@ -65,33 +66,25 @@ class APWorkerService:
         )
         return result.scalar_one_or_none()
 
-    async def _attachment_text(self, email_id: UUID | None) -> tuple[str, UUID | None]:
+    async def _attachment_text(self, email_id: UUID | None) -> tuple[str, UUID | None, str]:
         if not email_id:
-            return "", None
-        result = await self._session.execute(
-            select(EmailAttachment)
-            .where(EmailAttachment.email_id == email_id)
-            .order_by(EmailAttachment.created_at)
-            .limit(1)
-        )
-        att = result.scalar_one_or_none()
-        if att is None:
-            email = await self._session.get(Email, email_id)
-            return (email.body_text or email.body_preview or "") if email else "", None
-        return att.extracted_text or att.filename, att.id
+            return "", None, ""
+        return await build_extraction_context(self._session, email_id, hermes=self._hermes)
 
     async def handle_ap_invoice(self, message: dict) -> dict:
         case = await self._load_case(UUID(message["case_id"]))
         if case is None:
             return {"status": "skipped", "reason": "case_not_found"}
 
-        text, att_id = await self._attachment_text(case.email_id)
+        text, att_id, body = await self._attachment_text(case.email_id)
         try:
             extraction = await self._hermes.extract_invoice(
                 ExtractInvoiceRequest(
                     case_id=case.id,
                     attachment_id=att_id or case.id,
                     extracted_text=text,
+                    email_body=body,
+                    document_role="ap",
                     supplier_hint=case.counterparty_name,
                     currency_hint=case.amount_currency or "SGD",
                 )
@@ -200,13 +193,15 @@ class APWorkerService:
         if case is None:
             return {"status": "skipped", "reason": "case_not_found"}
 
-        text, att_id = await self._attachment_text(case.email_id)
+        text, att_id, body = await self._attachment_text(case.email_id)
         try:
             extraction = await self._hermes.extract_invoice(
                 ExtractInvoiceRequest(
                     case_id=case.id,
                     attachment_id=att_id or case.id,
                     extracted_text=text,
+                    email_body=body,
+                    document_role="ap",
                     supplier_hint=case.counterparty_name,
                     currency_hint=case.amount_currency or "SGD",
                 )

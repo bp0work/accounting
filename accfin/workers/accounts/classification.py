@@ -20,6 +20,7 @@ from app.schemas.hermes import (
     ClassifyEmailRequest,
     CounterpartyHint,
 )
+from app.services.email_context import ensure_attachment_texts
 from app.services.queue_router import enqueue_accounts, enqueue_dead_letter, schedule_retry
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ VALID_CASE_TYPES = [
     "ap_invoice",
     "ap_po_validation",
     "ap_payment_proposal",
+    "expense_claim",
     "treasury_reconciliation",
     "treasury_fx",
     "treasury_suspense",
@@ -75,6 +77,8 @@ class ClassificationService:
             return {"status": "skipped", "reason": "already_linked", "case_id": str(email.case_id)}
         if email.status == "duplicate":
             return {"status": "skipped", "reason": "duplicate_email"}
+
+        await ensure_attachment_texts(self._session, email_id, hermes=self._hermes)
 
         attachments = await self._load_attachments(email_id)
         counterparties = await self._load_counterparty_hints()

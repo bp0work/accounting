@@ -5,11 +5,12 @@ import httpx
 from fastapi import FastAPI
 
 from agents.hermes.classify import classify_email_stub
+from agents.hermes.document_text import extract_document_text
+from agents.hermes.expense_extract import extract_expense_claim_llm
+from agents.hermes.llm_extract import extract_invoice_llm, extract_payment_advice_llm
 from agents.hermes.reconcile import suggest_matches_stub
 from agents.hermes.extract import (
     check_duplicate_stub,
-    extract_invoice_stub,
-    extract_payment_advice_stub,
     generate_soa_stub,
     validate_po_match_stub,
 )
@@ -18,6 +19,10 @@ from app.schemas.hermes import (
     CheckDuplicateResponse,
     ClassifyEmailRequest,
     ClassifyEmailResponse,
+    DocumentTextRequest,
+    DocumentTextResponse,
+    ExtractExpenseClaimRequest,
+    ExtractExpenseClaimResponse,
     ExtractInvoiceRequest,
     ExtractInvoiceResponse,
     ExtractPaymentAdviceRequest,
@@ -30,7 +35,7 @@ from app.schemas.hermes import (
     SuggestMatchesResponse,
 )
 
-app = FastAPI(title="Hermes", version="0.5.0-phase8-stub")
+app = FastAPI(title="Hermes", version="0.6.0-ollama-extraction")
 
 OLLAMA_BASE = os.environ.get("HERMES_OLLAMA_BASE_URL", "http://ollama:11434")
 
@@ -60,14 +65,28 @@ async def classify_email(request: ClassifyEmailRequest) -> ClassifyEmailResponse
 
 @app.post("/extract/invoice", response_model=ExtractInvoiceResponse)
 async def extract_invoice(request: ExtractInvoiceRequest) -> ExtractInvoiceResponse:
-    return extract_invoice_stub(request)
+    return await extract_invoice_llm(request)
 
 
 @app.post("/extract/payment-advice", response_model=ExtractPaymentAdviceResponse)
 async def extract_payment_advice(
     request: ExtractPaymentAdviceRequest,
 ) -> ExtractPaymentAdviceResponse:
-    return extract_payment_advice_stub(request)
+    return await extract_payment_advice_llm(request)
+
+
+@app.post("/extract/expense-claim", response_model=ExtractExpenseClaimResponse)
+async def extract_expense_claim(
+    request: ExtractExpenseClaimRequest,
+) -> ExtractExpenseClaimResponse:
+    return await extract_expense_claim_llm(request)
+
+
+@app.post("/extract/document-text", response_model=DocumentTextResponse)
+async def extract_document_text_route(
+    request: DocumentTextRequest,
+) -> DocumentTextResponse:
+    return await extract_document_text(request)
 
 
 @app.post("/validate/duplicate", response_model=CheckDuplicateResponse)

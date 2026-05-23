@@ -21,6 +21,7 @@ from app.repositories.expense import ExpenseRepository
 from app.repositories.ledger import LedgerRepository
 from app.schemas.hermes import ExtractExpenseClaimRequest
 from app.services.approval_service import ApprovalService
+from app.services.email_context import ensure_attachment_texts
 from app.services.expense_policy_evaluator import evaluate_expense_claim
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,7 @@ class ExpenseWorkerService:
         attachments: list[dict] = []
         if email:
             body = email.body_text or email.body_preview or ""
+            await ensure_attachment_texts(self._session, email.id, hermes=self._hermes)
             result = await self._session.execute(
                 select(EmailAttachment).where(EmailAttachment.email_id == email.id).limit(5)
             )
@@ -176,6 +178,13 @@ class ExpenseWorkerService:
                     attachments=attachments,
                     claimant_hint=claimant.display_name,
                     department_hint=claimant.department,
+                    expense_categories=[
+                        "meals",
+                        "transport",
+                        "accommodation",
+                        "entertainment",
+                        "other",
+                    ],
                 )
             )
         except HermesError:

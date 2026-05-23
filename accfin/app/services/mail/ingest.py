@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.mail import Email, EmailAttachment, MailGatewayConfig
+from app.services.attachment_text import extract_attachment_text_sync
 from app.services.mail.dedup import EmailDedupService
 from app.services.mail.intake_queue import enqueue_intake
 from app.services.mail.parser import ParsedEmail
@@ -91,6 +92,9 @@ class MailIngestService:
             storage_path = save_attachment(
                 email_id=email.id, filename=att.filename, content=att.content
             )
+            extracted_text = extract_attachment_text_sync(
+                content=att.content, mime_type=att.mime_type
+            )
             self._session.add(
                 EmailAttachment(
                     email_id=email.id,
@@ -99,6 +103,7 @@ class MailIngestService:
                     mime_type=att.mime_type,
                     storage_path=storage_path,
                     content_hash=att.content_hash,
+                    extracted_text=extracted_text,
                 )
             )
             count += 1

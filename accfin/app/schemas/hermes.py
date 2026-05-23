@@ -56,8 +56,18 @@ class ExtractInvoiceRequest(BaseModel):
     attachment_id: UUID | None = None
     mime_type: str = "application/pdf"
     extracted_text: str = ""
+    email_body: str = ""
+    document_role: str = "ap"  # "ar" customer invoice | "ap" supplier invoice
     supplier_hint: str | None = None
+    customer_hint: str | None = None
     currency_hint: str = "SGD"
+
+
+class InvoiceLineItem(BaseModel):
+    description: str = ""
+    quantity: str | None = None
+    unit_price: str | None = None
+    amount: str | None = None
 
 
 class ExtractedInvoice(BaseModel):
@@ -65,10 +75,14 @@ class ExtractedInvoice(BaseModel):
     invoice_date: date | None = None
     due_date: date | None = None
     vendor_name: str | None = None
+    customer_name: str | None = None
     po_reference: str | None = None
+    subtotal: str | None = None
     total_amount: str | None = None
     tax_amount: str | None = None
     currency: str = "SGD"
+    payment_terms: str | None = None
+    line_items: list[InvoiceLineItem] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
@@ -266,4 +280,21 @@ class ExtractExpenseClaimOutput(BaseModel):
 
 class ExtractExpenseClaimResponse(BaseModel):
     success: bool = True
+    confidence_score: float = 0.0
+    model_used: str = "qwen2.5:7b"
+    prompt_version: str = "expense_claim_extract-v1"
     output: ExtractExpenseClaimOutput | None = None
+    error_message: str | None = None
+
+
+class DocumentTextRequest(BaseModel):
+    filename: str = ""
+    mime_type: str
+    content_base64: str
+
+
+class DocumentTextResponse(BaseModel):
+    success: bool = True
+    extracted_text: str = ""
+    model_used: str = ""
+    error_message: str | None = None
