@@ -22,6 +22,11 @@
     if (c.amount_value == null) return '—';
     return `${c.amount_currency} ${c.amount_value}`;
   }
+
+  function formatActivity(c: CaseItem) {
+    const ts = c.last_activity_at || c.created_at;
+    return new Date(ts).toLocaleString();
+  }
 </script>
 
 <h1>Cases & Approvals</h1>
@@ -40,10 +45,11 @@
           <th>Case</th>
           <th>Type</th>
           <th>Status</th>
+          <th>Stage</th>
           <th>Counterparty</th>
           <th>Amount</th>
-          <th>Processing</th>
-          <th>Created</th>
+          <th>Last activity</th>
+          <th>Error</th>
         </tr>
       </thead>
       <tbody>
@@ -57,10 +63,11 @@
             </td>
             <td>{item.type}</td>
             <td>{item.status}</td>
+            <td>{item.processing_stage || '—'}</td>
             <td>{item.counterparty_name || '—'}</td>
             <td>{formatAmount(item)}</td>
-            <td>{item.processing_time_minutes != null ? `${item.processing_time_minutes} min` : '—'}</td>
-            <td>{new Date(item.created_at).toLocaleDateString()}</td>
+            <td>{formatActivity(item)}</td>
+            <td class="error-cell">{item.error_reason || '—'}</td>
           </tr>
         {/each}
       </tbody>
@@ -100,5 +107,10 @@
   }
   tr.overdue .indicator {
     color: #b91c1c;
+  }
+  .error-cell {
+    color: #c2410c;
+    max-width: 14rem;
+    word-break: break-word;
   }
 </style>

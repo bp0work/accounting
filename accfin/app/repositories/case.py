@@ -53,7 +53,12 @@ class CaseRepository:
         date_from: date | None = None,
         date_to: date | None = None,
     ) -> list[Case]:
-        q = select(Case).order_by(Case.created_at.desc()).limit(limit)
+        q = (
+            select(Case)
+            .options(selectinload(Case.timeline))
+            .order_by(Case.created_at.desc())
+            .limit(limit)
+        )
         if status:
             q = q.where(Case.status == status)
         q = self._date_range_filter(q, date_from=date_from, date_to=date_to)
@@ -86,6 +91,7 @@ class CaseRepository:
         now = datetime.now(UTC)
         q = (
             select(Case)
+            .options(selectinload(Case.timeline))
             .where(
                 Case.status.notin_(tuple(TERMINAL_STATUSES)),
                 Case.sla_deadline.isnot(None),

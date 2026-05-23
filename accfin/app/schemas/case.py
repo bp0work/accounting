@@ -29,6 +29,12 @@ class CaseResponse(BaseModel):
     sla_deadline: datetime | None = None
     processing_time_minutes: int | None = None
     is_overdue: bool = False
+    processing_stage: str | None = None
+    error_reason: str | None = None
+    status_reason: str | None = None
+    last_activity_at: datetime | None = None
+    workflow_metadata: dict = Field(default_factory=dict)
+    classification_metadata: dict = Field(default_factory=dict)
 
 
 class CaseListResponse(BaseModel):
@@ -64,7 +70,7 @@ class CaseStatusTransitionResponse(BaseModel):
 
 
 class TimelineEntryResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
     event_type: str
@@ -72,6 +78,7 @@ class TimelineEntryResponse(BaseModel):
     to_status: str | None
     actor: str
     description: str | None
+    metadata: dict = Field(default_factory=dict, validation_alias="extra_metadata")
     created_at: datetime
 
 

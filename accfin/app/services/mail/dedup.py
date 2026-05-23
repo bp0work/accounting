@@ -1,4 +1,4 @@
-"""Duplicate detection — Message-ID and content hash — `02` §7."""
+"""Duplicate detection — Message-ID only — `02` §7, `17` §2.1."""
 
 from uuid import UUID
 
@@ -25,7 +25,8 @@ class EmailDedupService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def check(self, *, message_id: str, content_hash: str | None) -> DedupResult:
+    async def check(self, *, message_id: str, content_hash: str | None = None) -> DedupResult:
+        _ = content_hash  # retained for API compatibility; dedupe is Message-ID only
         by_message = await self._session.execute(
             select(Email).where(Email.message_id == message_id)
         )
@@ -36,20 +37,5 @@ class EmailDedupService:
                 duplicate_of_id=existing.id,
                 reason="message_id",
             )
-
-        if content_hash:
-            by_hash = await self._session.execute(
-                select(Email)
-                .where(Email.content_hash == content_hash, Email.is_duplicate.is_(False))
-                .order_by(Email.received_at.asc())
-                .limit(1)
-            )
-            original = by_hash.scalar_one_or_none()
-            if original is not None:
-                return DedupResult(
-                    is_duplicate=True,
-                    duplicate_of_id=original.id,
-                    reason="content_hash",
-                )
 
         return DedupResult(is_duplicate=False)

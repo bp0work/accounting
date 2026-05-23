@@ -131,7 +131,10 @@ class Case(Base, TimestampMixin):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     timeline: Mapped[list["CaseTimeline"]] = relationship(
-        "CaseTimeline", back_populates="case", cascade="all, delete-orphan"
+        "CaseTimeline",
+        back_populates="case",
+        cascade="all, delete-orphan",
+        order_by="CaseTimeline.created_at",
     )
     workflow_instance: Mapped["WorkflowInstance | None"] = relationship(
         "WorkflowInstance", back_populates="case", uselist=False

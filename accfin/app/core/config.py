@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.1-mail-text-sanitize"
+        return "0.13.2-case-visibility"
 
     @property
     def edge_public_base_url(self) -> str:

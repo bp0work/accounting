@@ -29,6 +29,12 @@ from app.schemas.case import (
 from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
 from app.services.case_service import CaseService
+from app.services.case_visibility import (
+    error_reason,
+    last_activity_at,
+    processing_stage,
+    status_reason,
+)
 from fastapi import status
 
 router = APIRouter(tags=["Cases"])
@@ -42,6 +48,12 @@ def _case_response(case) -> CaseResponse:
             "sla_deadline": case.sla_deadline,
             "processing_time_minutes": processing_time_minutes(case),
             "is_overdue": is_case_overdue(case),
+            "processing_stage": processing_stage(case),
+            "error_reason": error_reason(case),
+            "status_reason": status_reason(case),
+            "last_activity_at": last_activity_at(case),
+            "workflow_metadata": case.workflow_metadata or {},
+            "classification_metadata": case.classification_metadata or {},
         }
     )
 
@@ -153,7 +165,8 @@ async def get_case_timeline(
     case = await repo.get(case_id)
     if not case:
         raise AppHTTPException(status.HTTP_404_NOT_FOUND, "CASE_NOT_FOUND", "Case not found")
-    return [TimelineEntryResponse.model_validate(t) for t in case.timeline]
+    entries = sorted(case.timeline, key=lambda t: t.created_at)
+    return [TimelineEntryResponse.model_validate(t) for t in entries]
 
 
 @router.get("/workflow/queues", response_model=QueueStatusResponse)

@@ -5,6 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
+| **0.13.2-case-visibility** | 2026-05-20 | *(pending)* | Case timeline audit trail on detail page; error reason + processing stage on list/dashboard; dedupe Message-ID only. finance-ui `0.13.0-case-dashboard`. |
 | **0.13.1-mail-text-sanitize** | 2026-05-20 | `be0d1e0` | Sanitize all mail text fields at ingest (`body_text`, `body_html`, `body_preview`, `subject`, `extracted_text`) — strip NUL and invalid UTF-8 before PostgreSQL insert. |
 | **0.13.0-executive-mail-sop** | 2026-05-20 | `4bf72a5` | Manager-first processing failure escalation (`ExecutiveMailService`); sender ack with `[CAS-…]` after case_number; failure notify only on manager reject; `finance_activity_log` at ingest/classify/workers. |
 | **0.12.9-mail-pdf-sanitize** | 2026-05-20 | `a4717ce` | Strip NUL bytes from PDF `extracted_text` before DB insert (`sanitize_extracted_text` in ingest + email_context). Fixes PostgreSQL `CharacterNotInRepertoireError`. |

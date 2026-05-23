@@ -176,6 +176,21 @@ class ClassificationService:
         )
         await self._cases.add_timeline(
             case_id=case.id,
+            event_type="created",
+            from_status=None,
+            to_status="inbound",
+            actor="mail-gateway",
+            description=f"Email received from {email.from_address}",
+            metadata={
+                "from_address": email.from_address,
+                "from_name": email.from_name,
+                "subject": email.subject,
+                "received_at": email.received_at.isoformat() if email.received_at else None,
+                "mailbox": email.mailbox_address,
+            },
+        )
+        await self._cases.add_timeline(
+            case_id=case.id,
             event_type="classification",
             from_status="inbound",
             to_status=case.status,
@@ -265,6 +280,22 @@ class ClassificationService:
         email.case_id = case.id
         email.case_number = case.case_number
         await self._session.flush()
+
+        await self._cases.add_timeline(
+            case_id=case.id,
+            event_type="created",
+            from_status=None,
+            to_status="on_hold",
+            actor="mail-gateway",
+            description=f"Email received from {email.from_address}",
+            metadata={
+                "from_address": email.from_address,
+                "from_name": email.from_name,
+                "subject": email.subject,
+                "received_at": email.received_at.isoformat() if email.received_at else None,
+                "mailbox": email.mailbox_address,
+            },
+        )
 
         await self._executive_mail.log_step(
             action="email_received",

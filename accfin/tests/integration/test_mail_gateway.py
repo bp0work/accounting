@@ -117,6 +117,60 @@ async def test_duplicate_detection_by_message_id(db_session: AsyncSession, tmp_p
 
 
 @pytest.mark.asyncio
+async def test_same_content_different_message_id_not_duplicate(
+    db_session: AsyncSession, tmp_path, monkeypatch
+):
+    """Similar body with distinct Message-ID must create separate email rows."""
+    monkeypatch.setenv("FINANCE_MAIL__ATTACHMENT_STORAGE_PATH", str(tmp_path))
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    addr = f"content-dup-{uuid.uuid4().hex[:8]}@bp0.work"
+    mailbox = MailGatewayConfig(
+        email_address=addr,
+        mailbox_mode="executive_agent",
+        server_host="bp0.work",
+        server_port=993,
+        username=addr,
+        password_encrypted="x",
+        is_active=True,
+    )
+    db_session.add(mailbox)
+    await db_session.flush()
+
+    body = b"Shared invoice body text for dedup policy test."
+    raw_a = (
+        b"From: vendor@example.com\r\n"
+        b"To: " + addr.encode() + b"\r\n"
+        b"Subject: Invoice A\r\n"
+        b"Message-ID: <msg-a-" + uuid.uuid4().hex[:8].encode() + b"@example.com>\r\n"
+        b"Date: Mon, 20 May 2026 10:00:00 +0000\r\n"
+        b"Content-Type: text/plain\r\n\r\n" + body
+    )
+    raw_b = (
+        b"From: vendor@example.com\r\n"
+        b"To: " + addr.encode() + b"\r\n"
+        b"Subject: Invoice B\r\n"
+        b"Message-ID: <msg-b-" + uuid.uuid4().hex[:8].encode() + b"@example.com>\r\n"
+        b"Date: Mon, 20 May 2026 11:00:00 +0000\r\n"
+        b"Content-Type: text/plain\r\n\r\n" + body
+    )
+    ingest = MailIngestService(db_session)
+    first = await ingest.ingest(
+        mailbox=mailbox, parsed=parse_rfc822(raw_a, mailbox_address=mailbox.email_address)
+    )
+    second = await ingest.ingest(
+        mailbox=mailbox, parsed=parse_rfc822(raw_b, mailbox_address=mailbox.email_address)
+    )
+    await db_session.commit()
+
+    assert first.is_duplicate is False
+    assert second.is_duplicate is False
+    assert first.id != second.id
+
+
+@pytest.mark.asyncio
 async def test_mail_status_api(async_client: AsyncClient, auditor_user: User):
     login = await async_client.post(
         "/auth/login",

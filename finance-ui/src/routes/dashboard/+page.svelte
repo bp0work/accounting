@@ -4,14 +4,17 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchDashboard, type CaseDashboard } from '$lib/api/cases';
+  import { fetchDashboard, listCases, type CaseDashboard, type CaseItem } from '$lib/api/cases';
 
   let data: CaseDashboard | null = null;
+  let recentCases: CaseItem[] = [];
   let error = '';
 
   onMount(async () => {
     try {
-      data = await fetchDashboard();
+      const [dash, cases] = await Promise.all([fetchDashboard(), listCases(50)]);
+      data = dash;
+      recentCases = cases.data;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load dashboard';
     }
@@ -21,6 +24,11 @@
     if (m == null) return '—';
     if (m < 60) return `${Math.round(m)} min`;
     return `${(m / 60).toFixed(1)} h`;
+  }
+
+  function formatActivity(c: CaseItem) {
+    const ts = c.last_activity_at || c.created_at;
+    return new Date(ts).toLocaleString();
   }
 </script>
 
@@ -79,7 +87,10 @@
             <th>Case</th>
             <th>Type</th>
             <th>Status</th>
+            <th>Stage</th>
             <th>Processing</th>
+            <th>Last activity</th>
+            <th>Error</th>
             <th>SLA deadline</th>
           </tr>
         </thead>
@@ -89,12 +100,48 @@
               <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
               <td>{c.type}</td>
               <td>{c.status}</td>
+              <td>{c.processing_stage || '—'}</td>
               <td>{c.processing_time_minutes ?? '—'} min</td>
+              <td>{formatActivity(c)}</td>
+              <td class="error-cell">{c.error_reason || '—'}</td>
               <td>{c.sla_deadline ? new Date(c.sla_deadline).toLocaleString() : '—'}</td>
             </tr>
           {/each}
         </tbody>
       </table>
+    </section>
+  {/if}
+
+  {#if recentCases.length > 0}
+    <section class="card">
+      <h2>Recent cases</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Case</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Stage</th>
+              <th>Last activity</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each recentCases as c}
+              <tr>
+                <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
+                <td>{c.type}</td>
+                <td>{c.status}</td>
+                <td>{c.processing_stage || '—'}</td>
+                <td>{formatActivity(c)}</td>
+                <td class="error-cell">{c.error_reason || '—'}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint"><a href="/approvals">View all cases →</a></p>
     </section>
   {/if}
 {/if}
@@ -139,5 +186,13 @@
   }
   .overdue-row {
     background: #fef2f2;
+  }
+  .error-cell {
+    color: #c2410c;
+    max-width: 12rem;
+    word-break: break-word;
+  }
+  .table-wrap {
+    overflow-x: auto;
   }
 </style>

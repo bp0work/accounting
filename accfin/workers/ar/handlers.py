@@ -148,6 +148,15 @@ class ARWorkerService:
             policy_action=policy_action,
             actor_name="ar-worker",
         )
+        await self._cases.add_timeline(
+            case_id=case.id,
+            event_type="status_change",
+            from_status=case.status,
+            to_status=case.status,
+            actor="ar-worker",
+            description=f"Policy check: {policy_action.get('type', 'unknown')}",
+            metadata={"policy_action": policy_action, "policy_tier": policy_action.get("tier")},
+        )
         tier = int(policy_action.get("tier", 2))
         stp = message.get("stp_eligible", False) and policy_action.get("type") == "auto_release"
         final_status = evaluate_extraction_path(
@@ -181,9 +190,45 @@ class ARWorkerService:
             "policy_tier": tier,
             "stp": final_status == "posted",
             "missing_fields": inv.missing_fields,
+            "invoice_number": inv.invoice_number,
+            "invoice_date": str(inv.invoice_date) if inv.invoice_date else None,
+            "vendor": case.counterparty_name,
+            "total_amount": str(amount),
+            "currency": inv.currency,
         }
+        await self._cases.add_timeline(
+            case_id=case.id,
+            event_type="status_change",
+            from_status="processing",
+            to_status="processing",
+            actor="ar-worker",
+            description="Invoice extraction completed",
+            metadata={
+                "invoice_number": inv.invoice_number,
+                "total_amount": str(amount),
+                "currency": inv.currency,
+                "vendor": case.counterparty_name,
+                "confidence": extraction.confidence_score,
+                "missing_fields": inv.missing_fields,
+            },
+        )
         await self._timeline_completed(case, "ar_invoice", inv.invoice_number, final_status, journal_id)
         if journal_id and final_status == "posted":
+            await self._cases.add_timeline(
+                case_id=case.id,
+                event_type="journal_linked",
+                from_status=final_status,
+                to_status=final_status,
+                actor="ar-worker",
+                description=f"Journal posted — AR debit 1300, revenue credit 4100, amount {amount} {inv.currency}",
+                metadata={
+                    "journal_entry_id": journal_id,
+                    "debit_account": "1300",
+                    "credit_account": "4100",
+                    "amount": str(amount),
+                    "currency": inv.currency,
+                },
+            )
             await self._executive_mail.log_journal_posted(
                 case=case,
                 mailbox_id=mailbox_id,
