@@ -5,7 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.12.8-finance-token-refresh** | 2026-05-20 | *(pending)* | finance-ui silent JWT refresh: store access + refresh in `localStorage`; proactive `POST /auth/refresh` within 2 min of expiry; redirect `/login` on failure. Package `0.12.5-finance-token-refresh`. |
+| **0.12.8-finance-token-refresh** | 2026-05-20 | `2dfe475` | finance-ui silent JWT refresh: store access + refresh in `localStorage`; proactive `POST /auth/refresh` within 2 min of expiry; redirect `/login` on failure. Package `0.12.5-finance-token-refresh`. |
 | **0.12.7-ollama-extraction** | 2026-05-20 | `e3e0a1f` | Hermes Ollama extraction (`qwen2.5:7b`): `/extract/invoice`, `/extract/expense-claim`, `/extract/document-text`; mailbox-first classification (`accar`/`accap`/`accexp`); PDF text at ingest via pypdf. |
 | **0.12.6-gateway-imap-poller** | 2026-05-20 | `0669e6f` | Mail Gateway: enable `FINANCE_MAIL__POLL_ENABLED` in compose; fix IMAP poller async SQLAlchemy sessions (`gateway/imap/poller.py` — per-mailbox `async with session_factory()`, plain IMAP settings for `asyncio.to_thread`). Migration head `20260530_047`. |
 | **0.12.5-finance-dashboard** | 2026-05-22 | `51b30d4` | Finance oversight UI: dashboard, all-cases list, CSV `GET /cases/export`, branding **mmlogistix Finance Operations**. finance-ui `0.12.4-finance-dashboard`. |
