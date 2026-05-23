@@ -5,7 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.13.3-case-retry-hermes-timeout** | 2026-05-20 | *(pending)* | Hermes client default timeout 120s (slow Ollama CPU). `POST /cases/{id}/retry` requeues `exception`/`manual_review` to `accounts_queue`; Retry button on case detail. finance-ui `0.13.1-case-retry`. |
+| **0.13.3-case-retry-hermes-timeout** | 2026-05-20 | `8d049a1` | Hermes client default timeout 120s (slow Ollama CPU). `POST /cases/{id}/retry` requeues `exception`/`manual_review` to `accounts_queue`; Retry button on case detail. finance-ui `0.13.1-case-retry`. |
 | **0.13.2-case-visibility** | 2026-05-20 | `0286578` | Case timeline audit trail on detail page; error reason + processing stage on list/dashboard; dedupe Message-ID only. finance-ui `0.13.0-case-dashboard`. |
 | **0.13.1-mail-text-sanitize** | 2026-05-20 | `be0d1e0` | Sanitize all mail text fields at ingest (`body_text`, `body_html`, `body_preview`, `subject`, `extracted_text`) — strip NUL and invalid UTF-8 before PostgreSQL insert. |
 | **0.13.0-executive-mail-sop** | 2026-05-20 | `4bf72a5` | Manager-first processing failure escalation (`ExecutiveMailService`); sender ack with `[CAS-…]` after case_number; failure notify only on manager reject; `finance_activity_log` at ingest/classify/workers. |
