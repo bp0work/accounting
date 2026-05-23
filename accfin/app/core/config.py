@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.4-ollama-healthcheck-wget"
+        return "0.13.5-ollama-healthcheck-cli"
 
     @property
     def edge_public_base_url(self) -> str:
