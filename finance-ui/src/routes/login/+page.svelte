@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { setToken } from '$lib/api/client';
+  import { setTokens } from '$lib/api/client';
   import { APP_TITLE } from '$lib/branding';
 
   let username = '';
@@ -16,7 +16,10 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || 'Login failed');
-      setToken(data.access_token);
+      if (!data.access_token || !data.refresh_token) {
+        throw new Error('Login response missing tokens');
+      }
+      setTokens(data.access_token, data.refresh_token);
       const { goto } = await import('$app/navigation');
       await goto('/dashboard');
     } catch (e) {

@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.12.7-ollama-extraction` (migrations `001`–`047`; finance-ui `0.12.4-finance-dashboard`)
+**Target version:** `0.12.8-finance-token-refresh` (migrations `001`–`047`; finance-ui `0.12.5-finance-token-refresh`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -122,9 +122,10 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.12.7-ollama-extraction` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.12.8-finance-token-refresh` |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
-| E4.1c | Browser login → `/approvals` | Pending approvals load (client-side auth; not SSR 401) |
+| E4.1c | Browser login → remain signed in >15 min (silent refresh) | Session persists; no redirect to `/login` until refresh token expires (7d) |
+| E4.1d | Browser login → `/approvals` | Pending approvals load (client-side auth; not SSR 401) |
 | E4.2 | `GET /metrics` (if enabled) | Prometheus scrape OK |
 | E4.3 | Login + `GET /mail/status` | Executive/manager mailbox counts |
 | E4.4 | Cron job (dry run with `force=true` in staging only) | CSV path + `row_count` |
