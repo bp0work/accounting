@@ -13,9 +13,9 @@ IMAGE_MIMES = frozenset({"image/jpeg", "image/jpg", "image/png"})
 
 def sanitize_extracted_text(text: str | None) -> str | None:
     """Remove NUL bytes — PostgreSQL text columns reject \\x00."""
-    if not text:
-        return text
-    return text.replace("\x00", "")
+    from app.services.mail.text_sanitize import sanitize_text
+
+    return sanitize_text(text)
 
 
 def extract_pdf_text(content: bytes) -> str:

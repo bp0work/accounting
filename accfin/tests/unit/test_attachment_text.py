@@ -7,6 +7,7 @@ def test_sanitize_extracted_text_strips_null_bytes():
     assert sanitize_extracted_text("hello\x00world") == "helloworld"
     assert sanitize_extracted_text(None) is None
     assert sanitize_extracted_text("") == ""
+    assert sanitize_extracted_text("a\u00a0b") == "a b"
 
 
 def test_extract_pdf_text_from_minimal_pdf():

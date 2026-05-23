@@ -12,6 +12,19 @@ from app.services.mail.dedup import EmailDedupService
 from app.services.mail.intake_queue import enqueue_intake
 from app.services.mail.parser import ParsedEmail
 from app.services.mail.storage import save_attachment
+from app.services.mail.text_sanitize import sanitize_text as _sanitize_text
+
+
+def _sanitize_parsed(parsed: ParsedEmail) -> ParsedEmail:
+    """Sanitize all parsed text fields before ORM insert."""
+    parsed.from_name = _sanitize_text(parsed.from_name)
+    parsed.subject = _sanitize_text(parsed.subject) or "(no subject)"
+    parsed.body_text = _sanitize_text(parsed.body_text)
+    parsed.body_html = _sanitize_text(parsed.body_html)
+    parsed.body_preview = _sanitize_text(parsed.body_preview)
+    for att in parsed.attachments:
+        att.filename = _sanitize_text(att.filename) or att.filename
+    return parsed
 
 
 class MailIngestService:
@@ -26,6 +39,7 @@ class MailIngestService:
         mailbox: MailGatewayConfig,
         parsed: ParsedEmail,
     ) -> Email:
+        parsed = _sanitize_parsed(parsed)
         dedup = await self._dedup.check(
             message_id=parsed.message_id,
             content_hash=parsed.content_hash,
