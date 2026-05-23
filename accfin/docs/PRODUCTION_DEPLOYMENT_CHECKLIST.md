@@ -130,6 +130,8 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E4.3 | Login + `GET /mail/status` | Executive/manager mailbox counts |
 | E4.4 | Cron job (dry run with `force=true` in staging only) | CSV path + `row_count` |
 | E4.5 | Expense worker health `:8014/health` | Healthy after Gate C |
+| E4.6 | `docker compose ps ollama` | Status **healthy** (`ollama list` healthcheck; `0.13.5-ollama-healthcheck-cli`) |
+| E4.7 | `docker compose ps hermes` | **healthy** (depends on Ollama) |
 
 ### E5 — Explicit exclusions
 
