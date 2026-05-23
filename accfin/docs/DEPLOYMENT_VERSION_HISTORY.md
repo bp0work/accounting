@@ -18,6 +18,6 @@ Finance-ui package version: `finance-ui/package.json`.
 | *(infra, same API)* | 2026-05-19 | `8a8564e` | Production Traefik HTTPS, Let's Encrypt, finance-ui + fastapi routing (superseded by 0.12.0+). |
 | **0.11.0-phase11b** | 2026-05-19 | `43430d2` | Phase 11b: executive email SOP, migrations `045`–`046`, daily log job, escalations. |
 
-**Spec alignment:** `platform_dox/11` v2.22+, `14` v2.19+, `17` v2.10+, `15` v2.12+, `05` v1.3.12+, `00` v2.39+.
+**Spec alignment:** `platform_dox/11` v2.23+, `14` v2.20+, `04` v2.8+, `17` v2.11+, `15` v2.12+, `05` v1.3.12+, `00` v2.40+.
 
 **Production checklist:** `PRODUCTION_DEPLOYMENT_CHECKLIST.md` (Gate E).
