@@ -121,6 +121,14 @@
     {#if item.sla_deadline}
       <p>SLA deadline: {new Date(item.sla_deadline).toLocaleString()}</p>
     {/if}
+    {#if retryableStatuses.has(item.status)}
+      <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
+        {retrying ? 'Requeuing…' : 'Retry processing'}
+      </button>
+      {#if retryMessage}
+        <p class="hint success">{retryMessage}</p>
+      {/if}
+    {/if}
   </div>
 
   <section class="card timeline">
@@ -181,6 +189,9 @@
   }
   .hint {
     color: #64748b;
+  }
+  .hint.success {
+    color: #15803d;
   }
   .retry {
     margin-top: 0.75rem;
