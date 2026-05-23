@@ -1,6 +1,6 @@
 # Traefik dynamic configuration (`accfin/traefik/dynamic/`)
 
-**Deploy version:** `0.13.1-mail-text-sanitize` (see `app/core/config.py` and `docs/DEPLOYMENT_VERSION_HISTORY.md`).
+**Deploy version:** `0.13.2-case-visibility` (see `app/core/config.py` and `docs/DEPLOYMENT_VERSION_HISTORY.md`).
 
 Mounted read-only at `/etc/traefik/dynamic` (see `docker-compose.yml` → `traefik` service).
 
