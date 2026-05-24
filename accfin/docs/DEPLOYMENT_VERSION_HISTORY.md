@@ -5,7 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.13.7-worker-blpop-idle-fix** | 2026-05-20 | *(pending)* | `QueueConsumer` default BLPOP block timeout 5s (`workers/base.py`) — reduces idle CPU spin on empty queues (accounts, AR, AP, expense). |
+| **0.13.7-worker-blpop-idle-fix** | 2026-05-20 | `beef354` | `QueueConsumer` default BLPOP block timeout 5s (`workers/base.py`) — reduces idle CPU spin on empty queues (accounts, AR, AP, expense). |
 | **0.13.6-finance-security-2fa** | 2026-05-20 | `9d3fac0` | finance-ui `/settings/security`: 2FA setup (QR via `qrcode`), verify, disable; mandatory-2FA banner for `cfo`/`finance_manager`. Retry button on case detail. Package `0.13.3-security-2fa`. Feature `47c0f57`. |
 | **0.13.5-ollama-healthcheck-cli** | 2026-05-20 | `6927279` | Ollama Docker healthcheck: `ollama list` via bundled CLI (image has neither `curl` nor `wget`). Supersedes `0.13.4` wget attempt. Feature `e99848b`. |
 | **0.13.4-ollama-healthcheck-wget** | 2026-05-20 | `a405f86` | *(superseded)* Ollama healthcheck used `wget` — unavailable in image. Compose fix `d6bd61d`. |
