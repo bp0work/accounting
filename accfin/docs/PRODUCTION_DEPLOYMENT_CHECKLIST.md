@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.13.5-ollama-healthcheck-cli` (migrations `001`–`047`; finance-ui `0.13.1-case-retry`)
+**Target version:** `0.13.6-finance-security-2fa` (migrations `001`–`047`; finance-ui `0.13.3-security-2fa`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -122,7 +122,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.5-ollama-healthcheck-cli` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.6-finance-security-2fa` |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
 | E4.1c | Browser login → remain signed in >15 min (silent refresh) | Session persists; no redirect to `/login` until refresh token expires (7d) |
 | E4.1d | Browser login → `/approvals` | Pending approvals load (client-side auth; not SSR 401) |
@@ -132,6 +132,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E4.5 | Expense worker health `:8014/health` | Healthy after Gate C |
 | E4.6 | `docker compose ps ollama` | Status **healthy** (`ollama list` healthcheck; `0.13.5-ollama-healthcheck-cli`) |
 | E4.7 | `docker compose ps hermes` | **healthy** (depends on Ollama) |
+| E4.8 | Browser: `/settings/security` (logged in) | 2FA status shown; Enable flow renders QR (`0.13.6-finance-security-2fa`) |
 
 ### E5 — Explicit exclusions
 

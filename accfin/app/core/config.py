@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.5-ollama-healthcheck-cli"
+        return "0.13.6-finance-security-2fa"
 
     @property
     def edge_public_base_url(self) -> str:
