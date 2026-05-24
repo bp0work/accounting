@@ -103,11 +103,10 @@
       <label for="totp">Authentication code</label><br />
       <input
         id="totp"
+        type="text"
         bind:value={totpCode}
-        inputmode="numeric"
         autocomplete="one-time-code"
         maxlength="6"
-        pattern="[0-9]{6}"
         required
         disabled={loading}
         style="width: 100%; padding: 0.5rem; letter-spacing: 0.2em;"
