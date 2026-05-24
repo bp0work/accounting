@@ -103,7 +103,7 @@ async def test_send_message_calls_aiosmtplib(monkeypatch):
 @pytest.mark.asyncio
 async def test_try_send_pending_marks_row_sent():
     from app.models.executive_mail import PendingOutboundEmail
-    from app.services.outbound_mail_service import OutboundMailService
+    from app.services.outbound_mail_service import OutboundMailService, OutboundSendPlan
 
     outbound = PendingOutboundEmail(
         id=uuid.uuid4(),
@@ -122,37 +122,36 @@ async def test_try_send_pending_marks_row_sent():
             "reattach_inbound_attachments": True,
         },
     )
-    mailbox = MagicMock()
-    mailbox.id = outbound.mailbox_id
-    mailbox.email_address = "accap.mmlogistix@bp0.work"
-    mailbox.display_name = "AP"
-    mailbox.username = "accap.mmlogistix@bp0.work"
-    mailbox.password_encrypted = "enc"
+    plan = OutboundSendPlan(
+        outbound_id=outbound.id,
+        to_addresses=["vendor@example.com"],
+        cc_addresses=[],
+        subject=outbound.subject,
+        body_plain="Thanks — rendered",
+        body_html="<p>Thanks</p>",
+        attachments=[],
+        in_reply_to="<orig@test>",
+        references=["<orig@test>"],
+        from_address="accap.mmlogistix@bp0.work",
+        from_name="AP",
+        username="accap.mmlogistix@bp0.work",
+        password="pw",
+        metadata=dict(outbound.metadata_ or {}),
+    )
 
     session = AsyncMock()
-
-    async def execute_side_effect(_stmt):
-        result = MagicMock()
-        result.scalar_one_or_none.return_value = mailbox
-        return result
-
-    session.execute = AsyncMock(side_effect=execute_side_effect)
     session.flush = AsyncMock()
 
     svc = OutboundMailService(session)
     svc._smtp_ready = MagicMock(return_value=True)  # type: ignore[method-assign]
 
-    with patch.object(svc, "_load_source_email", new=AsyncMock(return_value=None)):
-        with patch(
-            "app.services.outbound_mail_service.decrypt_field",
-            return_value="pw",
+    with patch.object(svc, "_build_send_plan", new=AsyncMock(return_value=plan)):
+        with patch.object(
+            svc._smtp,
+            "send_message",
+            new=AsyncMock(return_value="<msg@test>"),
         ):
-            with patch.object(
-                svc._smtp,
-                "send_message",
-                new=AsyncMock(return_value="<msg@test>"),
-            ):
-                wire_id = await svc.try_send_pending(outbound)
+            wire_id = await svc.try_send_pending(outbound)
 
     assert wire_id == "<msg@test>"
     assert outbound.status == "sent"

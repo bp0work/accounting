@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -13,9 +14,10 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.crypto import decrypt_field
+from app.core.database import get_session_factory
 from app.models.case import Case
 from app.models.executive_mail import CaseEscalation, PendingOutboundEmail
-from app.models.mail import Email, MailGatewayConfig
+from app.models.mail import Email, EmailAttachment, MailGatewayConfig
 from app.services import mail_template_renderer as templates
 from app.services.smtp_mail_service import MailAttachment, SmtpMailService
 
@@ -25,6 +27,38 @@ PREFERRED_DAILY_LOG_SENDERS = (
     "acc.mmlogistix@bp0.work",
     "system.mmlogistix@bp0.work",
 )
+
+
+@dataclass(frozen=True)
+class AckSourceData:
+    """Plain email fields for ack templates — no ORM after external awaits."""
+
+    message_id: str
+    from_name: str | None
+    subject: str
+    body_plain: str
+    attachment_filenames: list[str]
+    received_at_display: str
+
+
+@dataclass(frozen=True)
+class OutboundSendPlan:
+    """SMTP payload built entirely inside an async DB session."""
+
+    outbound_id: UUID
+    to_addresses: list[str]
+    cc_addresses: list[str]
+    subject: str
+    body_plain: str
+    body_html: str | None
+    attachments: list[MailAttachment]
+    in_reply_to: str | None
+    references: list[str] | None
+    from_address: str
+    from_name: str | None
+    username: str
+    password: str
+    metadata: dict
 
 
 class OutboundMailService:
@@ -45,55 +79,53 @@ class OutboundMailService:
             mid = f"<{mid}>"
         return mid
 
-    async def _load_mailbox(self, mailbox_id: UUID) -> MailGatewayConfig | None:
-        result = await self._session.execute(
+    async def _load_mailbox(self, session: AsyncSession, mailbox_id: UUID) -> MailGatewayConfig | None:
+        result = await session.execute(
             select(MailGatewayConfig).where(MailGatewayConfig.id == mailbox_id)
         )
         return result.scalar_one_or_none()
 
-    async def _load_source_email(self, email_id: UUID | None) -> Email | None:
-        if email_id is None:
-            return None
-        result = await self._session.execute(
+    async def _load_ack_source_data(
+        self, session: AsyncSession, email_id: UUID
+    ) -> AckSourceData | None:
+        result = await session.execute(
             select(Email)
             .options(selectinload(Email.attachments))
             .where(Email.id == email_id)
         )
-        return result.scalar_one_or_none()
+        email = result.scalar_one_or_none()
+        if email is None:
+            return None
 
-    async def _resolve_daily_log_mailbox(self) -> MailGatewayConfig | None:
-        preferred = self._settings.daily_log_sender_mailbox.strip().lower()
-        candidates = [preferred, *PREFERRED_DAILY_LOG_SENDERS]
-        seen: set[str] = set()
-        for email in candidates:
-            key = email.lower()
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            result = await self._session.execute(
-                select(MailGatewayConfig).where(
-                    MailGatewayConfig.email_address == email,
-                    MailGatewayConfig.is_active.is_(True),
-                )
-            )
-            mailbox = result.scalar_one_or_none()
-            if mailbox is not None:
-                return mailbox
+        body = (email.body_text or email.body_preview or "").strip()
+        if len(body) > 2000:
+            body = body[:2000] + "\n…"
 
-        result = await self._session.execute(
-            select(MailGatewayConfig)
-            .where(MailGatewayConfig.is_active.is_(True))
-            .order_by(MailGatewayConfig.email_address.asc())
-            .limit(1)
+        return AckSourceData(
+            message_id=email.message_id,
+            from_name=email.from_name,
+            subject=email.subject,
+            body_plain=body,
+            attachment_filenames=[att.filename for att in email.attachments],
+            received_at_display=email.received_at.isoformat() if email.received_at else "",
         )
-        return result.scalar_one_or_none()
 
-    def _inbound_attachments(self, email: Email | None, *, reattach: bool) -> list[MailAttachment]:
-        if not reattach or email is None:
+    async def _load_reattach_attachments(
+        self,
+        session: AsyncSession,
+        email_id: UUID,
+        *,
+        reattach: bool,
+    ) -> list[MailAttachment]:
+        if not reattach:
             return []
+
+        result = await session.execute(
+            select(EmailAttachment).where(EmailAttachment.email_id == email_id)
+        )
         base = Path(self._settings.attachment_storage_path)
         attachments: list[MailAttachment] = []
-        for att in email.attachments:
+        for att in result.scalars().all():
             path = base / att.storage_path
             if not path.is_file():
                 logger.warning("Attachment missing for outbound reattach: %s", path)
@@ -107,24 +139,115 @@ class OutboundMailService:
             )
         return attachments
 
-    @staticmethod
-    def _quote_original_body(email: Email, *, max_chars: int = 2000) -> str:
-        body = (email.body_text or email.body_preview or "").strip()
-        if len(body) > max_chars:
-            return body[:max_chars] + "\n…"
-        return body
-
-    def _ack_template_context(self, source_email: Email, case_number: str) -> dict:
-        filenames = [att.filename for att in (source_email.attachments or [])]
-        received = source_email.received_at.isoformat() if source_email.received_at else ""
+    def _ack_template_context(self, ack: AckSourceData, case_number: str) -> dict:
         return {
             "case_number": case_number,
-            "sender_name": source_email.from_name,
-            "original_subject": source_email.subject,
-            "attachment_filenames": filenames,
-            "received_at_display": received,
-            "original_body_plain": self._quote_original_body(source_email),
+            "sender_name": ack.from_name,
+            "original_subject": ack.subject,
+            "attachment_filenames": ack.attachment_filenames,
+            "received_at_display": ack.received_at_display,
+            "original_body_plain": ack.body_plain,
         }
+
+    async def _build_send_plan(
+        self,
+        session: AsyncSession,
+        outbound: PendingOutboundEmail,
+    ) -> OutboundSendPlan | None:
+        if outbound.status != "approved":
+            return None
+
+        mailbox = await self._load_mailbox(session, outbound.mailbox_id)
+        if mailbox is None:
+            logger.warning("Outbound %s: mailbox %s not found", outbound.id, outbound.mailbox_id)
+            return None
+
+        meta = dict(outbound.metadata_ or {})
+        template_key = meta.get("template")
+        body_plain = outbound.body_plain
+        body_html = outbound.body_html
+        in_reply_to: str | None = None
+        references: list[str] | None = None
+        reattach = bool(meta.get("reattach_inbound_attachments"))
+        attachments: list[MailAttachment] = []
+
+        if outbound.email_id:
+            ack_data = await self._load_ack_source_data(session, outbound.email_id)
+            if ack_data is not None:
+                in_reply_to = self._normalize_msg_id(ack_data.message_id)
+                references = [in_reply_to] if in_reply_to else None
+
+                if template_key == "mail.intake.acknowledged":
+                    ctx = self._ack_template_context(
+                        ack_data,
+                        str(meta.get("case_number", "")),
+                    )
+                    body_plain, body_html = templates.render_acknowledgement(ctx)
+                    if not reattach and ctx["attachment_filenames"]:
+                        meta["reattach_inbound_attachments"] = True
+                        reattach = True
+
+            attachments = await self._load_reattach_attachments(
+                session,
+                outbound.email_id,
+                reattach=reattach,
+            )
+
+        return OutboundSendPlan(
+            outbound_id=outbound.id,
+            to_addresses=list(outbound.to_addresses),
+            cc_addresses=list(outbound.cc_addresses or []),
+            subject=outbound.subject,
+            body_plain=body_plain,
+            body_html=body_html,
+            attachments=attachments,
+            in_reply_to=in_reply_to,
+            references=references,
+            from_address=mailbox.email_address,
+            from_name=mailbox.display_name,
+            username=mailbox.username,
+            password=decrypt_field(mailbox.password_encrypted),
+            metadata=meta,
+        )
+
+    async def _mark_pending_sent(
+        self,
+        session: AsyncSession,
+        *,
+        outbound_id: UUID,
+        wire_id: str,
+        metadata: dict,
+    ) -> None:
+        result = await session.execute(
+            select(PendingOutboundEmail).where(PendingOutboundEmail.id == outbound_id)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return
+        row.status = "sent"
+        row.sent_at = datetime.now(UTC)
+        row.smtp_message_id = wire_id
+        metadata.pop("last_send_error", None)
+        row.metadata_ = metadata
+        await session.flush()
+
+    async def _mark_pending_send_failed(
+        self,
+        session: AsyncSession,
+        *,
+        outbound_id: UUID,
+        metadata: dict,
+        error: str,
+    ) -> None:
+        result = await session.execute(
+            select(PendingOutboundEmail).where(PendingOutboundEmail.id == outbound_id)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return
+        metadata["last_send_error"] = error[:500]
+        row.metadata_ = metadata
+        await session.flush()
 
     async def try_send_pending(
         self,
@@ -138,65 +261,45 @@ class OutboundMailService:
             logger.debug("SMTP not configured; leaving outbound %s queued", outbound.id)
             return None
 
-        mailbox = await self._load_mailbox(outbound.mailbox_id)
-        if mailbox is None:
-            logger.warning("Outbound %s: mailbox %s not found", outbound.id, outbound.mailbox_id)
+        # Same-session path (classification / executive mail during open transaction).
+        plan = await self._build_send_plan(self._session, outbound)
+        if plan is None:
             return None
-
-        if source_email is None and outbound.email_id:
-            source_email = await self._load_source_email(outbound.email_id)
-
-        meta = dict(outbound.metadata_ or {})
-        template_key = meta.get("template")
-        body_plain = outbound.body_plain
-        body_html = outbound.body_html
-
-        if template_key == "mail.intake.acknowledged" and source_email is not None:
-            ctx = self._ack_template_context(
-                source_email,
-                str(meta.get("case_number", "")),
-            )
-            body_plain, body_html = templates.render_acknowledgement(ctx)
-            if not meta.get("reattach_inbound_attachments") and ctx["attachment_filenames"]:
-                meta["reattach_inbound_attachments"] = True
-
-        reattach = bool(meta.get("reattach_inbound_attachments"))
-        attachments = self._inbound_attachments(source_email, reattach=reattach)
-
-        in_reply_to = None
-        references: list[str] | None = None
-        if source_email is not None:
-            in_reply_to = self._normalize_msg_id(source_email.message_id)
-            references = [in_reply_to] if in_reply_to else None
 
         try:
-            password = decrypt_field(mailbox.password_encrypted)
             wire_id = await self._smtp.send_message(
-                from_address=mailbox.email_address,
-                from_name=mailbox.display_name,
-                username=mailbox.username,
-                password=password,
-                to_addresses=list(outbound.to_addresses),
-                cc_addresses=list(outbound.cc_addresses or []),
-                subject=outbound.subject,
-                body_plain=body_plain,
-                body_html=body_html,
-                attachments=attachments,
-                in_reply_to=in_reply_to,
-                references=references,
+                from_address=plan.from_address,
+                from_name=plan.from_name,
+                username=plan.username,
+                password=plan.password,
+                to_addresses=plan.to_addresses,
+                cc_addresses=plan.cc_addresses,
+                subject=plan.subject,
+                body_plain=plan.body_plain,
+                body_html=plan.body_html,
+                attachments=plan.attachments,
+                in_reply_to=plan.in_reply_to,
+                references=plan.references,
             )
         except Exception as exc:
-            meta["last_send_error"] = str(exc)[:500]
-            outbound.metadata_ = meta
-            await self._session.flush()
+            await self._mark_pending_send_failed(
+                self._session,
+                outbound_id=plan.outbound_id,
+                metadata=plan.metadata,
+                error=str(exc),
+            )
             return None
 
+        await self._mark_pending_sent(
+            self._session,
+            outbound_id=plan.outbound_id,
+            wire_id=wire_id,
+            metadata=plan.metadata,
+        )
         outbound.status = "sent"
         outbound.sent_at = datetime.now(UTC)
         outbound.smtp_message_id = wire_id
-        meta.pop("last_send_error", None)
-        outbound.metadata_ = meta
-        await self._session.flush()
+        outbound.metadata_ = plan.metadata
         return wire_id
 
     async def try_send_manager_escalation(
@@ -259,6 +362,33 @@ class OutboundMailService:
         await self._session.flush()
         return wire_id
 
+    async def _resolve_daily_log_mailbox(self) -> MailGatewayConfig | None:
+        preferred = self._settings.daily_log_sender_mailbox.strip().lower()
+        candidates = [preferred, *PREFERRED_DAILY_LOG_SENDERS]
+        seen: set[str] = set()
+        for email in candidates:
+            key = email.lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            result = await self._session.execute(
+                select(MailGatewayConfig).where(
+                    MailGatewayConfig.email_address == email,
+                    MailGatewayConfig.is_active.is_(True),
+                )
+            )
+            mailbox = result.scalar_one_or_none()
+            if mailbox is not None:
+                return mailbox
+
+        result = await self._session.execute(
+            select(MailGatewayConfig)
+            .where(MailGatewayConfig.is_active.is_(True))
+            .order_by(MailGatewayConfig.email_address.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def send_daily_log(
         self,
         *,
@@ -310,20 +440,82 @@ class OutboundMailService:
             return None
 
     async def flush_approved(self, *, limit: int = 25) -> int:
-        """Send approved pending rows — useful for cron or startup catch-up."""
+        """Send approved pending rows — each via phased session_factory (cron catch-up)."""
         if not self._smtp_ready():
             return 0
 
         result = await self._session.execute(
-            select(PendingOutboundEmail)
+            select(PendingOutboundEmail.id)
             .where(PendingOutboundEmail.status == "approved")
             .order_by(PendingOutboundEmail.created_at.asc())
             .limit(limit)
         )
-        rows = list(result.scalars().all())
+        outbound_ids = [row[0] for row in result.all()]
         sent = 0
-        for row in rows:
-            wire_id = await self.try_send_pending(row)
-            if wire_id:
+        for outbound_id in outbound_ids:
+            if await send_pending_outbound_email(outbound_id):
                 sent += 1
         return sent
+
+
+async def send_pending_outbound_email(outbound_id: UUID) -> str | None:
+    """
+    Production catch-up path: load → SMTP → persist in separate session scopes.
+    Mirrors `gateway/imap/poller.py` / accounts classification phased DB pattern.
+    """
+    if not get_settings().smtp_configured:
+        return None
+
+    factory = get_session_factory()
+    smtp = SmtpMailService()
+
+    async with factory() as session:
+        svc = OutboundMailService(session)
+        result = await session.execute(
+            select(PendingOutboundEmail).where(PendingOutboundEmail.id == outbound_id)
+        )
+        outbound = result.scalar_one_or_none()
+        if outbound is None or outbound.status != "approved":
+            return None
+        plan = await svc._build_send_plan(session, outbound)
+        if plan is None:
+            return None
+
+    try:
+        wire_id = await smtp.send_message(
+            from_address=plan.from_address,
+            from_name=plan.from_name,
+            username=plan.username,
+            password=plan.password,
+            to_addresses=plan.to_addresses,
+            cc_addresses=plan.cc_addresses,
+            subject=plan.subject,
+            body_plain=plan.body_plain,
+            body_html=plan.body_html,
+            attachments=plan.attachments,
+            in_reply_to=plan.in_reply_to,
+            references=plan.references,
+        )
+    except Exception as exc:
+        async with factory() as session:
+            svc = OutboundMailService(session)
+            await svc._mark_pending_send_failed(
+                session,
+                outbound_id=plan.outbound_id,
+                metadata=plan.metadata,
+                error=str(exc),
+            )
+            await session.commit()
+        return None
+
+    async with factory() as session:
+        svc = OutboundMailService(session)
+        await svc._mark_pending_sent(
+            session,
+            outbound_id=plan.outbound_id,
+            wire_id=wire_id,
+            metadata=plan.metadata,
+        )
+        await session.commit()
+
+    return wire_id
