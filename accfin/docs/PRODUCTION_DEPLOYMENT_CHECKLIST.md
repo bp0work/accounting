@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.13.15-ap-missing-fields-escalation` (migrations `001`–`047`; finance-ui `0.13.6-manual-review-detail`)
+**Target version:** `0.13.16-escalation-inbound-attachments` (migrations `001`–`047`; finance-ui `0.13.6-manual-review-detail`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -61,6 +61,7 @@ Reference: `19_Expense_Worker_Specification.md` §1, §11.
 | D1e | `accounts-worker` mounts `attachment-data` at `/data/attachments`; Wasabi archive + ack re-attach find inbound PDFs (`0.13.13`) | ☐ |
 | D1f | Classified cases appear on `accounts_queue` and AP/AR/expense workers consume them (`0.13.14`) | ☐ |
 | D1g | AP `manual_review` (missing fields) escalates to manager mailbox with extracted/missing detail (`0.13.15`) | ☐ |
+| D1h | Manager escalation email includes original inbound attachments (`0.13.16`) | ☐ |
 | D2 | Manager mailboxes (`acc`, `fin`, `cfo`, `ceo`) are **not** on intake poller | ☐ |
 | D3 | `requires_outbound_client_approval` backfill applied (migration `045`) | ☐ |
 | D4 | Escalation / outbound approval emails include `[CAS-…]` in Subject | ☐ |
@@ -151,7 +152,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.15-ap-missing-fields-escalation` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.16-escalation-inbound-attachments` |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
 | E4.1c | Browser login → remain signed in >15 min (silent refresh) | Session persists; no redirect to `/login` until refresh token expires (7d) |
 | E4.1d | Browser login → `/approvals` | Pending approvals load (client-side auth; not SSR 401) |
@@ -175,7 +176,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E5.3 | Wasabi `logs/finance_daily_{date}.csv` upload verified (when credentials live) | ☐ |
 | E5.3a | Wasabi `transactions/{case_number}/` attachment archive on intake verified (`FINANCE_WASABI__ARCHIVE_ON_INTAKE=true`) | ☐ |
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
-| E5.5 | Outbound SMTP: manager escalation (incl. missing-fields template `0.13.15`), ack, clarification on Request More Info | ☐ |
+| E5.5 | Outbound SMTP: manager escalation (incl. missing-fields template `0.13.15` + inbound re-attach `0.13.16`), ack, clarification on Request More Info | ☐ |
 | E5.6 | finance-ui case detail shows manual review panel (`0.13.6-manual-review-detail`) | ☐ |
 
 ---

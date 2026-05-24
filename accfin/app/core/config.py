@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.15-ap-missing-fields-escalation"
+        return "0.13.16-escalation-inbound-attachments"
 
     @property
     def edge_public_base_url(self) -> str:

@@ -38,7 +38,8 @@ async def route_missing_fields_to_manager(
 ) -> dict:
     """
     Manager-first escalation when domain worker routes to manual_review for missing data.
-    Creates `case_escalations` and sends SMTP to `escalation_manager_email`.
+    Creates `case_escalations` and queues SMTP via `pending_outbound_emails` with
+    `reattach_inbound_attachments` when the source email has inbound files (`17` §10.4).
     """
     svc = ExecutiveMailService(session)
     cases = CaseRepository(session)

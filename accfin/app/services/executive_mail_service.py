@@ -6,14 +6,14 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.mail_action_token import issue_escalation_token
 from app.models.case import Case
 from app.models.executive_mail import CaseEscalation, PendingOutboundEmail
-from app.models.mail import Email, MailGatewayConfig
+from app.models.mail import Email, EmailAttachment, MailGatewayConfig
 from app.repositories.case import CaseRepository
 from app.repositories.executive_mail import CaseEscalationRepository
 from app.schemas.executive_mail import FinanceActivityLogCreate
@@ -99,6 +99,65 @@ class ExecutiveMailService:
         )
         return result.scalar_one_or_none()
 
+    async def _inbound_attachment_count(self, email_id: UUID | None) -> int:
+        if email_id is None:
+            return 0
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(EmailAttachment)
+            .where(EmailAttachment.email_id == email_id)
+        )
+        return int(result.scalar_one() or 0)
+
+    async def _queue_manager_escalation_outbound(
+        self,
+        *,
+        case: Case,
+        escalation: CaseEscalation,
+        executive: MailGatewayConfig,
+        email_id: UUID | None,
+        template_key: str,
+        summary: str,
+        error_detail: str,
+        missing_fields: list[str],
+        extracted_fields: dict[str, str | None],
+        extraction_confidence: float | None,
+        urls: dict[str, str],
+        reattach_inbound: bool,
+    ) -> PendingOutboundEmail:
+        if template_key == "manager.escalation.missing_fields":
+            subject = f"[{case.case_number}] Action required — missing invoice fields"
+        else:
+            subject = f"[{case.case_number}] Action required — manager review"
+
+        outbound = PendingOutboundEmail(
+            case_id=case.id,
+            email_id=email_id,
+            mailbox_id=executive.id,
+            to_addresses=[escalation.target_email],
+            cc_addresses=[],
+            subject=subject,
+            body_plain=summary,
+            message_type="other",
+            status="approved",
+            metadata_={
+                "template": template_key,
+                "case_number": case.case_number,
+                "escalation_id": str(escalation.id),
+                "reattach_inbound_attachments": reattach_inbound,
+                "summary": summary,
+                "error_reason": error_detail,
+                "executive_mailbox": executive.email_address,
+                "missing_fields": missing_fields,
+                "extracted_fields": extracted_fields,
+                "extraction_confidence": extraction_confidence,
+                **urls,
+            },
+        )
+        self._session.add(outbound)
+        await self._session.flush()
+        return outbound
+
     async def escalate_to_manager(
         self,
         *,
@@ -164,6 +223,11 @@ class ExecutiveMailService:
             },
         }
 
+        source_email_id = email.id if email else case.email_id
+        has_inbound_attachments = await self._inbound_attachment_count(source_email_id) > 0
+        if has_inbound_attachments:
+            context["notification"]["reattach_inbound_attachments"] = True
+
         row = CaseEscalation(
             id=escalation_id,
             case_id=case.id,
@@ -218,13 +282,30 @@ class ExecutiveMailService:
         )
         await self._session.flush()
 
-        smtp_id = await self._outbound.try_send_manager_escalation(
-            row,
+        outbound = await self._queue_manager_escalation_outbound(
             case=case,
-            executive_mailbox=executive,
-            source_email=email,
+            escalation=row,
+            executive=executive,
+            email_id=source_email_id,
+            template_key=escalation_template,
+            summary=summary,
+            error_detail=error_detail,
+            missing_fields=missing_fields_list,
+            extracted_fields=extracted_fields or {},
+            extraction_confidence=extraction_confidence,
+            urls=urls,
+            reattach_inbound=has_inbound_attachments,
         )
+        smtp_id = await self._outbound.try_send_pending(outbound, source_email=email)
         if smtp_id:
+            ctx_meta = dict(row.context or {})
+            notif = dict(ctx_meta.get("notification") or {})
+            notif["smtp_message_id"] = smtp_id
+            notif["outbound_id"] = str(outbound.id)
+            notif.pop("last_send_error", None)
+            ctx_meta["notification"] = notif
+            row.context = ctx_meta
+            await self._session.flush()
             await self.log_step(
                 action="escalation_email_sent",
                 summary=f"[{case.case_number}] Manager escalation email sent to {target_email}",
@@ -232,8 +313,13 @@ class ExecutiveMailService:
                 actor_name=actor_name,
                 mailbox_id=executive.id,
                 case_id=case.id,
-                email_id=email.id if email else case.email_id,
-                metadata={"escalation_id": str(escalation_id), "smtp_message_id": smtp_id},
+                email_id=source_email_id,
+                metadata={
+                    "escalation_id": str(escalation_id),
+                    "outbound_id": str(outbound.id),
+                    "smtp_message_id": smtp_id,
+                    "reattach_inbound_attachments": has_inbound_attachments,
+                },
             )
 
         return row

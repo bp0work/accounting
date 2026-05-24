@@ -28,6 +28,10 @@ PREFERRED_DAILY_LOG_SENDERS = (
     "system.mmlogistix@bp0.work",
 )
 
+MANAGER_ESCALATION_TEMPLATES = frozenset(
+    {"manager.escalation.request", "manager.escalation.missing_fields"}
+)
+
 
 @dataclass(frozen=True)
 class AckSourceData:
@@ -171,6 +175,25 @@ class OutboundMailService:
         reattach = bool(meta.get("reattach_inbound_attachments"))
         attachments: list[MailAttachment] = []
 
+        if template_key in MANAGER_ESCALATION_TEMPLATES:
+            render_ctx = {
+                "case_number": str(meta.get("case_number", "")),
+                "summary": meta.get("summary", body_plain),
+                "error_reason": meta.get("error_reason", ""),
+                "executive_mailbox": meta.get("executive_mailbox", ""),
+                "approve_url": meta.get("approve_url", ""),
+                "reject_url": meta.get("reject_url", ""),
+                "escalate_url": meta.get("escalate_url", ""),
+                "request_info_url": meta.get("request_info_url", ""),
+                "missing_fields": meta.get("missing_fields") or [],
+                "extracted_fields": meta.get("extracted_fields") or {},
+                "extraction_confidence": meta.get("extraction_confidence"),
+            }
+            if template_key == "manager.escalation.missing_fields":
+                body_plain, body_html = templates.render_missing_fields_escalation(render_ctx)
+            else:
+                body_plain, body_html = templates.render_manager_escalation(render_ctx)
+
         if outbound.email_id:
             ack_data = await self._load_ack_source_data(session, outbound.email_id)
             if ack_data is not None:
@@ -186,6 +209,14 @@ class OutboundMailService:
                     if not reattach and ctx["attachment_filenames"]:
                         meta["reattach_inbound_attachments"] = True
                         reattach = True
+
+                if (
+                    template_key in MANAGER_ESCALATION_TEMPLATES
+                    and ack_data.attachment_filenames
+                    and not reattach
+                ):
+                    meta["reattach_inbound_attachments"] = True
+                    reattach = True
 
             attachments = await self._load_reattach_attachments(
                 session,
@@ -346,6 +377,18 @@ class OutboundMailService:
 
         try:
             password = decrypt_field(executive_mailbox.password_encrypted)
+            email_id = escalation.email_id or case.email_id
+            attachments: list[MailAttachment] = []
+            if email_id:
+                attachments = await self._load_reattach_attachments(
+                    self._session,
+                    email_id,
+                    reattach=bool(
+                        (escalation.context or {})
+                        .get("notification", {})
+                        .get("reattach_inbound_attachments")
+                    ),
+                )
             wire_id = await self._smtp.send_message(
                 from_address=executive_mailbox.email_address,
                 from_name=executive_mailbox.display_name,
@@ -355,6 +398,7 @@ class OutboundMailService:
                 subject=subject,
                 body_plain=body_plain,
                 body_html=body_html,
+                attachments=attachments,
             )
         except Exception as exc:
             ctx_meta = dict(escalation.context or {})
