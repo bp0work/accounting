@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.16-escalation-inbound-attachments"
+        return "0.13.17-approvals-list-from-address"
 
     @property
     def edge_public_base_url(self) -> str:

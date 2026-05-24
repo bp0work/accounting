@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.13.16-escalation-inbound-attachments` (migrations `001`–`047`; finance-ui `0.13.6-manual-review-detail`)
+**Target version:** `0.13.17-approvals-list-from-address` (migrations `001`–`047`; finance-ui `0.13.7-approvals-table-columns`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -152,7 +152,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.16-escalation-inbound-attachments` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.17-approvals-list-from-address` |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
 | E4.1c | Browser login → remain signed in >15 min (silent refresh) | Session persists; no redirect to `/login` until refresh token expires (7d) |
 | E4.1d | Browser login → `/approvals` | Pending approvals load (client-side auth; not SSR 401) |
@@ -178,6 +178,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
 | E5.5 | Outbound SMTP: manager escalation (incl. missing-fields template `0.13.15` + inbound re-attach `0.13.16`), ack, clarification on Request More Info | ☐ |
 | E5.6 | finance-ui case detail shows manual review panel (`0.13.6-manual-review-detail`) | ☐ |
+| E5.7 | finance-ui Cases & Approvals table: Document Type, Submitted By, Issued By/To (`0.13.7`) | ☐ |
 
 ---
 

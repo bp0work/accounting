@@ -5,6 +5,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { listCases, type CaseItem } from '$lib/api/cases';
+  import { documentTypeLabel } from '$lib/case-labels';
 
   let items: CaseItem[] = [];
   let error = '';
@@ -43,12 +44,12 @@
         <tr>
           <th></th>
           <th>Case</th>
-          <th>Type</th>
+          <th>Document Type</th>
           <th>Status</th>
-          <th>Stage</th>
-          <th>Counterparty</th>
+          <th>Submitted By</th>
+          <th>Issued By/To</th>
           <th>Amount</th>
-          <th>Last activity</th>
+          <th>Last Activity</th>
           <th>Error</th>
         </tr>
       </thead>
@@ -61,9 +62,9 @@
             <td>
               <a href={`/cases/${item.id}`}>{item.case_number}</a>
             </td>
-            <td>{item.type}</td>
+            <td>{documentTypeLabel(item.type)}</td>
             <td>{item.status}</td>
-            <td>{item.processing_stage || '—'}</td>
+            <td>{item.from_address || '—'}</td>
             <td>{item.counterparty_name || '—'}</td>
             <td>{formatAmount(item)}</td>
             <td>{formatActivity(item)}</td>

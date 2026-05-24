@@ -5,8 +5,9 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.13.16-escalation-inbound-attachments** | 2026-05-24 | — | Manager escalation SMTP re-attaches inbound files: `pending_outbound_emails.metadata.reattach_inbound_attachments` + `_load_reattach_attachments` in `_build_send_plan` for `manager.escalation.*` templates (`17` §10.4). |
-| **0.13.16-escalation-inbound-attachments** | 2026-05-24 | — | Manager escalation SMTP re-attaches inbound files: `pending_outbound_emails.metadata.reattach_inbound_attachments` + `_load_reattach_attachments` in `_build_send_plan` for `manager.escalation.*` templates (`17` §10.4). |
+| **0.13.17-approvals-list-from-address** | 2026-05-24 | — | `GET /cases` includes `from_address` (from linked `emails` row) and existing `counterparty_name` for finance-ui approvals table. |
+| **0.13.7-approvals-table-columns** (finance-ui) | 2026-05-24 | — | Cases & Approvals table: Document Type labels, Submitted By, Issued By/To; Stage column removed. |
+| **0.13.16-escalation-inbound-attachments** | 2026-05-24 | `d9bf736` | Manager escalation SMTP re-attaches inbound files: `pending_outbound_emails.metadata.reattach_inbound_attachments` + `_load_reattach_attachments` in `_build_send_plan` for `manager.escalation.*` templates (`17` §10.4). |
 | **0.13.6-manual-review-detail** (finance-ui) | 2026-05-24 | `c1cd3bd` | Case detail `/cases/{id}`: **Manual review details** panel — `workflow_metadata.missing_fields`, `extraction_confidence`, `extracted_fields` when status is `manual_review` or `on_hold`. |
 | **0.13.15-ap-missing-fields-escalation** | 2026-05-24 | `c1cd3bd` | AP worker escalates `manual_review` (missing fields) via `route_missing_fields_to_manager()` → `case_escalations` + SMTP with extracted/missing field detail; `request_info` manager action queues client clarification (`mail.clarification.request`). |
 | **0.13.14-classification-accounts-queue-route** | 2026-05-24 | `78f83b1` | After intake classification, `route_case_to_queue()` pushes to `accounts_queue` **after** DB commit so AP/AR/expense workers see the case. New helper in `queue_router.py`. |

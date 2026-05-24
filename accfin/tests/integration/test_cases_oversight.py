@@ -8,6 +8,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.models.case import Case
+from app.models.mail import Email
 
 
 @pytest.mark.integration
@@ -15,6 +16,19 @@ async def test_cases_dashboard_and_export(
     async_client: AsyncClient, db_session, auth_headers
 ) -> None:
     now = datetime.now(UTC)
+    email = Email(
+        message_id=f"<exp-{uuid4().hex}@test>",
+        mailbox_address="accap.mmlogistix@bp0.work",
+        from_address="vendor@acme.sg",
+        to_addresses=["accap.mmlogistix@bp0.work"],
+        cc_addresses=[],
+        subject="Export test invoice",
+        status="classified",
+        received_at=now,
+    )
+    db_session.add(email)
+    await db_session.flush()
+
     case = Case(
         case_number=f"CAS-EXP-{uuid4().hex[:8]}",
         type="ap_invoice",
@@ -23,6 +37,7 @@ async def test_cases_dashboard_and_export(
         counterparty_name="Acme Pte Ltd",
         amount_value=Decimal("99.50"),
         amount_currency="SGD",
+        email_id=email.id,
         created_at=now,
         sla_deadline=now - timedelta(hours=1),
         sla_status="breached",
@@ -54,3 +69,5 @@ async def test_cases_dashboard_and_export(
     assert row is not None
     assert row["is_overdue"] is True
     assert row["processing_time_minutes"] is not None
+    assert row["counterparty_name"] == "Acme Pte Ltd"
+    assert row["from_address"] == "vendor@acme.sg"

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -14,6 +15,7 @@ from app.core.database import get_db_session
 from app.core.dependencies import require_permission
 from app.core.exceptions import AppHTTPException
 from app.core.redis_client import get_redis
+from app.models.mail import Email
 from app.repositories.case import CaseRepository
 from app.repositories.policy import PolicyRepository
 from app.schemas.auth import TokenData
@@ -41,10 +43,40 @@ from fastapi import status
 router = APIRouter(tags=["Cases"])
 
 
-def _case_response(case) -> CaseResponse:
+async def _load_from_addresses_map(
+    session: AsyncSession, cases: list
+) -> dict[UUID, str]:
+    email_ids = {c.email_id for c in cases if c.email_id}
+    if not email_ids:
+        return {}
+    result = await session.execute(
+        select(Email.id, Email.from_address).where(Email.id.in_(email_ids))
+    )
+    return {row[0]: row[1] for row in result.all()}
+
+
+async def _load_from_address(session: AsyncSession, case) -> str | None:
+    if case.email_id:
+        result = await session.execute(
+            select(Email.from_address).where(Email.id == case.email_id)
+        )
+        addr = result.scalar_one_or_none()
+        if addr:
+            return addr
+    meta = case.classification_metadata or {}
+    fallback = meta.get("from_address")
+    return str(fallback) if fallback else None
+
+
+def _case_response(case, *, from_address: str | None = None) -> CaseResponse:
     base = CaseResponse.model_validate(case)
+    if from_address is None:
+        meta = case.classification_metadata or {}
+        fallback = meta.get("from_address")
+        from_address = str(fallback) if fallback else None
     return base.model_copy(
         update={
+            "from_address": from_address,
             "completed_at": case.completed_at,
             "sla_deadline": case.sla_deadline,
             "processing_time_minutes": processing_time_minutes(case),
@@ -100,12 +132,15 @@ async def case_dashboard(
 ) -> CaseDashboardResponse:
     repo = CaseRepository(session)
     overdue = await repo.list_overdue_cases(limit=20)
+    from_map = await _load_from_addresses_map(session, overdue)
     return CaseDashboardResponse(
         queue_depths=await _queue_status(),
         cases_by_status=await repo.count_by_status(),
         average_processing_time_minutes=await repo.average_processing_minutes_completed(),
         overdue_count=len(overdue),
-        overdue_cases=[_case_response(c) for c in overdue],
+        overdue_cases=[
+            _case_response(c, from_address=from_map.get(c.email_id)) for c in overdue
+        ],
     )
 
 
@@ -122,7 +157,12 @@ async def list_cases(
     cases = await service.list_cases(
         limit=limit, status_filter=status, date_from=date_from, date_to=date_to
     )
-    return CaseListResponse(data=[_case_response(c) for c in cases])
+    from_map = await _load_from_addresses_map(session, cases)
+    return CaseListResponse(
+        data=[
+            _case_response(c, from_address=from_map.get(c.email_id)) for c in cases
+        ]
+    )
 
 
 @router.get("/cases/{case_id}", response_model=CaseResponse)
@@ -133,7 +173,8 @@ async def get_case(
 ) -> CaseResponse:
     service = CaseService(session)
     case = await service.get_case(case_id)
-    return _case_response(case)
+    from_address = await _load_from_address(session, case)
+    return _case_response(case, from_address=from_address)
 
 
 @router.post("/cases/{case_id}/status", response_model=CaseStatusTransitionResponse)
