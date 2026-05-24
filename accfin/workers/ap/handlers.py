@@ -111,11 +111,24 @@ class APWorkerService:
         if inv is None:
             return await self._route_manual(case, "Empty extraction")
 
+        override_po = bool(
+            message.get("override_po_check")
+            or (case.workflow_metadata or {}).get("override_po_check")
+        )
+
         po_validation = await self._resolve_po_validation(case, inv)
         match_status = po_validation["match_status"]
+        if override_po and match_status in ("not_found", "mismatch"):
+            po_validation = {
+                **po_validation,
+                "match_status": "manager_override",
+                "recommendation": "Manager approved — PO validation overridden",
+            }
+            match_status = "manager_override"
+
         extracted = invoice_extracted_fields(inv)
 
-        if match_status == "not_found":
+        if not override_po and match_status == "not_found":
             await self._start_processing(case)
             case.workflow_metadata = {
                 **(case.workflow_metadata or {}),
@@ -141,7 +154,7 @@ class APWorkerService:
                 po_validation=po_validation,
             )
 
-        if match_status == "mismatch":
+        if not override_po and match_status == "mismatch":
             await self._start_processing(case)
             case.workflow_metadata = {
                 **(case.workflow_metadata or {}),

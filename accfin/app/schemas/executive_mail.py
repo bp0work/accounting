@@ -34,6 +34,17 @@ class EscalationRespondResult(BaseModel):
     target_email: str | None = None
     responded_at: datetime
     message: str | None = None
+    manager_comment: str | None = None
+
+
+class EscalationRespondContext(BaseModel):
+    escalation_id: UUID
+    case_id: UUID
+    case_number: str
+    action: str
+    status: str
+    already_responded: bool = False
+    result: EscalationRespondResult | None = None
 
 
 class FinanceActivityLogCreate(BaseModel):

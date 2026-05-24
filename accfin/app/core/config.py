@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.21-ap-vendor-extraction-display"
+        return "0.13.22-escalation-respond-flow"
 
     @property
     def edge_public_base_url(self) -> str:

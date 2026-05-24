@@ -14,7 +14,7 @@ from app.api.routes import (
     health,
     internal_jobs,
     mail,
-    mail_escalations,
+    mail_actions,
     metrics,
     notifications,
     reconciliation,
@@ -67,7 +67,7 @@ app.include_router(events.router)
 app.include_router(audit.router)
 app.include_router(expense_claims.router)
 app.include_router(internal_jobs.router)
-app.include_router(mail_escalations.router)
+app.include_router(mail_actions.router)
 
 
 @app.exception_handler(AppHTTPException)

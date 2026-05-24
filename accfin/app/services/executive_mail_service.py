@@ -70,6 +70,12 @@ class ExecutiveMailService:
     async def get_mailbox_for_address(self, email_address: str) -> MailGatewayConfig | None:
         return await self._escalations.get_mailbox_by_email(email_address)
 
+    async def get_mailbox_by_id(self, mailbox_id: UUID) -> MailGatewayConfig | None:
+        result = await self._session.execute(
+            select(MailGatewayConfig).where(MailGatewayConfig.id == mailbox_id)
+        )
+        return result.scalar_one_or_none()
+
     def escalation_action_urls(
         self,
         escalation_id: UUID,
@@ -124,6 +130,8 @@ class ExecutiveMailService:
         extraction_confidence: float | None,
         urls: dict[str, str],
         reattach_inbound: bool,
+        manager_comment: str | None = None,
+        forwarded_from: str | None = None,
     ) -> PendingOutboundEmail:
         if template_key == "manager.escalation.missing_fields":
             subject = f"[{case.case_number}] Action required — missing invoice fields"
@@ -151,6 +159,8 @@ class ExecutiveMailService:
                 "missing_fields": missing_fields,
                 "extracted_fields": extracted_fields,
                 "extraction_confidence": extraction_confidence,
+                "manager_comment": manager_comment,
+                "forwarded_from": forwarded_from,
                 **urls,
             },
         )
@@ -404,6 +414,242 @@ class ExecutiveMailService:
             )
         return outbound
 
+    async def queue_submitter_rejection(
+        self,
+        *,
+        case: Case,
+        email: Email,
+        reason: str,
+        manager_comment: str | None = None,
+    ) -> PendingOutboundEmail | None:
+        """Notify original submitter after manager reject — internal or external."""
+        submitter = (email.from_address or "").strip()
+        if not submitter:
+            return None
+
+        mailbox = await self.get_mailbox_for_address(email.mailbox_address)
+        if mailbox is None:
+            return None
+
+        subject = f"[{case.case_number}] Submission rejected — action required"
+        body_lines = [
+            f"Your submission (reference {case.case_number}) was reviewed and could not be processed.",
+            f"Reason: {reason}",
+        ]
+        if manager_comment:
+            body_lines.append(f"Manager note: {manager_comment}")
+            body_lines.append(
+                "Please address the note above and resubmit if appropriate."
+            )
+        else:
+            body_lines.append(
+                "Please contact finance if you need clarification or wish to resubmit."
+            )
+        body = "\n\n".join(body_lines)
+
+        outbound = PendingOutboundEmail(
+            case_id=case.id,
+            email_id=email.id,
+            mailbox_id=mailbox.id,
+            to_addresses=[submitter],
+            cc_addresses=[],
+            subject=subject,
+            body_plain=body,
+            message_type="other",
+            status="approved",
+            metadata_={
+                "template": "mail.manager.rejection",
+                "case_number": case.case_number,
+                "failure_reason": reason,
+                "manager_comment": manager_comment,
+            },
+        )
+        self._session.add(outbound)
+        await self._session.flush()
+
+        await self.log_step(
+            action="submitter_rejection_sent",
+            summary=f"[{case.case_number}] Rejection notification queued for {submitter}",
+            actor_type="manager",
+            actor_name="escalation-reject",
+            mailbox_id=mailbox.id,
+            case_id=case.id,
+            email_id=email.id,
+            metadata={"outbound_id": str(outbound.id), "to": submitter},
+        )
+
+        smtp_id = await self._outbound.try_send_pending(outbound, source_email=email)
+        if smtp_id:
+            await self.log_step(
+                action="submitter_rejection_delivered",
+                summary=f"[{case.case_number}] Rejection sent to {submitter}",
+                actor_type="manager",
+                actor_name="escalation-reject",
+                mailbox_id=mailbox.id,
+                case_id=case.id,
+                email_id=email.id,
+                metadata={"outbound_id": str(outbound.id), "smtp_message_id": smtp_id},
+            )
+        return outbound
+
+    async def queue_manager_approval_acknowledgement(
+        self,
+        *,
+        case: Case,
+        email: Email,
+        manager_comment: str | None = None,
+    ) -> PendingOutboundEmail | None:
+        """Acknowledge manager approval to the original submitter."""
+        submitter = (email.from_address or "").strip()
+        if not submitter:
+            return None
+
+        mailbox = await self.get_mailbox_for_address(email.mailbox_address)
+        if mailbox is None:
+            return None
+
+        subject = f"[{case.case_number}] Approved — processing will continue"
+        body_lines = [
+            f"Your submission (reference {case.case_number}) has been approved by our finance team.",
+            "We will continue processing your request.",
+        ]
+        if manager_comment:
+            body_lines.append(f"Note: {manager_comment}")
+        body = "\n\n".join(body_lines)
+
+        outbound = PendingOutboundEmail(
+            case_id=case.id,
+            email_id=email.id,
+            mailbox_id=mailbox.id,
+            to_addresses=[submitter],
+            cc_addresses=[],
+            subject=subject,
+            body_plain=body,
+            message_type="other",
+            status="approved",
+            metadata_={
+                "template": "mail.manager.approval_ack",
+                "case_number": case.case_number,
+                "manager_comment": manager_comment,
+            },
+        )
+        self._session.add(outbound)
+        await self._session.flush()
+
+        smtp_id = await self._outbound.try_send_pending(outbound, source_email=email)
+        if smtp_id:
+            await self.log_step(
+                action="manager_approval_ack_delivered",
+                summary=f"[{case.case_number}] Approval acknowledgement sent to {submitter}",
+                actor_type="manager",
+                actor_name="escalation-approve",
+                mailbox_id=mailbox.id,
+                case_id=case.id,
+                email_id=email.id,
+                metadata={"outbound_id": str(outbound.id), "smtp_message_id": smtp_id},
+            )
+        return outbound
+
+    async def dispatch_child_escalation(
+        self,
+        *,
+        case: Case,
+        child: CaseEscalation,
+        parent: CaseEscalation,
+        wire_token: str,
+        manager_comment: str | None,
+        responder_email: str,
+    ) -> None:
+        """Forward escalation to next tier with parent manager comment."""
+        executive = await self.get_mailbox_by_id(child.originating_mailbox_id)
+        if executive is None:
+            return
+
+        parent_ctx = dict(parent.context or {})
+        template_key = (
+            (parent_ctx.get("notification") or {}).get("template")
+            or "manager.escalation.request"
+        )
+        include_request_info = template_key == "manager.escalation.missing_fields"
+        urls = self.escalation_action_urls(
+            child.id,
+            wire_token,
+            include_request_info=include_request_info,
+        )
+        reattach = bool(
+            (parent_ctx.get("notification") or {}).get("reattach_inbound_attachments")
+        )
+        child_ctx = {
+            **parent_ctx,
+            "forwarded_from": responder_email,
+            "manager_comment": manager_comment,
+            "parent_escalation_id": str(parent.id),
+            "notification": {
+                **urls,
+                "template": template_key,
+                "reattach_inbound_attachments": reattach,
+            },
+        }
+        child.context = child_ctx
+        await self._session.flush()
+
+        outbound = await self._queue_manager_escalation_outbound(
+            case=case,
+            escalation=child,
+            executive=executive,
+            email_id=child.email_id or case.email_id,
+            template_key=template_key,
+            summary=child.summary,
+            error_detail=parent_ctx.get("error_reason") or child.summary,
+            missing_fields=parent_ctx.get("missing_fields") or [],
+            extracted_fields=parent_ctx.get("extracted_fields") or {},
+            extraction_confidence=parent_ctx.get("extraction_confidence"),
+            urls=urls,
+            reattach_inbound=reattach,
+            manager_comment=manager_comment,
+            forwarded_from=responder_email,
+        )
+        email = None
+        if child.email_id or case.email_id:
+            email = await self._cases.get_email(child.email_id or case.email_id)
+        smtp_id = await self._outbound.try_send_manager_escalation(
+            child,
+            case=case,
+            executive_mailbox=executive,
+            source_email=email,
+        )
+        if smtp_id:
+            await self.log_step(
+                action="escalation_email_sent",
+                summary=f"[{case.case_number}] Escalation forwarded to {child.target_email}",
+                actor_type="manager",
+                actor_name=responder_email,
+                mailbox_id=executive.id,
+                case_id=case.id,
+                email_id=child.email_id or case.email_id,
+                metadata={
+                    "escalation_id": str(child.id),
+                    "parent_escalation_id": str(parent.id),
+                    "outbound_id": str(outbound.id),
+                    "smtp_message_id": smtp_id,
+                },
+            )
+        await self.log_step(
+            action="escalated",
+            summary=f"[{case.case_number}] Escalation forwarded to {child.target_email}",
+            actor_type="manager",
+            actor_name=responder_email,
+            mailbox_id=child.originating_mailbox_id,
+            case_id=case.id,
+            email_id=child.email_id,
+            metadata={
+                "parent_escalation_id": str(parent.id),
+                "child_escalation_id": str(child.id),
+                "target_email": child.target_email,
+                "manager_comment": manager_comment,
+            },
+        )
+
     async def queue_failure_notification(
         self,
         *,
@@ -568,6 +814,7 @@ class ExecutiveMailService:
         case: Case,
         escalation: CaseEscalation,
         actor_name: str = "manager",
+        override_po_check: bool = True,
     ) -> str | None:
         """Step 3: re-enqueue for reprocessing after manager approval."""
         meta = dict(case.workflow_metadata or {})
@@ -579,6 +826,10 @@ class ExecutiveMailService:
                 "reprocess_requested": True,
             }
         )
+        if escalation.manager_comment:
+            meta["manager_comment"] = escalation.manager_comment
+        if override_po_check:
+            meta["override_po_check"] = True
         case.workflow_metadata = meta
         case.status = "classified"
 
@@ -594,7 +845,11 @@ class ExecutiveMailService:
             mailbox_id=escalation.originating_mailbox_id,
             case_id=case.id,
             email_id=case.email_id,
-            metadata={"escalation_id": str(escalation.id)},
+            metadata={
+                "escalation_id": str(escalation.id),
+                "override_po_check": override_po_check,
+                "manager_comment": escalation.manager_comment,
+            },
         )
 
         message_id = await enqueue_accounts(
@@ -605,7 +860,15 @@ class ExecutiveMailService:
             priority=case.priority or "medium",
             stp_eligible=bool(case.stp_eligible),
             confidence_score=float(case.confidence_score or 0),
+            source="manager-escalation-approve",
+            override_po_check=override_po_check,
         )
+        if email is not None:
+            await self.queue_manager_approval_acknowledgement(
+                case=case,
+                email=email,
+                manager_comment=escalation.manager_comment,
+            )
         await self._session.flush()
         return message_id
 

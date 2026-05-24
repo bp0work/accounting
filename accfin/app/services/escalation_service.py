@@ -16,7 +16,7 @@ from app.core.mail_action_token import (
 from app.models.executive_mail import CaseEscalation
 from app.repositories.case import CaseRepository
 from app.repositories.executive_mail import CaseEscalationRepository
-from app.schemas.executive_mail import EscalationRespondResult
+from app.schemas.executive_mail import EscalationRespondContext, EscalationRespondResult
 from app.services.executive_mail_service import ExecutiveMailService
 
 
@@ -26,6 +26,70 @@ class EscalationService:
         self._repo = CaseEscalationRepository(session)
         self._cases = CaseRepository(session)
         self._executive_mail = ExecutiveMailService(session)
+
+    async def get_case_number(self, case_id: UUID) -> str | None:
+        case = await self._cases.get(case_id)
+        return case.case_number if case else None
+
+    def _validate_token(self, wire_token: str, escalation_id: UUID) -> str:
+        try:
+            verify_escalation_token(wire_token, escalation_id=escalation_id)
+        except ValueError as exc:
+            code = str(exc)
+            raise AppHTTPException(400, code, "Invalid or expired escalation token") from exc
+        return hash_token(wire_token)
+
+    async def get_respond_context(
+        self,
+        escalation_id: UUID,
+        *,
+        action: str,
+        wire_token: str,
+    ) -> EscalationRespondContext:
+        if action not in ("approve", "reject", "escalate", "request_info"):
+            raise AppHTTPException(
+                422,
+                "INVALID_ESCALATION_ACTION",
+                "action must be approve, reject, escalate, or request_info",
+            )
+
+        token_hash = self._validate_token(wire_token, escalation_id)
+        row = await self._repo.get(escalation_id)
+        if row is None:
+            raise AppHTTPException(404, "ESCALATION_NOT_FOUND", "Escalation not found")
+        if row.response_token_hash != token_hash:
+            raise AppHTTPException(400, "INVALID_ESCALATION_TOKEN", "Token does not match escalation")
+
+        case = await self._cases.get(row.case_id)
+        case_number = case.case_number if case else str(row.case_id)
+
+        if row.status != "pending":
+            return EscalationRespondContext(
+                escalation_id=row.id,
+                case_id=row.case_id,
+                case_number=case_number,
+                action=action,
+                status=row.status,
+                already_responded=True,
+                result=EscalationRespondResult(
+                    escalation_id=row.id,
+                    case_id=row.case_id,
+                    action=action,
+                    status=row.status,
+                    responded_at=row.responded_at or datetime.now(UTC),
+                    manager_comment=row.manager_comment,
+                    message="Already responded (idempotent)",
+                ),
+            )
+
+        return EscalationRespondContext(
+            escalation_id=row.id,
+            case_id=row.case_id,
+            case_number=case_number,
+            action=action,
+            status=row.status,
+            already_responded=False,
+        )
 
     async def respond(
         self,
@@ -38,21 +102,15 @@ class EscalationService:
     ) -> EscalationRespondResult:
         if action not in ("approve", "reject", "escalate", "request_info"):
             raise AppHTTPException(
-                400,
-                "VALIDATION_ERROR",
+                422,
+                "INVALID_ESCALATION_ACTION",
                 "action must be approve, reject, escalate, or request_info",
             )
 
-        try:
-            verify_escalation_token(wire_token, escalation_id=escalation_id)
-        except ValueError as exc:
-            code = str(exc)
-            raise AppHTTPException(400, code, "Invalid or expired escalation token") from exc
-
-        token_hash = hash_token(wire_token)
+        token_hash = self._validate_token(wire_token, escalation_id)
         row = await self._repo.get(escalation_id)
         if row is None:
-            raise AppHTTPException(404, "NOT_FOUND", "Escalation not found")
+            raise AppHTTPException(404, "ESCALATION_NOT_FOUND", "Escalation not found")
         if row.response_token_hash != token_hash:
             raise AppHTTPException(400, "INVALID_ESCALATION_TOKEN", "Token does not match escalation")
 
@@ -64,54 +122,56 @@ class EscalationService:
                     action=action,
                     status=row.status,
                     responded_at=row.responded_at or datetime.now(UTC),
+                    manager_comment=row.manager_comment,
                     message="Already responded (idempotent)",
                 )
             raise AppHTTPException(409, "ESCALATION_ALREADY_RESPONDED", "Escalation is not pending")
 
+        trimmed_comment = (comment or "").strip() or None
         now = datetime.now(UTC)
         responder = responder_email or row.target_email
         child_id: UUID | None = None
         target_email: str | None = None
+        message: str | None = None
 
         if action == "approve":
             row.status = "approved"
             row.responded_at = now
             row.responded_by_email = responder
-            row.manager_comment = comment
+            row.manager_comment = trimmed_comment
             case = await self._cases.get(row.case_id)
             if case:
                 await self._executive_mail.resume_after_manager_approve(
                     case=case,
                     escalation=row,
                     actor_name=responder,
+                    override_po_check=True,
                 )
+                message = "Approved. Case requeued for processing and submitter notified."
 
         elif action == "reject":
             row.status = "rejected"
             row.responded_at = now
             row.responded_by_email = responder
-            row.manager_comment = comment
+            row.manager_comment = trimmed_comment
             case = await self._cases.get(row.case_id)
             if case:
                 case.status = "rejected"
                 meta = dict(case.workflow_metadata or {})
                 meta["manager_decision"] = "rejected"
                 meta["escalation_pending"] = False
+                if trimmed_comment:
+                    meta["manager_comment"] = trimmed_comment
                 case.workflow_metadata = meta
 
-                email = None
-                if row.email_id:
-                    email = await self._cases.get_email(row.email_id)
-                elif case.email_id:
-                    email = await self._cases.get_email(case.email_id)
-
+                email = await self._resolve_email(row, case)
                 error_reason = (row.context or {}).get("error_reason") or row.summary
                 if email is not None:
-                    await self._executive_mail.queue_failure_notification(
+                    await self._executive_mail.queue_submitter_rejection(
                         case=case,
                         email=email,
                         reason=error_reason,
-                        manager_comment=comment,
+                        manager_comment=trimmed_comment,
                     )
 
                 await self._executive_mail.log_step(
@@ -124,9 +184,10 @@ class EscalationService:
                     email_id=email.id if email else None,
                     metadata={
                         "escalation_id": str(row.id),
-                        "manager_comment": comment,
+                        "manager_comment": trimmed_comment,
                     },
                 )
+                message = "Rejected. Submitter has been notified."
 
         elif action == "escalate":
             manager_mailbox = await self._repo.get_mailbox_by_email(row.target_email)
@@ -139,12 +200,12 @@ class EscalationService:
             row.status = "escalated"
             row.responded_at = now
             row.responded_by_email = responder
-            row.manager_comment = comment
+            row.manager_comment = trimmed_comment
 
             target_email = manager_mailbox.escalation_manager_email
             target_mailbox = await self._repo.get_mailbox_by_email(target_email)
             child_id = uuid4()
-            wire, token_hash, expires = issue_escalation_token(
+            wire, child_token_hash, expires = issue_escalation_token(
                 escalation_id=child_id,
                 case_id=row.case_id,
             )
@@ -158,58 +219,47 @@ class EscalationService:
                 parent_escalation_id=row.id,
                 status="pending",
                 summary=row.summary,
-                context=row.context,
-                response_token_hash=token_hash,
+                context=dict(row.context or {}),
+                response_token_hash=child_token_hash,
                 token_expires_at=expires,
             )
             await self._repo.create(child)
             case = await self._cases.get(row.case_id)
             if case:
-                await self._executive_mail.log_step(
-                    action="escalated",
-                    summary=(
-                        f"[{case.case_number}] Escalation forwarded to {target_email}"
-                    ),
-                    actor_type="manager",
-                    actor_name=responder,
-                    mailbox_id=row.originating_mailbox_id,
-                    case_id=case.id,
-                    email_id=row.email_id,
-                    metadata={
-                        "parent_escalation_id": str(row.id),
-                        "child_escalation_id": str(child_id),
-                        "target_email": target_email,
-                    },
+                await self._executive_mail.dispatch_child_escalation(
+                    case=case,
+                    child=child,
+                    parent=row,
+                    wire_token=wire,
+                    manager_comment=trimmed_comment,
+                    responder_email=responder,
                 )
-            _ = wire  # outbound email dispatch deferred to notification worker
+                message = f"Escalated to {target_email}. A new email has been sent."
 
         elif action == "request_info":
             row.status = "approved"
             row.responded_at = now
             row.responded_by_email = responder
-            row.manager_comment = comment
+            row.manager_comment = trimmed_comment
             case = await self._cases.get(row.case_id)
             if case:
                 meta = dict(case.workflow_metadata or {})
                 meta["manager_decision"] = "request_info"
                 meta["clarification_pending"] = True
                 meta["escalation_pending"] = False
+                if trimmed_comment:
+                    meta["manager_comment"] = trimmed_comment
                 case.workflow_metadata = meta
                 case.status = "on_hold"
 
-                email = None
-                if row.email_id:
-                    email = await self._cases.get_email(row.email_id)
-                elif case.email_id:
-                    email = await self._cases.get_email(case.email_id)
-
+                email = await self._resolve_email(row, case)
                 missing_fields = (row.context or {}).get("missing_fields") or []
                 if email is not None:
                     await self._executive_mail.queue_clarification_request(
                         case=case,
                         email=email,
                         missing_fields=missing_fields,
-                        manager_comment=comment,
+                        manager_comment=trimmed_comment,
                     )
 
                 await self._executive_mail.log_step(
@@ -223,9 +273,10 @@ class EscalationService:
                     metadata={
                         "escalation_id": str(row.id),
                         "missing_fields": missing_fields,
-                        "manager_comment": comment,
+                        "manager_comment": trimmed_comment,
                     },
                 )
+                message = "Request for more information sent to the client."
 
         await self._session.commit()
         return EscalationRespondResult(
@@ -236,4 +287,13 @@ class EscalationService:
             child_escalation_id=child_id,
             target_email=target_email,
             responded_at=row.responded_at or now,
+            manager_comment=trimmed_comment,
+            message=message,
         )
+
+    async def _resolve_email(self, row: CaseEscalation, case):
+        if row.email_id:
+            return await self._cases.get_email(row.email_id)
+        if case.email_id:
+            return await self._cases.get_email(case.email_id)
+        return None

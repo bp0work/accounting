@@ -367,6 +367,8 @@ class OutboundMailService:
             "missing_fields": (escalation.context or {}).get("missing_fields") or [],
             "extracted_fields": (escalation.context or {}).get("extracted_fields") or {},
             "extraction_confidence": (escalation.context or {}).get("extraction_confidence"),
+            "manager_comment": (escalation.context or {}).get("manager_comment"),
+            "forwarded_from": (escalation.context or {}).get("forwarded_from"),
         }
         if template_key == "manager.escalation.missing_fields":
             body_plain, body_html = templates.render_missing_fields_escalation(ctx)

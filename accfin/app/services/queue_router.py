@@ -29,6 +29,7 @@ async def enqueue_accounts(
     confidence_score: float = 0.0,
     retry_count: int = 0,
     source: str = "accounts-worker",
+    override_po_check: bool = False,
 ) -> str:
     message_id = str(uuid4())
     payload = {
@@ -49,6 +50,8 @@ async def enqueue_accounts(
         },
         "source": source,
     }
+    if override_po_check:
+        payload["override_po_check"] = True
     redis = get_redis()
     await redis.rpush(get_settings().accounts_queue_name, json.dumps(payload))
     return message_id

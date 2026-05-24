@@ -98,9 +98,19 @@ async def test_escalation_respond_approve(async_client: AsyncClient, db_session:
     response = await async_client.get(
         f"/mail/escalations/{esc_id}/respond",
         params={"action": "approve", "token": wire},
+    )
+    assert response.status_code == 200
+    assert "Confirm manager action" in response.text
+    assert case.case_number in response.text
+
+    response = await async_client.post(
+        f"/mail/escalations/{esc_id}/respond",
+        params={"action": "approve", "token": wire},
+        data={"comment": "Approved — recurring ACRA fee, no PO required"},
         headers={"Accept": "application/json"},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["action"] == "approve"
     assert data["status"] == "approved"
+    assert data["manager_comment"] == "Approved — recurring ACRA fee, no PO required"

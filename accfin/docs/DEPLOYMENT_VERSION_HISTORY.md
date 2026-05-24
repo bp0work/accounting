@@ -5,6 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
+| **0.13.22-escalation-respond-flow** | 2026-05-24 | — | **Escalation respond:** GET shows comment form; POST stores `manager_comment`. Approve → requeue with `override_po_check` + submitter ack; Reject → email submitter with comment; Escalate → forward to next tier with comment. Routes in `mail_actions.py` (`05` §8.8a). |
 | **0.13.21-ap-vendor-extraction-display** | 2026-05-24 | `1d0075b` | **Hermes AP:** `ap_invoice_extract-v2` — vendor is issuer (not payer); receipt/ref/ARN invoice numbers; paid receipt `due_date` = `invoice_date`. **API/UI:** `GET /cases` `client_vendor_name` from `extracted_fields.vendor_name` for AP; finance-ui Client/Vendor column (`0.13.9`). |
 | **0.13.9-ap-vendor-column-display** (finance-ui) | 2026-05-24 | `1d0075b` | Approvals + case detail use `client_vendor_name` for Client / Vendor column. |
 | **0.13.20-docx-po-travel-controls** | 2026-05-24 | `791a9f1` | DOCX attachment text extraction; AP due_date + PO gate escalation; expense travel-request matching; `travel_requests` table (migration `048`). |

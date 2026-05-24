@@ -56,6 +56,8 @@ Action required — manager review for case {{ case_number }}.
 
 Summary: {{ summary }}
 {% if error_reason %}Reason: {{ error_reason }}{% endif %}
+{% if forwarded_from %}Forwarded from: {{ forwarded_from }}{% endif %}
+{% if manager_comment %}Note from previous reviewer: {{ manager_comment }}{% endif %}
 {% if executive_mailbox %}Executive mailbox: {{ executive_mailbox }}{% endif %}
 
 Approve: {{ approve_url }}
@@ -68,6 +70,8 @@ _ESCALATION_HTML = """\
 <p><strong>Case:</strong> {{ case_number }}</p>
 <p><strong>Summary:</strong> {{ summary }}</p>
 {% if error_reason %}<p><strong>Reason:</strong> {{ error_reason }}</p>{% endif %}
+{% if forwarded_from %}<p><strong>Forwarded from:</strong> {{ forwarded_from }}</p>{% endif %}
+{% if manager_comment %}<p><strong>Note from previous reviewer:</strong> {{ manager_comment }}</p>{% endif %}
 {% if executive_mailbox %}<p><strong>Executive mailbox:</strong> {{ executive_mailbox }}</p>{% endif %}
 <p>
   <a href="{{ approve_url }}" style="background:#16a34a;color:#fff;padding:8px 16px;text-decoration:none;border-radius:4px;">Approve</a>
