@@ -33,3 +33,16 @@ def test_processing_stage_from_status():
 def test_status_reason_for_manual_review():
     case = _case(status="manual_review", workflow_metadata={"reason": "Empty extraction"})
     assert status_reason(case) == "Empty extraction"
+
+
+def test_status_reason_includes_missing_fields_and_confidence():
+    case = _case(
+        status="manual_review",
+        workflow_metadata={
+            "missing_fields": ["invoice_number", "invoice_date"],
+            "extraction_confidence": 0.62,
+        },
+    )
+    assert status_reason(case) == (
+        "Missing fields: invoice_number, invoice_date · Extraction confidence: 0.62"
+    )

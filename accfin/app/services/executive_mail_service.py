@@ -70,15 +70,26 @@ class ExecutiveMailService:
     async def get_mailbox_for_address(self, email_address: str) -> MailGatewayConfig | None:
         return await self._escalations.get_mailbox_by_email(email_address)
 
-    def escalation_action_urls(self, escalation_id: UUID, wire_token: str) -> dict[str, str]:
+    def escalation_action_urls(
+        self,
+        escalation_id: UUID,
+        wire_token: str,
+        *,
+        include_escalate: bool = True,
+        include_request_info: bool = False,
+    ) -> dict[str, str]:
         base = self._settings.edge_public_base_url.rstrip("/")
         qs = f"token={wire_token}"
         path = f"/mail/escalations/{escalation_id}/respond"
-        return {
+        urls = {
             "approve_url": f"{base}{path}?action=approve&{qs}",
             "reject_url": f"{base}{path}?action=reject&{qs}",
-            "escalate_url": f"{base}{path}?action=escalate&{qs}",
         }
+        if include_request_info:
+            urls["request_info_url"] = f"{base}{path}?action=request_info&{qs}"
+        if include_escalate:
+            urls["escalate_url"] = f"{base}{path}?action=escalate&{qs}"
+        return urls
 
     async def _pending_escalation(self, case_id: UUID) -> CaseEscalation | None:
         result = await self._session.execute(
@@ -98,6 +109,10 @@ class ExecutiveMailService:
         error_detail: str,
         actor_name: str,
         actor_type: str = "worker",
+        missing_fields: list[str] | None = None,
+        extracted_fields: dict[str, str | None] | None = None,
+        extraction_confidence: float | None = None,
+        escalation_template: str = "manager.escalation.request",
     ) -> CaseEscalation | None:
         """Step 1: manager review before any sender failure notification."""
         existing = await self._pending_escalation(case.id)
@@ -127,7 +142,27 @@ class ExecutiveMailService:
             escalation_id=escalation_id,
             case_id=case.id,
         )
-        urls = self.escalation_action_urls(escalation_id, wire)
+        missing_fields_list = list(missing_fields or [])
+        is_missing_fields = escalation_template == "manager.escalation.missing_fields"
+        urls = self.escalation_action_urls(
+            escalation_id,
+            wire,
+            include_escalate=not is_missing_fields,
+            include_request_info=is_missing_fields,
+        )
+
+        context: dict = {
+            "error_reason": error_detail,
+            "actor_name": actor_name,
+            "missing_fields": missing_fields_list,
+            "extracted_fields": extracted_fields or {},
+            "extraction_confidence": extraction_confidence,
+            "notification": {
+                "template": escalation_template,
+                "wire_token": wire,
+                **urls,
+            },
+        }
 
         row = CaseEscalation(
             id=escalation_id,
@@ -139,15 +174,7 @@ class ExecutiveMailService:
             status="pending",
             reason_code=reason_code,
             summary=summary,
-            context={
-                "error_reason": error_detail,
-                "actor_name": actor_name,
-                "notification": {
-                    "template": "manager.escalation.request",
-                    "wire_token": wire,
-                    **urls,
-                },
-            },
+            context=context,
             response_token_hash=token_hash,
             token_expires_at=expires,
         )
@@ -163,6 +190,12 @@ class ExecutiveMailService:
                 "reason_code": reason_code,
             }
         )
+        if missing_fields_list:
+            meta["missing_fields"] = missing_fields_list
+        if extracted_fields:
+            meta["extracted_fields"] = extracted_fields
+        if extraction_confidence is not None:
+            meta["extraction_confidence"] = extraction_confidence
         case.workflow_metadata = meta
 
         await self.log_step(
@@ -353,6 +386,89 @@ class ExecutiveMailService:
                 summary=f"[{case.case_number}] Failure notification sent to {email.from_address}",
                 actor_type="manager",
                 actor_name="escalation-reject",
+                mailbox_id=mailbox.id,
+                case_id=case.id,
+                email_id=email.id,
+                metadata={"outbound_id": str(outbound.id), "smtp_message_id": smtp_id},
+            )
+        return outbound
+
+    async def queue_clarification_request(
+        self,
+        *,
+        case: Case,
+        email: Email,
+        missing_fields: list[str],
+        manager_comment: str | None = None,
+    ) -> PendingOutboundEmail | None:
+        """Queue client clarification after manager selects Request More Info."""
+        if not self.is_external_sender(email.from_address):
+            return None
+
+        mailbox = await self.get_mailbox_for_address(email.mailbox_address)
+        if mailbox is None:
+            return None
+
+        field_lines = [f"- {field.replace('_', ' ')}" for field in missing_fields]
+        fields_text = "\n".join(field_lines) if field_lines else "- additional invoice details"
+        subject = f"[{case.case_number}] Additional information required"
+        if email.subject:
+            subject = f"{subject} — {email.subject[:200]}"
+
+        body_lines = [
+            f"Thank you for your email (reference {case.case_number}).",
+            "To complete processing, we need the following information:",
+            fields_text,
+        ]
+        if manager_comment:
+            body_lines.append(f"Note from our team: {manager_comment}")
+        body_lines.append(
+            "Please reply to this email with the missing details or an updated document."
+        )
+        body = "\n\n".join(body_lines)
+
+        outbound = PendingOutboundEmail(
+            case_id=case.id,
+            email_id=email.id,
+            mailbox_id=mailbox.id,
+            to_addresses=[email.from_address],
+            cc_addresses=[],
+            subject=subject,
+            body_plain=body,
+            message_type="clarification",
+            status="approved",
+            metadata_={
+                "template": "mail.clarification.request",
+                "case_number": case.case_number,
+                "missing_fields": missing_fields,
+                "source_email_id": str(email.id),
+                "manager_comment": manager_comment,
+            },
+        )
+        self._session.add(outbound)
+        await self._session.flush()
+
+        await self.log_step(
+            action="clarification_sent",
+            summary=f"[{case.case_number}] Clarification request queued for {email.from_address}",
+            actor_type="manager",
+            actor_name="escalation-request-info",
+            mailbox_id=mailbox.id,
+            case_id=case.id,
+            email_id=email.id,
+            metadata={
+                "outbound_id": str(outbound.id),
+                "missing_fields": missing_fields,
+            },
+        )
+
+        smtp_id = await self._outbound.try_send_pending(outbound, source_email=email)
+        if smtp_id:
+            await self.log_step(
+                action="clarification_delivered",
+                summary=f"[{case.case_number}] Clarification sent to {email.from_address}",
+                actor_type="manager",
+                actor_name="escalation-request-info",
                 mailbox_id=mailbox.id,
                 case_id=case.id,
                 email_id=email.id,

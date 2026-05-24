@@ -320,7 +320,9 @@ class OutboundMailService:
         approve_url = notification.get("approve_url", "")
         reject_url = notification.get("reject_url", "")
         escalate_url = notification.get("escalate_url", "")
+        request_info_url = notification.get("request_info_url", "")
         error_reason = (escalation.context or {}).get("error_reason", "")
+        template_key = notification.get("template", "manager.escalation.request")
 
         ctx = {
             "case_number": case.case_number,
@@ -330,9 +332,17 @@ class OutboundMailService:
             "approve_url": approve_url,
             "reject_url": reject_url,
             "escalate_url": escalate_url,
+            "request_info_url": request_info_url,
+            "missing_fields": (escalation.context or {}).get("missing_fields") or [],
+            "extracted_fields": (escalation.context or {}).get("extracted_fields") or {},
+            "extraction_confidence": (escalation.context or {}).get("extraction_confidence"),
         }
-        body_plain, body_html = templates.render_manager_escalation(ctx)
-        subject = f"[{case.case_number}] Action required — manager review"
+        if template_key == "manager.escalation.missing_fields":
+            body_plain, body_html = templates.render_missing_fields_escalation(ctx)
+            subject = f"[{case.case_number}] Action required — missing invoice fields"
+        else:
+            body_plain, body_html = templates.render_manager_escalation(ctx)
+            subject = f"[{case.case_number}] Action required — manager review"
 
         try:
             password = decrypt_field(executive_mailbox.password_encrypted)

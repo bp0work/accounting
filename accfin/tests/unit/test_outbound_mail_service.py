@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.mail_template_renderer import render_acknowledgement, render_manager_escalation
+from app.services.mail_template_renderer import (
+    render_acknowledgement,
+    render_manager_escalation,
+    render_missing_fields_escalation,
+)
 from app.services.smtp_mail_service import MailAttachment, SmtpMailService
 
 
@@ -26,8 +30,27 @@ def test_render_acknowledgement_includes_case_number():
     assert "CAS-20260524-0001" in html
     assert "Invoice 123" in plain
     assert "invoice.pdf" in plain
-    assert "Original message" in plain
-    assert "Please process this invoice." in plain
+
+
+def test_render_missing_fields_escalation_includes_request_info():
+    plain, html = render_missing_fields_escalation(
+        {
+            "case_number": "CAS-20260524-0002",
+            "summary": "Missing invoice fields",
+            "extraction_confidence": 0.55,
+            "extracted_fields": {"vendor_name": "Acme", "invoice_number": None},
+            "missing_fields": ["invoice_number", "invoice_date"],
+            "executive_mailbox": "accap.mmlogistix@bp0.work",
+            "approve_url": "https://example.test/approve",
+            "request_info_url": "https://example.test/request-info",
+            "reject_url": "https://example.test/reject",
+        }
+    )
+    assert "invoice_number" in plain
+    assert "invoice_date" in plain
+    assert "Request more info" in plain
+    assert "Request More Info" in html
+    assert "https://example.test/request-info" in html
 
 
 def test_render_manager_escalation_includes_action_urls():

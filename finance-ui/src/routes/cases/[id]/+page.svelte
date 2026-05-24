@@ -94,6 +94,30 @@
     };
     return labels[entry.event_type] || entry.event_type;
   }
+
+  function manualReviewDetails(caseItem: CaseItem) {
+    const meta = caseItem.workflow_metadata ?? {};
+    const missing = meta.missing_fields;
+    const extracted = meta.extracted_fields;
+    return {
+      missing: Array.isArray(missing) ? missing.map(String) : [],
+      confidence:
+        typeof meta.extraction_confidence === 'number'
+          ? meta.extraction_confidence
+          : meta.extraction_confidence != null
+            ? Number(meta.extraction_confidence)
+            : null,
+      extracted:
+        extracted && typeof extracted === 'object' && !Array.isArray(extracted)
+          ? (extracted as Record<string, string | null>)
+          : {},
+    };
+  }
+
+  function formatConfidence(value: number): string {
+    if (Number.isNaN(value)) return '—';
+    return value.toFixed(2);
+  }
 </script>
 
 <a href="/approvals">← Cases & Approvals</a>
@@ -110,6 +134,34 @@
     <p>Status: <strong>{item.status}</strong>{#if item.processing_stage} · Stage: {item.processing_stage}{/if}</p>
     {#if item.status_reason && !item.error_reason}
       <p class="hint">{item.status_reason}</p>
+    {/if}
+    {#if item.status === 'manual_review' || item.status === 'on_hold'}
+      {@const review = manualReviewDetails(item)}
+      {#if review.missing.length > 0 || review.confidence != null || Object.keys(review.extracted).length > 0}
+        <section class="review-box">
+          <h2>Manual review details</h2>
+          {#if review.confidence != null}
+            <p><strong>Extraction confidence:</strong> {formatConfidence(review.confidence)}</p>
+          {/if}
+          {#if review.missing.length > 0}
+            <p><strong>Missing fields:</strong></p>
+            <ul>
+              {#each review.missing as field}
+                <li>{field.replaceAll('_', ' ')}</li>
+              {/each}
+            </ul>
+          {/if}
+          {#if Object.keys(review.extracted).length > 0}
+            <p><strong>Extracted:</strong></p>
+            <dl class="extracted">
+              {#each Object.entries(review.extracted) as [key, value]}
+                <dt>{key.replaceAll('_', ' ')}</dt>
+                <dd>{value ?? '—'}</dd>
+              {/each}
+            </dl>
+          {/if}
+        </section>
+      {/if}
     {/if}
     <p>{item.subject}</p>
     <p>Counterparty: {item.counterparty_name || '—'}</p>
@@ -235,5 +287,33 @@
     margin-top: 0.25rem;
     font-family: ui-monospace, monospace;
     font-size: 0.8rem;
+  }
+  .review-box {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid #fdba74;
+    border-radius: 6px;
+    background: #fffbeb;
+  }
+  .review-box h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+  }
+  .review-box ul {
+    margin: 0.25rem 0 0.75rem;
+    padding-left: 1.25rem;
+  }
+  .extracted {
+    display: grid;
+    grid-template-columns: minmax(8rem, auto) 1fr;
+    gap: 0.25rem 0.75rem;
+    margin: 0.25rem 0 0;
+  }
+  .extracted dt {
+    font-weight: 600;
+    color: #475569;
+  }
+  .extracted dd {
+    margin: 0;
   }
 </style>

@@ -32,6 +32,10 @@ from workers.ap.extraction import (
     has_critical_missing,
     resolve_expense_account_code,
 )
+from workers.common.missing_fields_escalation import (
+    invoice_extracted_fields,
+    route_missing_fields_to_manager,
+)
 from workers.common.processing_failure import route_processing_failure
 
 logger = logging.getLogger(__name__)
@@ -175,6 +179,7 @@ class APWorkerService:
         case.amount_currency = inv.currency
         case.risk_flags = risk_flags
         case.current_approval_tier = tier if final_status == "pending_approval" else None
+        extracted = invoice_extracted_fields(inv)
         case.workflow_metadata = {
             **(case.workflow_metadata or {}),
             "current_stage": "processing",
@@ -183,7 +188,12 @@ class APWorkerService:
             "po_reference": inv.po_reference,
             "expense_account_code": expense_code,
             "missing_fields": inv.missing_fields,
+            "extracted_fields": extracted,
+            "error_type": "INCOMPLETE_EXTRACTION" if final_status == "manual_review" else None,
         }
+        # Remove null error_type when not manual review
+        if case.workflow_metadata.get("error_type") is None:
+            case.workflow_metadata.pop("error_type", None)
         await self._timeline_completed(case, "ap_invoice", inv.invoice_number, final_status, journal_id)
         await self._session.flush()
 
@@ -191,6 +201,29 @@ class APWorkerService:
             await self._approvals.request_approval(
                 case_id=case.id, tier=tier, amount_value=amount, amount_currency=inv.currency
             )
+
+        if final_status == "manual_review":
+            email = await self._email_for_case(case)
+            escalation_result = await route_missing_fields_to_manager(
+                self._session,
+                case,
+                email=email,
+                missing_fields=list(inv.missing_fields or []),
+                extraction_confidence=float(extraction.confidence_score),
+                extracted_fields=extracted,
+                actor_name="ap-worker",
+            )
+            return {
+                "status": escalation_result.get("status", final_status),
+                "case_id": str(case.id),
+                "journal_entry_id": journal_id,
+                "missing_fields": inv.missing_fields,
+                **{
+                    k: v
+                    for k, v in escalation_result.items()
+                    if k not in ("status", "case_id")
+                },
+            }
 
         return {"status": final_status, "case_id": str(case.id), "journal_entry_id": journal_id}
 

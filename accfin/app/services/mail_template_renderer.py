@@ -82,6 +82,63 @@ Reject: {{ reject_url }}<br>
 Escalate: {{ escalate_url }}</p>
 """
 
+_MISSING_FIELDS_ESCALATION_PLAIN = """\
+Action required — missing invoice fields for case {{ case_number }}.
+
+Summary: {{ summary }}
+{% if extraction_confidence is not none %}Extraction confidence: {{ extraction_confidence }}
+{% endif %}{% if extracted_fields %}
+Extracted:
+{% for key, value in extracted_fields.items() -%}
+- {{ key }}: {{ value if value else '(not found)' }}
+{% endfor -%}
+{% endif %}{% if missing_fields %}
+Missing:
+{% for field in missing_fields -%}
+- {{ field }}
+{% endfor -%}
+{% endif %}{% if executive_mailbox %}Executive mailbox: {{ executive_mailbox }}
+{% endif %}
+Approve: {{ approve_url }}
+Request more info: {{ request_info_url }}
+Reject: {{ reject_url }}
+"""
+
+_MISSING_FIELDS_ESCALATION_HTML = """\
+<h2>Action required — missing invoice fields</h2>
+<p><strong>Case:</strong> {{ case_number }}</p>
+<p><strong>Summary:</strong> {{ summary }}</p>
+{% if extraction_confidence is not none %}<p><strong>Extraction confidence:</strong> {{ extraction_confidence }}</p>{% endif %}
+{% if extracted_fields %}
+<p><strong>Extracted:</strong></p>
+<ul>
+{% for key, value in extracted_fields.items() %}
+  <li><strong>{{ key }}:</strong> {{ value if value else '(not found)' }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% if missing_fields %}
+<p><strong>Missing:</strong></p>
+<ul>
+{% for field in missing_fields %}
+  <li>{{ field }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% if executive_mailbox %}<p><strong>Executive mailbox:</strong> {{ executive_mailbox }}</p>{% endif %}
+<p>
+  <a href="{{ approve_url }}" style="background:#16a34a;color:#fff;padding:8px 16px;text-decoration:none;border-radius:4px;">Approve</a>
+  &nbsp;
+  <a href="{{ request_info_url }}" style="background:#2563eb;color:#fff;padding:8px 16px;text-decoration:none;border-radius:4px;">Request More Info</a>
+  &nbsp;
+  <a href="{{ reject_url }}" style="background:#dc2626;color:#fff;padding:8px 16px;text-decoration:none;border-radius:4px;">Reject</a>
+</p>
+<p style="font-size:12px;color:#64748b;">If buttons do not work, use these links:<br>
+Approve: {{ approve_url }}<br>
+Request more info: {{ request_info_url }}<br>
+Reject: {{ reject_url }}</p>
+"""
+
 _DAILY_LOG_PLAIN = """\
 Finance activity log for {{ business_date }}.
 
@@ -116,6 +173,12 @@ def render_acknowledgement(context: dict) -> tuple[str, str]:
 def render_manager_escalation(context: dict) -> tuple[str, str]:
     plain = _ENV.from_string(_ESCALATION_PLAIN).render(**context)
     html = _ENV.from_string(_ESCALATION_HTML).render(**context)
+    return plain.strip(), html.strip()
+
+
+def render_missing_fields_escalation(context: dict) -> tuple[str, str]:
+    plain = _ENV.from_string(_MISSING_FIELDS_ESCALATION_PLAIN).render(**context)
+    html = _ENV.from_string(_MISSING_FIELDS_ESCALATION_HTML).render(**context)
     return plain.strip(), html.strip()
 
 

@@ -41,6 +41,16 @@ def error_reason(case: Case) -> str | None:
         val = meta.get(key)
         if val:
             return str(val)
+    if case.status in ("manual_review", "on_hold"):
+        parts: list[str] = []
+        missing = meta.get("missing_fields")
+        if isinstance(missing, list) and missing:
+            parts.append(f"Missing fields: {', '.join(str(m) for m in missing)}")
+        conf = meta.get("extraction_confidence")
+        if conf is not None:
+            parts.append(f"Extraction confidence: {conf}")
+        if parts:
+            return " · ".join(parts)
     if case.status == "manual_review":
         return meta.get("reason") or "Routed to manual review"
     if case.status == "on_hold" and meta.get("escalation_pending"):

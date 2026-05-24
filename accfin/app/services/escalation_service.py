@@ -36,8 +36,12 @@ class EscalationService:
         comment: str | None = None,
         responder_email: str | None = None,
     ) -> EscalationRespondResult:
-        if action not in ("approve", "reject", "escalate"):
-            raise AppHTTPException(400, "VALIDATION_ERROR", "action must be approve, reject, or escalate")
+        if action not in ("approve", "reject", "escalate", "request_info"):
+            raise AppHTTPException(
+                400,
+                "VALIDATION_ERROR",
+                "action must be approve, reject, escalate, or request_info",
+            )
 
         try:
             verify_escalation_token(wire_token, escalation_id=escalation_id)
@@ -178,6 +182,50 @@ class EscalationService:
                     },
                 )
             _ = wire  # outbound email dispatch deferred to notification worker
+
+        elif action == "request_info":
+            row.status = "approved"
+            row.responded_at = now
+            row.responded_by_email = responder
+            row.manager_comment = comment
+            case = await self._cases.get(row.case_id)
+            if case:
+                meta = dict(case.workflow_metadata or {})
+                meta["manager_decision"] = "request_info"
+                meta["clarification_pending"] = True
+                meta["escalation_pending"] = False
+                case.workflow_metadata = meta
+                case.status = "on_hold"
+
+                email = None
+                if row.email_id:
+                    email = await self._cases.get_email(row.email_id)
+                elif case.email_id:
+                    email = await self._cases.get_email(case.email_id)
+
+                missing_fields = (row.context or {}).get("missing_fields") or []
+                if email is not None:
+                    await self._executive_mail.queue_clarification_request(
+                        case=case,
+                        email=email,
+                        missing_fields=missing_fields,
+                        manager_comment=comment,
+                    )
+
+                await self._executive_mail.log_step(
+                    action="manager_request_info",
+                    summary=f"[{case.case_number}] Manager requested more information from client",
+                    actor_type="manager",
+                    actor_name=responder,
+                    mailbox_id=row.originating_mailbox_id,
+                    case_id=case.id,
+                    email_id=email.id if email else None,
+                    metadata={
+                        "escalation_id": str(row.id),
+                        "missing_fields": missing_fields,
+                        "manager_comment": comment,
+                    },
+                )
 
         await self._session.commit()
         return EscalationRespondResult(
