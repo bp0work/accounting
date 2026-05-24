@@ -9,7 +9,6 @@ from app.models.mail import Email, EmailAttachment, MailGatewayConfig
 from app.services.attachment_text import extract_attachment_text_sync, sanitize_extracted_text
 from app.services.executive_mail_service import ExecutiveMailService
 from app.services.mail.dedup import EmailDedupService
-from app.services.mail.intake_queue import enqueue_intake
 from app.services.mail.parser import ParsedEmail
 from app.services.mail.storage import save_attachment
 from app.services.mail.text_sanitize import sanitize_text as _sanitize_text
@@ -126,7 +125,6 @@ class MailIngestService:
             count += 1
 
         email.attachment_count = count
-        email.status = "queued"
         await self._session.flush()
 
         await self._executive_mail.log_step(
@@ -142,7 +140,4 @@ class MailIngestService:
             },
         )
 
-        await enqueue_intake(email_id=email.id, mailbox=mailbox.email_address)
-        email.processed_at = datetime.now(UTC)
-        await self._session.flush()
         return email

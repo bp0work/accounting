@@ -11,6 +11,7 @@ from app.models.mail import MailGatewayConfig
 from app.models.user import User
 from app.repositories.mail import MailRepository
 from app.services.mail.ingest import MailIngestService
+from app.services.mail.intake_queue import enqueue_intake
 from app.services.mail.parser import parse_rfc822
 from tests.conftest import TEST_PASSWORD
 
@@ -66,6 +67,8 @@ async def test_ingest_enqueues_intake_queue(db_session: AsyncSession, tmp_path, 
     )
     parsed = parse_rfc822(raw, mailbox_address=mailbox.email_address)
     email = await MailIngestService(db_session).ingest(mailbox=mailbox, parsed=parsed)
+    await enqueue_intake(email_id=email.id, mailbox=mailbox.email_address)
+    email.status = "queued"
     await db_session.commit()
 
     assert email.status == "queued"

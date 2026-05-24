@@ -11,9 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.crypto import decrypt_field
 from app.core.database import get_session_factory
-from app.models.mail import MailGatewayConfig
+from app.models.mail import Email, MailGatewayConfig
 from app.repositories.mail import MailRepository
 from app.services.mail.ingest import MailIngestService
+from app.services.mail.intake_queue import enqueue_intake
 from app.services.mail.parser import parse_rfc822
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,41 @@ def _fetch_unseen(settings: MailboxImapSettings) -> list[bytes]:
     return messages
 
 
+async def _enqueue_intake_for_email(
+    session: AsyncSession,
+    email: Email,
+    mailbox_address: str,
+) -> None:
+    """Push parsed email to Redis; log success/failure for manual recovery."""
+    if email.status == "duplicate":
+        return
+
+    try:
+        await enqueue_intake(email_id=email.id, mailbox=mailbox_address)
+    except Exception:
+        logger.exception(
+            "Failed to enqueue email %s (%s) to intake_queue — requeue manually with email_id=%s",
+            email.id,
+            email.subject,
+            email.id,
+        )
+        meta = dict(email.processing_metadata or {})
+        meta["intake_enqueue_failed"] = True
+        meta["intake_enqueue_failed_at"] = datetime.now(UTC).isoformat()
+        email.processing_metadata = meta
+        await session.flush()
+        return
+
+    email.status = "queued"
+    email.processed_at = datetime.now(UTC)
+    await session.flush()
+    logger.info(
+        "Enqueued email %s (%s) to intake_queue",
+        email.id,
+        email.subject,
+    )
+
+
 async def _poll_mailbox_in_session(
     session: AsyncSession, mailbox_id: UUID
 ) -> int:
@@ -78,7 +114,8 @@ async def _poll_mailbox_in_session(
     processed = 0
     for raw in raw_messages:
         parsed = parse_rfc822(raw, mailbox_address=mailbox.email_address)
-        await ingest.ingest(mailbox=mailbox, parsed=parsed)
+        email = await ingest.ingest(mailbox=mailbox, parsed=parsed)
+        await _enqueue_intake_for_email(session, email, mailbox.email_address)
         processed += 1
 
     mailbox.last_poll_at = datetime.now(UTC)
