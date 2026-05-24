@@ -36,6 +36,10 @@ from workers.common.missing_fields_escalation import (
     invoice_extracted_fields,
     route_missing_fields_to_manager,
 )
+from workers.common.policy_escalation import (
+    route_po_mismatch_escalation,
+    route_po_not_found_escalation,
+)
 from workers.common.processing_failure import route_processing_failure
 
 logger = logging.getLogger(__name__)
@@ -107,23 +111,65 @@ class APWorkerService:
         if inv is None:
             return await self._route_manual(case, "Empty extraction")
 
-        po_mismatch = False
-        po_not_found = False
+        po_validation = await self._resolve_po_validation(case, inv)
+        match_status = po_validation["match_status"]
+        extracted = invoice_extracted_fields(inv)
+
+        if match_status == "not_found":
+            await self._start_processing(case)
+            case.workflow_metadata = {
+                **(case.workflow_metadata or {}),
+                "current_stage": "processing",
+                "extraction_confidence": extraction.confidence_score,
+                "extracted_fields": extracted,
+                "missing_fields": inv.missing_fields,
+                "po_validation": po_validation,
+                "error_type": "PO_NOT_FOUND",
+            }
+            await self._timeline_completed(
+                case, "ap_invoice", inv.invoice_number, "manual_review", None
+            )
+            await self._session.flush()
+            email = await self._email_for_case(case)
+            return await route_po_not_found_escalation(
+                self._session,
+                case,
+                email=email,
+                extracted_fields=extracted,
+                extraction_confidence=float(extraction.confidence_score),
+                actor_name="ap-worker",
+                po_validation=po_validation,
+            )
+
+        if match_status == "mismatch":
+            await self._start_processing(case)
+            case.workflow_metadata = {
+                **(case.workflow_metadata or {}),
+                "current_stage": "processing",
+                "extraction_confidence": extraction.confidence_score,
+                "extracted_fields": extracted,
+                "po_validation": po_validation,
+                "error_type": "PO_MISMATCH",
+            }
+            case.risk_flags = ["po_amount_mismatch"]
+            await self._timeline_completed(
+                case, "ap_invoice", inv.invoice_number, "manual_review", None
+            )
+            await self._session.flush()
+            email = await self._email_for_case(case)
+            return await route_po_mismatch_escalation(
+                self._session,
+                case,
+                email=email,
+                extracted_fields=extracted,
+                extraction_confidence=float(extraction.confidence_score),
+                actor_name="ap-worker",
+                po_validation=po_validation,
+            )
+
         po = None
         if inv.po_reference:
             po = await self._pos.get_by_po_number(inv.po_reference)
-            if po is None:
-                po_not_found = True
-            else:
-                match = await self._hermes.validate_po_match(
-                    ValidatePOMatchRequest(
-                        case_id=case.id,
-                        extracted_invoice=inv,
-                        po_data=self._pos.to_po_data(po),
-                    )
-                )
-                status = match.output.match_status if match.output else "mismatch"
-                po_mismatch = status in ("mismatch", "partial")
 
         recent = await self._recent_invoices(case.counterparty_id)
         dup = await self._hermes.check_duplicate(
@@ -135,8 +181,8 @@ class APWorkerService:
         risk_flags = compute_ap_invoice_risk_flags(
             duplicate_score=dup_score,
             amount=amount,
-            po_not_found=po_not_found,
-            po_mismatch=po_mismatch,
+            po_not_found=False,
+            po_mismatch=match_status == "partial",
             warnings=inv.warnings,
         )
         policy_action = self._policy.combine_results(
@@ -186,6 +232,7 @@ class APWorkerService:
             "extraction_confidence": extraction.confidence_score,
             "policy_tier": tier,
             "po_reference": inv.po_reference,
+            "po_validation": po_validation,
             "expense_account_code": expense_code,
             "missing_fields": inv.missing_fields,
             "extracted_fields": extracted,
@@ -272,8 +319,16 @@ class APWorkerService:
             )
         )
         match_status = match.output.match_status if match.output else "mismatch"
+        po_validation = {
+            "po_number": inv.po_reference,
+            "match_status": match_status,
+            "differences": [
+                d.model_dump() for d in (match.output.differences if match.output else [])
+            ],
+            "recommendation": match.output.recommendation if match.output else "",
+        }
         await self._start_processing(case)
-        if match_status == "match":
+        if match_status == "exact":
             case.status = "completed"
             case.completed_at = datetime.now(UTC)
             final = "completed"
@@ -285,11 +340,48 @@ class APWorkerService:
         case.workflow_metadata = {
             **(case.workflow_metadata or {}),
             "po_reference": inv.po_reference,
-            "po_match_status": match_status,
+            "po_validation": po_validation,
         }
         await self._timeline_completed(case, "ap_po_validation", inv.po_reference, final, None)
         await self._session.flush()
         return {"status": final, "case_id": str(case.id), "po_match_status": match_status}
+
+    async def _resolve_po_validation(self, case: Case, inv) -> dict:
+        """Build po_validation block per `17` §5.1."""
+        po_number = inv.po_reference
+        if not po_number:
+            return {
+                "po_number": None,
+                "match_status": "not_found",
+                "differences": [],
+                "recommendation": "No PO reference extracted from invoice",
+            }
+
+        po = await self._pos.get_by_po_number(po_number)
+        if po is None:
+            return {
+                "po_number": po_number,
+                "match_status": "not_found",
+                "differences": [],
+                "recommendation": "PO record not found in purchase_orders",
+            }
+
+        match = await self._hermes.validate_po_match(
+            ValidatePOMatchRequest(
+                case_id=case.id,
+                extracted_invoice=inv,
+                po_data=self._pos.to_po_data(po),
+            )
+        )
+        output = match.output
+        return {
+            "po_number": po_number,
+            "match_status": output.match_status if output else "mismatch",
+            "differences": [
+                d.model_dump() for d in (output.differences if output else [])
+            ],
+            "recommendation": output.recommendation if output else "",
+        }
 
     async def handle_payment_proposal(self, message: dict) -> dict:
         """Payment proposals deferred — route to manual review per `17` §5.4."""

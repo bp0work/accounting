@@ -27,11 +27,13 @@ logger = logging.getLogger(__name__)
 
 _AP_INVOICE_PROMPT = """You are an AP invoice data extractor for mmlogistix finance.
 Extract structured fields from the supplier invoice text below.
+Always extract due_date (payment due date) when present in the document or derivable from payment terms.
 Return ONLY valid JSON matching this schema:
 {{
   "invoice_number": string|null,
   "invoice_date": "YYYY-MM-DD"|null,
   "due_date": "YYYY-MM-DD"|null,
+  "payment_due_date": "YYYY-MM-DD"|null,
   "vendor_name": string|null,
   "po_reference": string|null,
   "subtotal": string|null,
@@ -53,11 +55,13 @@ DOCUMENT TEXT:
 
 _AR_INVOICE_PROMPT = """You are an AR invoice data extractor for mmlogistix finance.
 Extract customer invoice fields from the text below.
+Always extract due_date (payment due date) when present in the document or derivable from payment terms.
 Return ONLY valid JSON matching this schema:
 {{
   "invoice_number": string|null,
   "invoice_date": "YYYY-MM-DD"|null,
   "due_date": "YYYY-MM-DD"|null,
+  "payment_due_date": "YYYY-MM-DD"|null,
   "customer_name": string|null,
   "subtotal": string|null,
   "tax_amount": string|null,
@@ -138,7 +142,7 @@ def _line_items(raw: Any) -> list[InvoiceLineItem]:
 
 def _invoice_missing_fields(extracted: ExtractedInvoice, *, role: str) -> list[str]:
     missing = list(extracted.missing_fields)
-    required = ["invoice_number", "total_amount", "invoice_date"]
+    required = ["invoice_number", "total_amount", "invoice_date", "due_date"]
     if role == "ap":
         required.append("vendor_name")
     else:
@@ -182,7 +186,7 @@ async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceR
     extracted = ExtractedInvoice(
         invoice_number=data.get("invoice_number"),
         invoice_date=_parse_date(data.get("invoice_date")),
-        due_date=_parse_date(data.get("due_date")),
+        due_date=_parse_date(data.get("due_date") or data.get("payment_due_date")),
         vendor_name=data.get("vendor_name") or request.supplier_hint,
         customer_name=data.get("customer_name") or request.customer_hint,
         po_reference=data.get("po_reference"),

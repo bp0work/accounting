@@ -26,6 +26,19 @@ def test_evaluate_stp_posted_ap():
     )
 
 
+def test_evaluate_manual_on_due_date_missing():
+    assert (
+        evaluate_extraction_path(
+            case_type="ap_invoice",
+            confidence=0.95,
+            missing_fields=["due_date"],
+            stp_eligible=True,
+            risk_flags=[],
+        )
+        == "manual_review"
+    )
+
+
 def test_evaluate_manual_on_vendor_missing():
     assert (
         evaluate_extraction_path(
@@ -84,7 +97,19 @@ def test_validate_po_match_match():
         )
     )
     assert resp.output is not None
-    assert resp.output.match_status == "match"
+    assert resp.output.match_status == "exact"
+
+
+def test_validate_po_match_partial_within_tolerance():
+    resp = validate_po_match_stub(
+        ValidatePOMatchRequest(
+            case_id=UUID("00000000-0000-0000-0000-000000000013"),
+            extracted_invoice=ExtractedInvoice(total_amount="5100.00", currency="SGD"),
+            po_data={"total_amount": "5000.00", "currency": "SGD"},
+        )
+    )
+    assert resp.output is not None
+    assert resp.output.match_status == "partial"
 
 
 def test_validate_po_match_mismatch():

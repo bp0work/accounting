@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.13.19-domain-worker-attachment-volumes` (migrations `001`–`047`; finance-ui `0.13.7-approvals-table-columns`)
+**Target version:** `0.13.20-docx-po-travel-controls` (migrations `001`–`048`; finance-ui `0.13.7-approvals-table-columns`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -153,7 +153,10 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.19-domain-worker-attachment-volumes` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.20-docx-po-travel-controls` |
+| D1i | DOCX attachments extract on accexp; employee reimbursement classifies as `expense_claim` (`0.13.20`) | ☐ |
+| D1j | AP invoice without PO escalates to manager; PO match stored in `workflow_metadata.po_validation` (`0.13.20`) | ☐ |
+| D1k | Travel expense without approved `travel_requests` row escalates to manager (`0.13.20`) | ☐ |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
 | E4.1c | Browser login → remain signed in >15 min (silent refresh) | Session persists; no redirect to `/login` until refresh token expires (7d) |
 | E4.1d | Browser login → `/approvals` | Pending approvals load (client-side auth; not SSR 401) |

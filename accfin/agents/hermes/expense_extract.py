@@ -17,8 +17,11 @@ from app.schemas.hermes import (
 logger = logging.getLogger(__name__)
 
 _EXPENSE_PROMPT = """You are an expense claim extractor for mmlogistix finance.
-Extract expense claim line items from the email body and attachment text below.
-Categories MUST be one of: meals, transport, accommodation, entertainment, other.
+Extract expense claim line items from employee reimbursement invoices and receipts.
+Documents sent to the accexp mailbox are employee expense claims (NOT supplier AP invoices).
+If the document shows "Invoice No", "From:", employee name, and "Category:" (e.g. Home office expense reimbursement),
+extract as expense claim line items — map the total to amount_claimed and category from the document.
+Categories MUST be one of: meals, transport, accommodation, entertainment, other, office_supplies.
 
 Return ONLY valid JSON:
 {{

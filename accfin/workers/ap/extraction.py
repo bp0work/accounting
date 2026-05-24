@@ -6,7 +6,14 @@ from decimal import Decimal
 
 CRITICAL_FIELDS: dict[str, frozenset[str]] = {
     "ap_invoice": frozenset(
-        {"vendor_name", "invoice_number", "total_amount", "invoice_date", "currency"}
+        {
+            "vendor_name",
+            "invoice_number",
+            "total_amount",
+            "invoice_date",
+            "due_date",
+            "currency",
+        }
     ),
     "ap_po_validation": frozenset({"po_reference", "total_amount", "vendor_name"}),
     "ap_payment_proposal": frozenset({"payment_amount", "currency"}),

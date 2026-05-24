@@ -22,6 +22,22 @@ def test_accexp_mailbox_routes_expense_claim():
     assert resp.confidence_score >= 0.90
 
 
+def test_accexp_mailbox_invoice_subject_still_expense_claim():
+    """Employee reimbursement invoices to accexp must not classify as ap_invoice."""
+    resp = classify_email_stub(
+        ClassifyEmailRequest(
+            email_id=UUID("00000000-0000-0000-0000-000000000003"),
+            subject="Invoice HO-202512-01 — Home office reimbursement",
+            body_preview="Invoice No: HO-202512-01 Total: SGD 282.00",
+            from_address="marc@bp0.work",
+            mailbox="accexp.mmlogistix@bp0.work",
+            valid_case_types=["expense_claim", "ap_invoice", "general_inquiry"],
+        )
+    )
+    assert resp.output is not None
+    assert resp.output.case_type == "expense_claim"
+
+
 def test_accap_mailbox_overrides_non_invoice_subject():
     resp = classify_email_stub(
         ClassifyEmailRequest(
