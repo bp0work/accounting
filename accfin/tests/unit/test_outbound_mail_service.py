@@ -17,11 +17,17 @@ def test_render_acknowledgement_includes_case_number():
             "case_number": "CAS-20260524-0001",
             "sender_name": "Vendor Co",
             "original_subject": "Invoice 123",
+            "attachment_filenames": ["invoice.pdf"],
+            "received_at_display": "2026-05-24T08:00:00+00:00",
+            "original_body_plain": "Please process this invoice.",
         }
     )
     assert "CAS-20260524-0001" in plain
     assert "CAS-20260524-0001" in html
     assert "Invoice 123" in plain
+    assert "invoice.pdf" in plain
+    assert "Original message" in plain
+    assert "Please process this invoice." in plain
 
 
 def test_render_manager_escalation_includes_action_urls():
@@ -110,7 +116,11 @@ async def test_try_send_pending_marks_row_sent():
         body_plain="Thanks",
         message_type="acknowledgement",
         status="approved",
-        metadata_={"template": "mail.intake.acknowledged", "case_number": "CAS-1"},
+        metadata_={
+            "template": "mail.intake.acknowledged",
+            "case_number": "CAS-1",
+            "reattach_inbound_attachments": True,
+        },
     )
     mailbox = MagicMock()
     mailbox.id = outbound.mailbox_id

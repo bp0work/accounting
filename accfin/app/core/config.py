@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.9-outbound-smtp"
+        return "0.13.10-ack-context-attachments"
 
     @property
     def edge_public_base_url(self) -> str:

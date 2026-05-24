@@ -17,14 +17,39 @@ Thank you for your email{% if sender_name %}, {{ sender_name }}{% endif %}.
 We have received your message and assigned reference {{ case_number }}. Our team will review it shortly.
 
 Original subject: {{ original_subject | default('(no subject)') }}
-"""
+{% if received_at_display %}Received: {{ received_at_display }}
+{% endif %}{% if attachment_filenames %}
+File(s) received:
+{% for name in attachment_filenames -%}
+- {{ name }}
+{% endfor -%}
+{% endif %}{% if original_body_plain %}
+
+----- Original message -----
+{{ original_body_plain }}
+{% endif %}"""
 
 _ACK_HTML = """\
 <p>Thank you for your email{% if sender_name %}, {{ sender_name }}{% endif %}.</p>
 <p>We have received your message and assigned reference <strong>{{ case_number }}</strong>. \
 Our team will review it shortly.</p>
-<p>Original subject: {{ original_subject | default('(no subject)') }}</p>
-"""
+<p><strong>Original subject:</strong> {{ original_subject | default('(no subject)') }}</p>
+{% if received_at_display %}<p><strong>Received:</strong> {{ received_at_display }}</p>{% endif %}
+{% if attachment_filenames %}
+<p><strong>File(s) received:</strong></p>
+<ul>
+{% for name in attachment_filenames %}
+  <li>{{ name }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% if original_body_plain %}
+<hr>
+<p><strong>Original message</strong></p>
+<blockquote style="border-left:3px solid #ccc;padding-left:12px;color:#444;white-space:pre-wrap;margin:0;">
+{{ original_body_plain }}
+</blockquote>
+{% endif %}"""
 
 _ESCALATION_PLAIN = """\
 Action required — manager review for case {{ case_number }}.

@@ -107,6 +107,25 @@ class OutboundMailService:
             )
         return attachments
 
+    @staticmethod
+    def _quote_original_body(email: Email, *, max_chars: int = 2000) -> str:
+        body = (email.body_text or email.body_preview or "").strip()
+        if len(body) > max_chars:
+            return body[:max_chars] + "\n…"
+        return body
+
+    def _ack_template_context(self, source_email: Email, case_number: str) -> dict:
+        filenames = [att.filename for att in (source_email.attachments or [])]
+        received = source_email.received_at.isoformat() if source_email.received_at else ""
+        return {
+            "case_number": case_number,
+            "sender_name": source_email.from_name,
+            "original_subject": source_email.subject,
+            "attachment_filenames": filenames,
+            "received_at_display": received,
+            "original_body_plain": self._quote_original_body(source_email),
+        }
+
     async def try_send_pending(
         self,
         outbound: PendingOutboundEmail | None,
@@ -133,12 +152,13 @@ class OutboundMailService:
         body_html = outbound.body_html
 
         if template_key == "mail.intake.acknowledged" and source_email is not None:
-            ctx = {
-                "case_number": meta.get("case_number", ""),
-                "sender_name": source_email.from_name,
-                "original_subject": source_email.subject,
-            }
+            ctx = self._ack_template_context(
+                source_email,
+                str(meta.get("case_number", "")),
+            )
             body_plain, body_html = templates.render_acknowledgement(ctx)
+            if not meta.get("reattach_inbound_attachments") and ctx["attachment_filenames"]:
+                meta["reattach_inbound_attachments"] = True
 
         reattach = bool(meta.get("reattach_inbound_attachments"))
         attachments = self._inbound_attachments(source_email, reattach=reattach)

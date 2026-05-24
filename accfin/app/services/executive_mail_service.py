@@ -254,6 +254,7 @@ class ExecutiveMailService:
             metadata_={
                 "template": "mail.intake.acknowledged",
                 "case_number": case.case_number,
+                "reattach_inbound_attachments": email.attachment_count > 0,
             },
         )
         self._session.add(outbound)
