@@ -90,6 +90,9 @@ services:
     environment:
       FINANCE_ACCOUNTS_WORKER__ENABLED: "true"
       FINANCE_HERMES__BASE_URL: http://hermes:8001
+      FINANCE_MAIL__ATTACHMENT_STORAGE_PATH: /data/attachments
+    volumes:
+      - attachment-data:/data/attachments
     ports:
       - "8010:8010"
     networks:
