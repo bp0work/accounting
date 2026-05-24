@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.hermes import HermesClient
 from app.core.config import get_settings
-from workers.accounts.classification import ClassificationService, GeneralInquiryHandler
+from workers.accounts.classification import GeneralInquiryHandler, process_intake_message
 from workers.base import QueueConsumer
 
 logger = logging.getLogger(__name__)
@@ -23,8 +23,8 @@ class IntakeConsumer(QueueConsumer):
         self._hermes = hermes
 
     async def handle_raw(self, raw: str, session: AsyncSession) -> dict[str, Any]:
-        service = ClassificationService(session, hermes=self._hermes)
-        return await service.process_intake(raw)
+        # DB work uses per-phase sessions inside process_intake_message (see poller fix).
+        return await process_intake_message(raw, hermes=self._hermes)
 
 
 class AccountsQueueConsumer(QueueConsumer):

@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.10-ack-context-attachments"
+        return "0.13.11-accounts-classification-greenlet-fix"
 
     @property
     def edge_public_base_url(self) -> str:

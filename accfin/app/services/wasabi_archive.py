@@ -110,6 +110,12 @@ class WasabiArchiveService:
         return {"archived": archived, "total": len(attachments)}
 
     async def _archive_one(self, *, case_number: str, attachment: EmailAttachment) -> bool:
+        attachment_id = attachment.id
+        filename = attachment.filename
+        mime_type = attachment.mime_type
+        email_id = attachment.email_id
+        storage_path = attachment.storage_path
+
         local_path = resolve_local_attachment_path(
             attachment,
             attachment_storage_path=self._settings.attachment_storage_path,
@@ -118,26 +124,35 @@ class WasabiArchiveService:
             logger.warning(
                 "Attachment file missing for Wasabi archive: %s (attachment %s)",
                 local_path,
-                attachment.id,
+                attachment_id,
             )
             return False
 
         object_key = build_transaction_archive_key(
             case_number=case_number,
-            filename=attachment.filename,
+            filename=filename,
             prefix_transactions=self._settings.wasabi_prefix_transactions,
         )
         await asyncio.to_thread(
             self._upload_file_sync,
             local_path=local_path,
             object_key=object_key,
-            content_type=attachment.mime_type,
+            content_type=mime_type,
         )
-        attachment.wasabi_archive_path = object_key
+
+        result = await self._session.execute(
+            select(EmailAttachment).where(EmailAttachment.id == attachment_id)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            logger.warning("Attachment %s not found after Wasabi upload (email %s)", attachment_id, email_id)
+            return False
+
+        row.wasabi_archive_path = object_key
         await self._session.flush()
         logger.info(
             "Archived attachment %s to s3://%s/%s",
-            attachment.id,
+            attachment_id,
             self._settings.wasabi_bucket,
             object_key,
         )
