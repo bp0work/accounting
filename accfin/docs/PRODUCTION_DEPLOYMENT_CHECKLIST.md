@@ -175,7 +175,8 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E5.3 | Wasabi `logs/finance_daily_{date}.csv` upload verified (when credentials live) | ☐ |
 | E5.3a | Wasabi `transactions/{case_number}/` attachment archive on intake verified (`FINANCE_WASABI__ARCHIVE_ON_INTAKE=true`) | ☐ |
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
-| E5.5 | Outbound SMTP for manager escalation, ack, clarification (`0.13.9-outbound-smtp`) | ☐ |
+| E5.5 | Outbound SMTP: manager escalation (incl. missing-fields template `0.13.15`), ack, clarification on Request More Info | ☐ |
+| E5.6 | finance-ui case detail shows manual review panel (`0.13.6-manual-review-detail`) | ☐ |
 
 ---
 
