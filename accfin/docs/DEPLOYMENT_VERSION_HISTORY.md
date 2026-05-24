@@ -5,7 +5,8 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.13.18-gateway-intake-enqueue-logging** | 2026-05-24 | — | Gateway IMAP poller: `_enqueue_intake_for_email()` with success/failure logging; ingest leaves email `parsed` until Redis RPUSH succeeds; `intake_enqueue_failed` metadata on failure for manual requeue. |
+| **0.13.19-domain-worker-attachment-volumes** | 2026-05-24 | — | `docker-compose.yml`: mount shared `attachment-data` on `ap-worker`, `ar-worker`, `expense-worker` (+ `FINANCE_MAIL__ATTACHMENT_STORAGE_PATH`) so escalation SMTP can re-attach inbound files. Extends `0.13.13` (accounts-worker only). |
+| **0.13.18-gateway-intake-enqueue-logging** | 2026-05-24 | `f439577` | Gateway IMAP poller: `_enqueue_intake_for_email()` with success/failure logging; ingest leaves email `parsed` until Redis RPUSH succeeds; `intake_enqueue_failed` metadata on failure for manual requeue. |
 | **0.13.17-approvals-list-from-address** | 2026-05-24 | `9ed2002` | `GET /cases` includes `from_address` (from linked `emails` row) and existing `counterparty_name` for finance-ui approvals table. |
 | **0.13.7-approvals-table-columns** (finance-ui) | 2026-05-24 | — | Cases & Approvals table: Document Type labels, Submitted By, Issued By/To; Stage column removed. |
 | **0.13.16-escalation-inbound-attachments** | 2026-05-24 | `d9bf736` | Manager escalation SMTP re-attaches inbound files: `pending_outbound_emails.metadata.reattach_inbound_attachments` + `_load_reattach_attachments` in `_build_send_plan` for `manager.escalation.*` templates (`17` §10.4). |

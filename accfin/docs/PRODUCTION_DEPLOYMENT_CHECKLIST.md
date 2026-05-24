@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.13.18-gateway-intake-enqueue-logging` (migrations `001`–`047`; finance-ui `0.13.7-approvals-table-columns`)
+**Target version:** `0.13.19-domain-worker-attachment-volumes` (migrations `001`–`047`; finance-ui `0.13.7-approvals-table-columns`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -59,7 +59,7 @@ Reference: `19_Expense_Worker_Specification.md` §1, §11.
 | D1b | Gateway logs show successful poll (no `MissingGreenlet` / SQLAlchemy async errors) | ☐ |
 | D1c | Accounts worker intake classification completes without `MissingGreenlet` (`0.13.11`) | ☐ |
 | D1d | Intake ack SMTP send completes without `MissingGreenlet` (`0.13.12`) | ☐ |
-| D1e | `accounts-worker` mounts `attachment-data` at `/data/attachments`; Wasabi archive + ack re-attach find inbound PDFs (`0.13.13`) | ☐ |
+| D1e | All workers that send outbound mail mount `attachment-data` at `/data/attachments` (`accounts-worker` `0.13.13`; `ap-worker`/`ar-worker`/`expense-worker` `0.13.19`) | ☐ |
 | D1f | Classified cases appear on `accounts_queue` and AP/AR/expense workers consume them (`0.13.14`) | ☐ |
 | D1g | AP `manual_review` (missing fields) escalates to manager mailbox with extracted/missing detail (`0.13.15`) | ☐ |
 | D1h | Manager escalation email includes original inbound attachments (`0.13.16`) | ☐ |
@@ -153,7 +153,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.18-gateway-intake-enqueue-logging` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.19-domain-worker-attachment-volumes` |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
 | E4.1c | Browser login → remain signed in >15 min (silent refresh) | Session persists; no redirect to `/login` until refresh token expires (7d) |
 | E4.1d | Browser login → `/approvals` | Pending approvals load (client-side auth; not SSR 401) |

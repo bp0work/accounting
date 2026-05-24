@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.18-gateway-intake-enqueue-logging"
+        return "0.13.19-domain-worker-attachment-volumes"
 
     @property
     def edge_public_base_url(self) -> str:
