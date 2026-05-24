@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 TERMINAL_CASE_STATUSES = frozenset({"posted", "completed", "pending_approval"})
 
+# Block up to N seconds on BLPOP when the queue is empty (avoids tight Redis poll loops).
+DEFAULT_QUEUE_BLOCK_TIMEOUT_SEC = 5
+
 
 async def check_idempotent(redis: Redis, message_id: str) -> bool:
     """Return True if this message should be processed (new), False if duplicate."""
@@ -61,7 +64,7 @@ async def signal_retry(
 
 
 class QueueConsumer(ABC):
-    """BRPOP loop for a single Redis queue."""
+    """Blocking BLPOP loop for a single Redis queue."""
 
     def __init__(
         self,
@@ -80,7 +83,12 @@ class QueueConsumer(ABC):
     async def handle_raw(self, raw: str, session: AsyncSession) -> dict[str, Any]:
         ...
 
-    async def poll_once(self, session: AsyncSession, *, timeout: int = 1) -> bool:
+    async def poll_once(
+        self,
+        session: AsyncSession,
+        *,
+        timeout: int = DEFAULT_QUEUE_BLOCK_TIMEOUT_SEC,
+    ) -> bool:
         item = await self.redis.blpop(self.queue_name, timeout=timeout)
         if not item:
             return False

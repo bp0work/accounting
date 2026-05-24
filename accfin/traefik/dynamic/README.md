@@ -1,6 +1,6 @@
 # Traefik dynamic configuration (`accfin/traefik/dynamic/`)
 
-**Deploy version:** `0.13.6-finance-security-2fa` (see `app/core/config.py` and `docs/DEPLOYMENT_VERSION_HISTORY.md`).
+**Deploy version:** `0.13.7-worker-blpop-idle-fix` (see `app/core/config.py` and `docs/DEPLOYMENT_VERSION_HISTORY.md`).
 
 Mounted read-only at `/etc/traefik/dynamic` (see `docker-compose.yml` → `traefik` service).
 
