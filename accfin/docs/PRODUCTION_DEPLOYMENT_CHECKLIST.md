@@ -182,7 +182,8 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
 | E5.5 | Outbound SMTP: manager escalation (incl. missing-fields template `0.13.15` + inbound re-attach `0.13.16`), ack, clarification on Request More Info | ☐ |
 | E5.6 | finance-ui case detail shows manual review panel (`0.13.6-manual-review-detail`) | ☐ |
-| E5.7 | finance-ui Cases & Approvals table: Document Type, Submitted By, Issued By/To (`0.13.7`) | ☐ |
+| E5.7 | finance-ui Cases & Approvals table: Document Type, Submitted By, Client / Vendor (`0.13.8`) | ☐ |
+| E5.8 | Rebuild `gateway`, `ap-worker`, `expense-worker`, `hermes`, `fastapi` after `0.13.20` (`python-docx` dependency) | ☐ |
 
 ---
 

@@ -47,7 +47,7 @@
           <th>Document Type</th>
           <th>Status</th>
           <th>Submitted By</th>
-          <th>Issued By/To</th>
+          <th>Client / Vendor</th>
           <th>Amount</th>
           <th>Last Activity</th>
           <th>Error</th>
