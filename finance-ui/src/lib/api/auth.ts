@@ -24,6 +24,71 @@ export type LoginUserResponse = {
   two_factor_enabled: boolean;
 };
 
+export type LoginRequest = {
+  username: string;
+  password: string;
+  totp_code?: string;
+};
+
+export type LoginSuccess = {
+  access_token: string;
+  refresh_token: string;
+  user: LoginUserResponse;
+};
+
+export type LoginError = {
+  code: string;
+  message: string;
+};
+
+/** API codes that require a second login step with TOTP (`05` §3). */
+export const LOGIN_TOTP_REQUIRED_CODES = new Set(['TOTP_REQUIRED', '2FA_REQUIRED']);
+
+export function isLoginTotpRequired(code: string): boolean {
+  return LOGIN_TOTP_REQUIRED_CODES.has(code);
+}
+
+export async function loginRequest(
+  payload: LoginRequest,
+): Promise<{ ok: true; data: LoginSuccess } | { ok: false; error: LoginError }> {
+  const body: Record<string, string> = {
+    username: payload.username,
+    password: payload.password,
+  };
+  if (payload.totp_code) {
+    body.totp_code = payload.totp_code;
+  }
+
+  const res = await fetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: {
+        code: data?.error?.code ?? 'LOGIN_FAILED',
+        message: data?.error?.message ?? 'Login failed',
+      },
+    };
+  }
+
+  if (!data.access_token || !data.refresh_token) {
+    return {
+      ok: false,
+      error: {
+        code: 'LOGIN_FAILED',
+        message: 'Login response missing tokens',
+      },
+    };
+  }
+
+  return { ok: true, data };
+}
+
 export function sessionUserFromLogin(user: LoginUserResponse): SessionUser {
   return {
     id: user.id,

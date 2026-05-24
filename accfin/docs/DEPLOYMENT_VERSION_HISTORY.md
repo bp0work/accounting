@@ -5,6 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
+| **0.13.4-login-2fa-step** (finance-ui) | 2026-05-24 | — | Login two-step flow: username/password first; on `TOTP_REQUIRED` show 6-digit authenticator field and resubmit with `totp_code`. Package `finance-ui@0.13.4-login-2fa-step`. |
 | **0.13.10-ack-context-attachments** | 2026-05-24 | — | Ack email (`mail.intake.acknowledged`): lists inbound attachment filenames, quotes original message body, re-attaches files when present; `In-Reply-To` threading unchanged. |
 | **0.13.9-outbound-smtp** | 2026-05-20 | — | Outbound SMTP: `SmtpMailService` + `OutboundMailService` (`aiosmtplib`, Jinja templates); `FINANCE_SMTP__*` relay settings in `config.py`; manager escalation, ack, and failure notify sent after queue; daily log CSV attachment; `POST /internal/jobs/flush-outbound-mail` catch-up. |
 | **0.13.8-wasabi-attachment-archive** | 2026-05-20 | `5f4de39` | `WasabiArchiveService` (`app/services/wasabi_archive.py`): boto3 upload to `transactions/{case_number}/{filename}` on `bp0workacc`; sets `email_attachments.wasabi_archive_path`. Triggered from `CaseService.on_case_linked_to_email()` after intake classification links email → case when `FINANCE_WASABI__ARCHIVE_ON_INTAKE=true`. Dependency: `boto3`. |

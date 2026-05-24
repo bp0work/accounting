@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.13.10-ack-context-attachments` (migrations `001`–`047`; finance-ui `0.13.3-security-2fa`)
+**Target version:** `0.13.10-ack-context-attachments` (migrations `001`–`047`; finance-ui `0.13.4-login-2fa-step`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -156,7 +156,8 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E4.5 | Expense worker health `:8014/health` | Healthy after Gate C |
 | E4.6 | `docker compose ps ollama` | Status **healthy** (`ollama list` healthcheck; `0.13.5-ollama-healthcheck-cli`) |
 | E4.7 | `docker compose ps hermes` | **healthy** (depends on Ollama) |
-| E4.8 | Browser: `/settings/security` (logged in) | 2FA status shown; Enable flow renders QR (`0.13.6-finance-security-2fa`) |
+| E4.8 | Browser: `/settings/security` (logged in) | 2FA status shown; Enable flow renders QR (`0.13.3-security-2fa`) |
+| E4.8a | Browser: `/login` with 2FA-enabled user | Step 1 username/password → `TOTP_REQUIRED`; step 2 shows 6-digit code field; successful login (`0.13.4-login-2fa-step`) |
 | E4.9 | Inbound email with PDF attachment → new case | `email_attachments.wasabi_archive_path` set to `transactions/{case_number}/{filename}`; object present on Wasabi `bp0workacc` (`0.13.8-wasabi-attachment-archive`) |
 
 ### E5 — Explicit exclusions
