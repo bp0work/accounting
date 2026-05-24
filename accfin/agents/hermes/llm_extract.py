@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -26,8 +27,23 @@ from app.schemas.hermes import (
 logger = logging.getLogger(__name__)
 
 _AP_INVOICE_PROMPT = """You are an AP invoice data extractor for mmlogistix finance.
-Extract structured fields from the supplier invoice text below.
-Always extract due_date (payment due date) when present in the document or derivable from payment terms.
+Extract structured fields from the supplier invoice, receipt, or payment document text below.
+
+VENDOR (vendor_name): The company or entity that ISSUED the invoice — the seller or service
+provider. Do NOT use the buyer, payer, or customer name as vendor_name. Example: on an ACRA receipt,
+vendor_name is "ACRA" or "Accounting and Corporate Regulatory Authority", NOT "MMLOGISTIX PTE LTD"
+(the customer who paid).
+
+INVOICE NUMBER (invoice_number): Accept values labelled Invoice no., Receipt no., Receipt number,
+Reference no., Ref no., ARN, Document no., or similar.
+
+INVOICE DATE (invoice_date): Accept Date and time, Date of service, Transaction date, Payment date,
+Invoice date, or similar. Format as YYYY-MM-DD.
+
+DUE DATE (due_date): Payment due date from payment terms when present. For receipts or documents
+that are already paid (payment confirmed, receipt issued after payment), set due_date equal to
+invoice_date.
+
 Return ONLY valid JSON matching this schema:
 {{
   "invoice_number": string|null,
@@ -47,7 +63,8 @@ Return ONLY valid JSON matching this schema:
   "confidence_score": float
 }}
 Use amounts as decimal strings without currency symbols. Currency default {currency_hint}.
-Supplier hint: {supplier_hint}
+Do not copy the supplier hint as vendor_name unless the document confirms that entity issued the invoice.
+Supplier hint (context only): {supplier_hint}
 
 DOCUMENT TEXT:
 {document_text}
@@ -99,6 +116,34 @@ Currency default {currency_hint}. Customer hint: {customer_hint}.
 DOCUMENT TEXT:
 {document_text}
 """
+
+
+_PAID_RECEIPT_RE = re.compile(
+    r"\b("
+    r"receipt|paid|payment\s+received|payment\s+confirmed|already\s+paid|"
+    r"payment\s+successful|amount\s+paid|transaction\s+successful"
+    r")\b",
+    re.I,
+)
+
+
+def _normalize_ap_due_date(
+    invoice_date: date | None,
+    due_date: date | None,
+    document_text: str,
+) -> date | None:
+    if due_date:
+        return due_date
+    if invoice_date and _PAID_RECEIPT_RE.search(document_text):
+        return invoice_date
+    return None
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _parse_date(value: Any) -> date | None:
@@ -183,12 +228,21 @@ async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceR
         return extract_invoice_stub(request)
 
     line_items = _line_items(data.get("line_items"))
+    invoice_date = _parse_date(data.get("invoice_date"))
+    due_date = _parse_date(data.get("due_date") or data.get("payment_due_date"))
+    if role == "ap":
+        due_date = _normalize_ap_due_date(invoice_date, due_date, document_text)
+    vendor_name = _optional_str(data.get("vendor_name"))
+    customer_name = _optional_str(data.get("customer_name"))
+    if role != "ap":
+        vendor_name = vendor_name or request.supplier_hint
+        customer_name = customer_name or request.customer_hint
     extracted = ExtractedInvoice(
-        invoice_number=data.get("invoice_number"),
-        invoice_date=_parse_date(data.get("invoice_date")),
-        due_date=_parse_date(data.get("due_date") or data.get("payment_due_date")),
-        vendor_name=data.get("vendor_name") or request.supplier_hint,
-        customer_name=data.get("customer_name") or request.customer_hint,
+        invoice_number=_optional_str(data.get("invoice_number")),
+        invoice_date=invoice_date,
+        due_date=due_date,
+        vendor_name=vendor_name,
+        customer_name=customer_name,
         po_reference=data.get("po_reference"),
         subtotal=_normalize_amount(data.get("subtotal")),
         tax_amount=_normalize_amount(data.get("tax_amount")),
@@ -205,7 +259,7 @@ async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceR
     return ExtractInvoiceResponse(
         confidence_score=round(confidence, 2),
         model_used=EXTRACTION_MODEL,
-        prompt_version="ar_invoice_extract-v1" if role == "ar" else "ap_invoice_extract-v1",
+        prompt_version="ar_invoice_extract-v1" if role == "ar" else "ap_invoice_extract-v2",
         output=extracted,
     )
 

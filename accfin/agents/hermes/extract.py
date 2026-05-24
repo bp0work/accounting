@@ -36,8 +36,17 @@ def _parse_amount(text: str) -> str | None:
 
 
 def _parse_invoice_number(text: str) -> str | None:
-    match = re.search(r"(?:invoice|inv)[\s#:.-]*([A-Z0-9-]+)", text, re.I)
-    return match.group(1) if match else None
+    patterns = [
+        r"(?:invoice|inv)[\s#:.-]*([A-Z0-9-]+)",
+        r"(?:receipt(?:\s+no\.?|\s+number)?)[\s#:.-]*([A-Z0-9-]+)",
+        r"(?:reference(?:\s+no\.?)?|ref(?:\s+no\.?)?)[\s#:.-]*([A-Z0-9-]+)",
+        r"(?:ARN|document(?:\s+no\.?)?)[\s#:.-]*([A-Z0-9-]+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            return match.group(1)
+    return None
 
 
 def _parse_po_reference(text: str) -> str | None:
@@ -56,9 +65,13 @@ def extract_invoice_stub(request: ExtractInvoiceRequest) -> ExtractInvoiceRespon
     if not total:
         missing.append("total_amount")
     today = date.today()
+    is_paid_receipt = bool(
+        re.search(r"\b(receipt|paid|payment\s+confirmed|payment\s+received)\b", text, re.I)
+    )
     extracted = ExtractedInvoice(
         invoice_number=invoice_number,
         invoice_date=today,
+        due_date=today if is_paid_receipt else None,
         vendor_name=request.supplier_hint,
         po_reference=po_reference,
         total_amount=total,

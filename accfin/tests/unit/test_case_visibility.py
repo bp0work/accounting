@@ -3,7 +3,13 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-from app.services.case_visibility import error_reason, processing_stage, status_reason
+from app.models.case import Case
+from app.services.case_visibility import (
+    client_vendor_name,
+    error_reason,
+    processing_stage,
+    status_reason,
+)
 
 
 def _case(**kwargs):
@@ -46,3 +52,37 @@ def test_status_reason_includes_missing_fields_and_confidence():
     assert status_reason(case) == (
         "Missing fields: invoice_number, invoice_date · Extraction confidence: 0.62"
     )
+
+
+def test_client_vendor_name_ap_uses_extracted_vendor():
+    case = Case(
+        case_number="CAS-TEST-1",
+        type="ap_invoice",
+        status="manual_review",
+        subject="ACRA receipt",
+        counterparty_name="Marc Michelmann",
+        amount_currency="SGD",
+        workflow_metadata={
+            "extracted_fields": {
+                "vendor_name": "Accounting and Corporate Regulatory Authority",
+                "invoice_number": "R-123",
+            }
+        },
+    )
+    assert (
+        client_vendor_name(case)
+        == "Accounting and Corporate Regulatory Authority"
+    )
+
+
+def test_client_vendor_name_ap_falls_back_to_counterparty():
+    case = Case(
+        case_number="CAS-TEST-2",
+        type="ap_invoice",
+        status="processing",
+        subject="Invoice",
+        counterparty_name="Acme Pte Ltd",
+        amount_currency="SGD",
+        workflow_metadata={},
+    )
+    assert client_vendor_name(case) == "Acme Pte Ltd"

@@ -34,13 +34,18 @@ async def test_cases_dashboard_and_export(
         type="ap_invoice",
         status="processing",
         subject="Export test case",
-        counterparty_name="Acme Pte Ltd",
+        counterparty_name="Marc Michelmann",
         amount_value=Decimal("99.50"),
         amount_currency="SGD",
         email_id=email.id,
         created_at=now,
         sla_deadline=now - timedelta(hours=1),
         sla_status="breached",
+        workflow_metadata={
+            "extracted_fields": {
+                "vendor_name": "Accounting and Corporate Regulatory Authority",
+            }
+        },
     )
     db_session.add(case)
     await db_session.commit()
@@ -69,5 +74,6 @@ async def test_cases_dashboard_and_export(
     assert row is not None
     assert row["is_overdue"] is True
     assert row["processing_time_minutes"] is not None
-    assert row["counterparty_name"] == "Acme Pte Ltd"
+    assert row["counterparty_name"] == "Marc Michelmann"
+    assert row["client_vendor_name"] == "Accounting and Corporate Regulatory Authority"
     assert row["from_address"] == "vendor@acme.sg"

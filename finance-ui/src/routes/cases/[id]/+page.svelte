@@ -164,7 +164,7 @@
       {/if}
     {/if}
     <p>{item.subject}</p>
-    <p>Counterparty: {item.counterparty_name || '—'}</p>
+    <p>Client / Vendor: {item.client_vendor_name || item.counterparty_name || '—'}</p>
     <p>Processing time: {item.processing_time_minutes != null ? `${item.processing_time_minutes} min` : '—'}</p>
     <p>Created: {new Date(item.created_at).toLocaleString()}</p>
     {#if item.last_activity_at}

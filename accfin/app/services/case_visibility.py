@@ -7,6 +7,32 @@ from datetime import datetime
 from app.models.case import Case
 
 EXCEPTION_STATUSES = frozenset({"exception", "manual_review", "on_hold", "rejected"})
+AP_CASE_TYPES = frozenset({"ap_invoice", "ap_po_validation", "ap_payment_proposal"})
+AR_CASE_TYPES = frozenset({"ar_invoice", "ar_payment_advice", "ar_statement"})
+
+
+def _extracted_field(workflow_metadata: dict, field: str) -> str | None:
+    extracted = workflow_metadata.get("extracted_fields")
+    if not isinstance(extracted, dict):
+        return None
+    val = extracted.get(field)
+    if val is None or val == "":
+        return None
+    return str(val)
+
+
+def client_vendor_name(case: Case) -> str | None:
+    """Display name for Client / Vendor column — issuer for AP, customer for AR."""
+    meta = case.workflow_metadata or {}
+    if case.type in AP_CASE_TYPES:
+        vendor = _extracted_field(meta, "vendor_name")
+        if vendor:
+            return vendor
+    if case.type in AR_CASE_TYPES:
+        customer = _extracted_field(meta, "customer_name")
+        if customer:
+            return customer
+    return case.counterparty_name
 
 
 def processing_stage(case: Case) -> str:

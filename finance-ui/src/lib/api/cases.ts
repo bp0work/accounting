@@ -7,6 +7,7 @@ export type CaseItem = {
   status: string;
   subject: string;
   counterparty_name?: string | null;
+  client_vendor_name?: string | null;
   from_address?: string | null;
   amount_value?: string | null;
   amount_currency: string;

@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.20-docx-po-travel-controls"
+        return "0.13.21-ap-vendor-extraction-display"
 
     @property
     def edge_public_base_url(self) -> str:

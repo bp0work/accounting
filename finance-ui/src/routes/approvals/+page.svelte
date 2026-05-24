@@ -65,7 +65,7 @@
             <td>{documentTypeLabel(item.type)}</td>
             <td>{item.status}</td>
             <td>{item.from_address || '—'}</td>
-            <td>{item.counterparty_name || '—'}</td>
+            <td>{item.client_vendor_name || item.counterparty_name || '—'}</td>
             <td>{formatAmount(item)}</td>
             <td>{formatActivity(item)}</td>
             <td class="error-cell">{item.error_reason || '—'}</td>

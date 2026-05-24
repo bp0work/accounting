@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.13.20-docx-po-travel-controls` (migrations `001`–`048`; finance-ui `0.13.7-approvals-table-columns`)
+**Target version:** `0.13.21-ap-vendor-extraction-display` (migrations `001`–`048`; finance-ui `0.13.9-ap-vendor-column-display`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -153,7 +153,8 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.20-docx-po-travel-controls` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.21-ap-vendor-extraction-display` |
+| D1l | AP receipt: Hermes extracts issuer as `vendor_name` (not payer); paid receipt `due_date` = `invoice_date`; Cases table Client/Vendor shows `client_vendor_name` (`0.13.21`) | ☐ |
 | D1i | DOCX attachments extract on accexp; employee reimbursement classifies as `expense_claim` (`0.13.20`) | ☐ |
 | D1j | AP invoice without PO escalates to manager; PO match stored in `workflow_metadata.po_validation` (`0.13.20`) | ☐ |
 | D1k | Travel expense without approved `travel_requests` row escalates to manager (`0.13.20`) | ☐ |
@@ -182,8 +183,9 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
 | E5.5 | Outbound SMTP: manager escalation (incl. missing-fields template `0.13.15` + inbound re-attach `0.13.16`), ack, clarification on Request More Info | ☐ |
 | E5.6 | finance-ui case detail shows manual review panel (`0.13.6-manual-review-detail`) | ☐ |
-| E5.7 | finance-ui Cases & Approvals table: Document Type, Submitted By, Client / Vendor (`0.13.8`) | ☐ |
+| E5.7 | finance-ui Cases & Approvals: Document Type, Submitted By, Client / Vendor from `client_vendor_name` (`0.13.9`) | ☐ |
 | E5.8 | Rebuild `gateway`, `ap-worker`, `expense-worker`, `hermes`, `fastapi` after `0.13.20` (`python-docx` dependency) | ☐ |
+| E5.9 | Rebuild `hermes`, `fastapi`, `finance-ui` after `0.13.21` (AP vendor prompt + `client_vendor_name` API) | ☐ |
 
 ---
 

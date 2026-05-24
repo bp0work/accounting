@@ -20,6 +20,7 @@ class CaseResponse(BaseModel):
     stp_eligible: bool
     email_id: UUID | None = None
     counterparty_name: str | None = None
+    client_vendor_name: str | None = None
     from_address: str | None = None
     amount_value: Decimal | None = None
     amount_currency: str

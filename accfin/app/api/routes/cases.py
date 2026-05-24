@@ -33,6 +33,7 @@ from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
 from app.services.case_service import CaseService
 from app.services.case_visibility import (
+    client_vendor_name,
     error_reason,
     last_activity_at,
     processing_stage,
@@ -77,6 +78,7 @@ def _case_response(case, *, from_address: str | None = None) -> CaseResponse:
     return base.model_copy(
         update={
             "from_address": from_address,
+            "client_vendor_name": client_vendor_name(case),
             "completed_at": case.completed_at,
             "sla_deadline": case.sla_deadline,
             "processing_time_minutes": processing_time_minutes(case),
