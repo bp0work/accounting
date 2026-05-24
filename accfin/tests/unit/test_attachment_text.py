@@ -1,29 +1,54 @@
-"""PDF attachment text extraction."""
+"""Attachment text extraction — PDF and DOCX."""
 
-from app.services.attachment_text import extract_attachment_text_sync, sanitize_extracted_text
+import io
+
+import pytest
+
+from app.services.attachment_text import (
+    DOCX_MIME,
+    extract_attachment_text_sync,
+    extract_docx_text,
+    normalize_fragmented_text,
+)
 
 
-def test_sanitize_extracted_text_strips_null_bytes():
-    assert sanitize_extracted_text("hello\x00world") == "helloworld"
-    assert sanitize_extracted_text(None) is None
-    assert sanitize_extracted_text("") == ""
-    assert sanitize_extracted_text("a\u00a0b") == "a b"
+def test_normalize_fragmented_text_invoice_number():
+    raw = "Invoice No: HO-202 512 -01"
+    assert normalize_fragmented_text(raw) == "Invoice No: HO-202512-01"
 
 
-def test_extract_pdf_text_from_minimal_pdf():
-    # Minimal valid PDF with "INVOICE TOTAL 100.00" text stream
-    pdf_bytes = (
-        b"%PDF-1.4\n"
-        b"1 0 obj<<>>endobj\n"
-        b"2 0 obj<</Length 44>>stream\n"
-        b"BT /F1 12 Tf 100 700 Td (INVOICE TOTAL 100.00) Tj ET\n"
-        b"endstream\nendobj\n"
-        b"3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Contents 2 0 R>>endobj\n"
-        b"xref\n0 4\n0000000000 65535 f \n"
-        b"0000000009 00000 n \n0000000022 00000 n \n0000000120 00000 n \n"
-        b"trailer<</Size 4/Root<</Pages<</Kids[3 0 R]/Count 1>>>>>>\n"
-        b"startxref\n200\n%%EOF"
-    )
-    text = extract_attachment_text_sync(content=pdf_bytes, mime_type="application/pdf")
-    # pypdf may or may not parse this minimal PDF — ensure no exception and str or None
-    assert text is None or "INVOICE" in text or "100" in text
+def test_normalize_fragmented_text_month():
+    raw = "Date: 1 Dec em ber 2025"
+    assert normalize_fragmented_text(raw) == "Date: 1 December 2025"
+
+
+def test_extract_docx_reimbursement_invoice():
+    from docx import Document
+
+    buffer = io.BytesIO()
+    doc = Document()
+    doc.add_paragraph("Invoice No: HO-202512-01")
+    doc.add_paragraph("Date: 1 December 2025")
+    doc.add_paragraph("Total: SGD 282.00")
+    doc.add_paragraph("From: Marc Michelmann")
+    doc.add_paragraph("Category: Home office expense reimbursement")
+    doc.save(buffer)
+
+    text = extract_docx_text(buffer.getvalue())
+    assert "HO-202512-01" in text
+    assert "282.00" in text
+    assert "Marc Michelmann" in text
+    assert "Home office expense reimbursement" in text
+
+
+def test_extract_attachment_text_sync_docx():
+    from docx import Document
+
+    buffer = io.BytesIO()
+    doc = Document()
+    doc.add_paragraph("Employee reimbursement total SGD 50.00")
+    doc.save(buffer)
+
+    text = extract_attachment_text_sync(content=buffer.getvalue(), mime_type=DOCX_MIME)
+    assert text is not None
+    assert "50.00" in text

@@ -19,12 +19,15 @@ from app.models.user import User
 from app.repositories.case import CaseRepository
 from app.repositories.expense import ExpenseRepository
 from app.repositories.ledger import LedgerRepository
+from app.repositories.travel import TravelRequestRepository
 from app.schemas.hermes import ExtractExpenseClaimRequest
 from app.services.approval_service import ApprovalService
 from app.services.email_context import ensure_attachment_texts
 from app.services.executive_mail_service import ExecutiveMailService
 from app.services.expense_policy_evaluator import evaluate_expense_claim
+from workers.common.policy_escalation import route_travel_request_escalation
 from workers.common.processing_failure import route_processing_failure
+from workers.common.travel_detection import claim_requires_travel_request
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,7 @@ class ExpenseWorkerService:
         self._hermes = hermes or HermesClient()
         self._cases = CaseRepository(session)
         self._expense = ExpenseRepository(session)
+        self._travel = TravelRequestRepository(session)
         self._ledger = LedgerRepository(session)
         self._approvals = ApprovalService(session)
         self._executive_mail = ExecutiveMailService(session)
@@ -99,6 +103,49 @@ class ExpenseWorkerService:
 
         if confidence < 0.70 or not claim.line_items:
             return await self._finish_manual_review(case, claim, "INCOMPLETE_EXTRACTION")
+
+        if claim_requires_travel_request(claim.line_items):
+            travel = await self._travel.find_approved_for_period(
+                employee_id=claim.claimant_id,
+                period_from=claim.claim_period_from,
+                period_to=claim.claim_period_to,
+            )
+            if travel is None:
+                travel_validation = {
+                    "requires_travel_request": True,
+                    "travel_request_found": False,
+                    "claim_period_from": str(claim.claim_period_from),
+                    "claim_period_to": str(claim.claim_period_to),
+                }
+                claim_summary = {
+                    "claimant_name": claim.claimant_name,
+                    "total_claimed": str(claim.total_claimed),
+                    "currency": claim.currency,
+                    "purpose": claim.purpose,
+                }
+                email = None
+                if case.email_id:
+                    result = await self._session.execute(
+                        select(Email).where(Email.id == case.email_id)
+                    )
+                    email = result.scalar_one_or_none()
+                return await route_travel_request_escalation(
+                    self._session,
+                    case,
+                    email=email,
+                    claim_summary=claim_summary,
+                    extraction_confidence=confidence,
+                    actor_name="expense-worker",
+                    travel_validation=travel_validation,
+                )
+            case.workflow_metadata = {
+                **(case.workflow_metadata or {}),
+                "travel_request_validation": {
+                    "requires_travel_request": True,
+                    "travel_request_found": True,
+                    "travel_request_number": travel.request_number,
+                },
+            }
 
         entry_id = await self._create_reimbursement_journal(case, claim, posted=evaluation.stp_eligible)
         if entry_id is None:
@@ -186,6 +233,7 @@ class ExpenseWorkerService:
                         "transport",
                         "accommodation",
                         "entertainment",
+                        "office_supplies",
                         "other",
                     ],
                 )

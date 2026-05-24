@@ -147,6 +147,8 @@ def validate_po_match_stub(request: ValidatePOMatchRequest) -> ValidatePOMatchRe
     inv_total = Decimal(inv.total_amount or "0")
     po_total = Decimal(str(po.get("total_amount", "0")))
     tolerance = Decimal("0.01")
+    partial_pct = Decimal("0.05")
+
     if abs(inv_total - po_total) > tolerance:
         differences.append(
             PODifference(
@@ -156,7 +158,10 @@ def validate_po_match_stub(request: ValidatePOMatchRequest) -> ValidatePOMatchRe
             )
         )
     po_currency = po.get("currency", "SGD")
-    if inv.currency and po_currency and inv.currency != po_currency:
+    currency_mismatch = bool(
+        inv.currency and po_currency and inv.currency != po_currency
+    )
+    if currency_mismatch:
         differences.append(
             PODifference(
                 field="currency",
@@ -164,7 +169,16 @@ def validate_po_match_stub(request: ValidatePOMatchRequest) -> ValidatePOMatchRe
                 po_value=str(po_currency),
             )
         )
-    if differences:
+
+    if not differences:
+        return ValidatePOMatchResponse(
+            output=ValidatePOMatchOutput(
+                match_status="exact",
+                recommendation="Proceed with AP posting",
+            ),
+        )
+
+    if currency_mismatch:
         return ValidatePOMatchResponse(
             confidence_score=0.70,
             output=ValidatePOMatchOutput(
@@ -173,9 +187,22 @@ def validate_po_match_stub(request: ValidatePOMatchRequest) -> ValidatePOMatchRe
                 recommendation="Route to manual review for PO variance",
             ),
         )
+
+    if po_total > 0 and abs(inv_total - po_total) / po_total <= partial_pct:
+        return ValidatePOMatchResponse(
+            confidence_score=0.85,
+            output=ValidatePOMatchOutput(
+                match_status="partial",
+                differences=differences,
+                recommendation="Approve — amount variance within 5% tolerance",
+            ),
+        )
+
     return ValidatePOMatchResponse(
+        confidence_score=0.70,
         output=ValidatePOMatchOutput(
-            match_status="match",
-            recommendation="Proceed with AP posting",
+            match_status="mismatch",
+            differences=differences,
+            recommendation="Route to manual review for PO variance",
         ),
     )
