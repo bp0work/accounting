@@ -17,6 +17,7 @@ from fastapi import status
 from app.schemas.auth import TokenData
 from app.schemas.case import CaseRetryResponse
 from app.services.queue_router import enqueue_accounts
+from app.services.wasabi_archive import WasabiArchiveService
 
 RETRYABLE_STATUSES = frozenset({"exception", "manual_review"})
 
@@ -35,6 +36,14 @@ class CaseService:
         self._policies = PolicyRepository(session)
         self._machine = CaseStateMachine()
         self._policy_engine = PolicyEngine()
+
+    async def on_case_linked_to_email(self, case, email_id: UUID) -> dict[str, int | str]:
+        """Post-intake hook: archive email attachments to Wasabi when configured."""
+        archive = WasabiArchiveService(self._session)
+        return await archive.archive_email_attachments(
+            case_number=case.case_number,
+            email_id=email_id,
+        )
 
     async def get_case(self, case_id: UUID):
         case = await self._cases.get(case_id)

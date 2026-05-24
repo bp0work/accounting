@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -80,7 +80,42 @@ class Settings(BaseSettings):
     )
     daily_log_timezone: str = Field(default="Asia/Singapore", alias="FINANCE_DAILY_LOG_TIMEZONE")
     daily_log_csv_utf8_bom: bool = Field(default=True, alias="FINANCE_DAILY_LOG__CSV_UTF8_BOM")
+    wasabi_access_key_id: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "FINANCE_WASABI__ACCESS_KEY_ID", "WASABI_ACCESS_KEY_ID"
+        ),
+    )
+    wasabi_secret_access_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "FINANCE_WASABI__SECRET_ACCESS_KEY", "WASABI_SECRET_ACCESS_KEY"
+        ),
+    )
+    wasabi_bucket: str = Field(
+        default="bp0workacc",
+        validation_alias=AliasChoices("FINANCE_WASABI__BUCKET", "WASABI_BUCKET"),
+    )
+    wasabi_endpoint_url: str = Field(
+        default="https://s3.ap-southeast-1.wasabisys.com",
+        validation_alias=AliasChoices(
+            "FINANCE_WASABI__ENDPOINT_URL", "WASABI_ENDPOINT_URL"
+        ),
+    )
+    wasabi_region: str = Field(
+        default="ap-southeast-1",
+        validation_alias=AliasChoices("FINANCE_WASABI__REGION", "WASABI_REGION"),
+    )
     wasabi_prefix_logs: str = Field(default="logs/", alias="FINANCE_WASABI__PREFIX_LOGS")
+    wasabi_prefix_backups: str = Field(
+        default="backups/", alias="FINANCE_WASABI__PREFIX_BACKUPS"
+    )
+    wasabi_prefix_transactions: str = Field(
+        default="transactions/", alias="FINANCE_WASABI__PREFIX_TRANSACTIONS"
+    )
+    wasabi_archive_on_intake: bool = Field(
+        default=True, alias="FINANCE_WASABI__ARCHIVE_ON_INTAKE"
+    )
     smtp_enabled: bool = Field(default=False, alias="FINANCE_SMTP__ENABLED")
 
     internal_api_base_url: str = Field(
@@ -97,8 +132,12 @@ class Settings(BaseSettings):
     )
 
     @property
+    def wasabi_configured(self) -> bool:
+        return bool(self.wasabi_access_key_id and self.wasabi_secret_access_key)
+
+    @property
     def version(self) -> str:
-        return "0.13.7-worker-blpop-idle-fix"
+        return "0.13.8-wasabi-attachment-archive"
 
     @property
     def edge_public_base_url(self) -> str:

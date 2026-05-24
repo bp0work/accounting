@@ -21,6 +21,7 @@ from app.schemas.hermes import (
     CounterpartyHint,
 )
 from app.services.email_context import ensure_attachment_texts
+from app.services.case_service import CaseService
 from app.services.executive_mail_service import ExecutiveMailService
 from app.services.queue_router import enqueue_accounts, enqueue_dead_letter, schedule_retry
 
@@ -68,6 +69,7 @@ class ClassificationService:
         self._hermes = hermes or HermesClient()
         self._machine = CaseStateMachine()
         self._executive_mail = ExecutiveMailService(session)
+        self._case_service = CaseService(session)
 
     async def process_intake(self, raw: str) -> dict:
         payload = json.loads(raw)
@@ -157,6 +159,7 @@ class ClassificationService:
         email.status = "classified"
         email.case_id = case.id
         email.case_number = case.case_number
+        await self._case_service.on_case_linked_to_email(case, email.id)
 
         definition = await self._cases.ensure_workflow_definition(case_type)
         instance = await self._cases.create_workflow_instance(case, definition)
@@ -280,6 +283,7 @@ class ClassificationService:
         email.case_id = case.id
         email.case_number = case.case_number
         await self._session.flush()
+        await self._case_service.on_case_linked_to_email(case, email.id)
 
         await self._cases.add_timeline(
             case_id=case.id,
