@@ -78,7 +78,7 @@ Reference: `17_Worker_Specifications.md` §2.1.1–§10.
 
 ```bash
 cd accfin && alembic upgrade head
-alembic current   # expect head: 20260530_047
+alembic current   # expect head: 20260530_048
 ```
 
 | Migration band | Purpose |
@@ -89,6 +89,7 @@ alembic current   # expect head: 20260530_047
 | `045` | `finance_activity_log`, SOP seeds, notification templates |
 | `046` | `case_escalations`, `pending_outbound_emails` |
 | `047` | mmlogistix CFO + Finance Manager users (`cfo.mmlogistix`, `finmanager.mmlogistix`) |
+| `048` | `travel_requests` table; DOCX MIME on executive mailboxes (`0.13.20`) |
 
 ### E1a — Production database (Supabase)
 
@@ -183,6 +184,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E5.5 | Outbound SMTP: manager escalation (incl. missing-fields template `0.13.15` + inbound re-attach `0.13.16`), ack, clarification on Request More Info | ☐ |
 | E5.6 | finance-ui case detail shows manual review panel (`0.13.6-manual-review-detail`) | ☐ |
 | E5.7 | finance-ui Cases & Approvals table: Document Type, Submitted By, Issued By/To (`0.13.7`) | ☐ |
+| E5.8 | Rebuild `gateway`, `ap-worker`, `expense-worker`, `hermes`, `fastapi` after `0.13.20` (`python-docx` dependency) | ☐ |
 
 ---
 
