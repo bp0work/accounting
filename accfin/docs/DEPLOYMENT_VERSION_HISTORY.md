@@ -5,8 +5,8 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.13.21-ap-vendor-extraction-display** | 2026-05-24 | — | **Hermes AP:** `ap_invoice_extract-v2` — vendor is issuer (not payer); receipt/ref/ARN invoice numbers; paid receipt `due_date` = `invoice_date`. **API/UI:** `GET /cases` `client_vendor_name` from `extracted_fields.vendor_name` for AP; finance-ui Client/Vendor column (`0.13.9`). |
-| **0.13.9-ap-vendor-column-display** (finance-ui) | 2026-05-24 | — | Approvals + case detail use `client_vendor_name` for Client / Vendor column. |
+| **0.13.21-ap-vendor-extraction-display** | 2026-05-24 | `1d0075b` | **Hermes AP:** `ap_invoice_extract-v2` — vendor is issuer (not payer); receipt/ref/ARN invoice numbers; paid receipt `due_date` = `invoice_date`. **API/UI:** `GET /cases` `client_vendor_name` from `extracted_fields.vendor_name` for AP; finance-ui Client/Vendor column (`0.13.9`). |
+| **0.13.9-ap-vendor-column-display** (finance-ui) | 2026-05-24 | `1d0075b` | Approvals + case detail use `client_vendor_name` for Client / Vendor column. |
 | **0.13.20-docx-po-travel-controls** | 2026-05-24 | `791a9f1` | DOCX attachment text extraction; AP due_date + PO gate escalation; expense travel-request matching; `travel_requests` table (migration `048`). |
 | **0.13.19-domain-worker-attachment-volumes** | 2026-05-24 | `7c80047` | `docker-compose.yml`: mount shared `attachment-data` on `ap-worker`, `ar-worker`, `expense-worker` (+ `FINANCE_MAIL__ATTACHMENT_STORAGE_PATH`) so escalation SMTP can re-attach inbound files. Extends `0.13.13` (accounts-worker only). |
 | **0.13.18-gateway-intake-enqueue-logging** | 2026-05-24 | `f439577` | Gateway IMAP poller: `_enqueue_intake_for_email()` with success/failure logging; ingest leaves email `parsed` until Redis RPUSH succeeds; `intake_enqueue_failed` metadata on failure for manual requeue. |
