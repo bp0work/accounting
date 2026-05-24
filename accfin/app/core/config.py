@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.13.13-accounts-worker-attachment-volume"
+        return "0.13.14-classification-accounts-queue-route"
 
     @property
     def edge_public_base_url(self) -> str:

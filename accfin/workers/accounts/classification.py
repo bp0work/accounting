@@ -27,7 +27,7 @@ from app.schemas.hermes import (
 from app.services.case_service import CaseService
 from app.services.email_context import ensure_attachment_texts
 from app.services.executive_mail_service import ExecutiveMailService
-from app.services.queue_router import enqueue_accounts, enqueue_dead_letter, schedule_retry
+from app.services.queue_router import enqueue_dead_letter, route_case_to_queue, schedule_retry
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +196,7 @@ async def _apply_successful_classification(
     snapshot: EmailSnapshot,
     hermes_resp: ClassifyEmailResponse,
     payload: dict,
+    defer_queue_route: bool = False,
 ) -> dict:
     cases = CaseRepository(session)
     executive_mail = ExecutiveMailService(session)
@@ -317,16 +318,26 @@ async def _apply_successful_classification(
             email_id=snapshot.id,
         )
         await executive_mail.queue_acknowledgement(case=case, email=email)
-        await enqueue_accounts(
-            case_id=case.id,
-            case_type=case.type,
-            case_number=case.case_number,
-            email_id=snapshot.id,
-            priority=case.priority,
-            stp_eligible=case.stp_eligible,
-            confidence_score=confidence,
-        )
-        return {"status": "routed", "case_id": str(case.id), "case_number": case.case_number}
+        result: dict = {
+            "status": "routed",
+            "case_id": str(case.id),
+            "case_number": case.case_number,
+        }
+        if defer_queue_route:
+            result["_defer_queue_route"] = {
+                "case_id": str(case.id),
+                "email_id": str(snapshot.id),
+                "confidence_score": confidence,
+            }
+        else:
+            message_id = await route_case_to_queue(
+                case=case,
+                session=session,
+                email_id=snapshot.id,
+                confidence_score=confidence,
+            )
+            result["queue_message_id"] = message_id
+        return result
 
     await executive_mail.log_step(
         action="classified",
@@ -487,8 +498,20 @@ async def process_intake_message(raw: str, *, hermes: HermesClient | None = None
             snapshot=prep.snapshot,
             hermes_resp=hermes_resp,
             payload=payload,
+            defer_queue_route=True,
         )
+        defer = result.pop("_defer_queue_route", None)
         await session.commit()
+        if defer is not None:
+            case = await session.get(Case, UUID(defer["case_id"]))
+            if case is not None:
+                message_id = await route_case_to_queue(
+                    case=case,
+                    session=session,
+                    email_id=UUID(defer["email_id"]),
+                    confidence_score=defer["confidence_score"],
+                )
+                result["queue_message_id"] = message_id
         return result
 
 
