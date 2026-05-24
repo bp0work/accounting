@@ -1,5 +1,7 @@
 <script lang="ts">
   import { setTokens } from '$lib/api/client';
+  import { sessionUserFromLogin } from '$lib/api/auth';
+  import { updateSessionUser } from '$lib/stores/session';
   import { APP_TITLE } from '$lib/branding';
 
   let username = '';
@@ -20,6 +22,9 @@
         throw new Error('Login response missing tokens');
       }
       setTokens(data.access_token, data.refresh_token);
+      if (data.user) {
+        updateSessionUser(sessionUserFromLogin(data.user));
+      }
       const { goto } = await import('$app/navigation');
       await goto('/dashboard');
     } catch (e) {

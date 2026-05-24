@@ -1,5 +1,6 @@
 const ACCESS_TOKEN_KEY = 'finance_access_token';
 const REFRESH_TOKEN_KEY = 'finance_refresh_token';
+const SESSION_USER_KEY = 'finance_session_user';
 /** Refresh access token when within this many seconds of JWT `exp`. */
 const EXPIRY_BUFFER_SEC = 120;
 
@@ -62,6 +63,32 @@ export function setTokens(accessToken: string, refreshToken: string) {
 export function clearToken() {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(SESSION_USER_KEY);
+}
+
+export type StoredSessionUser = {
+  id: string;
+  username: string;
+  display_name: string;
+  email: string;
+  role_name: string | null;
+  two_factor_enabled: boolean;
+};
+
+export function setSessionUser(user: StoredSessionUser) {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+}
+
+export function getSessionUser(): StoredSessionUser | null {
+  if (typeof localStorage === 'undefined') return null;
+  const raw = localStorage.getItem(SESSION_USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StoredSessionUser;
+  } catch {
+    return null;
+  }
 }
 
 async function redirectToLogin(): Promise<void> {
