@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.13.8-wasabi-attachment-archive` (migrations `001`–`047`; finance-ui `0.13.3-security-2fa`)
+**Target version:** `0.13.9-outbound-smtp` (migrations `001`–`047`; finance-ui `0.13.3-security-2fa`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -59,6 +59,7 @@ Reference: `19_Expense_Worker_Specification.md` §1, §11.
 | D2 | Manager mailboxes (`acc`, `fin`, `cfo`, `ceo`) are **not** on intake poller | ☐ |
 | D3 | `requires_outbound_client_approval` backfill applied (migration `045`) | ☐ |
 | D4 | Escalation / outbound approval emails include `[CAS-…]` in Subject | ☐ |
+| D5 | Outbound SMTP (`0.13.9`): manager escalation, ack, failure notify sent when `FINANCE_SMTP__ENABLED=true` and relay vars set; catch-up via `POST /internal/jobs/flush-outbound-mail` | ☐ |
 
 Reference: `17_Worker_Specifications.md` §2.1.1–§10.
 
@@ -81,6 +82,29 @@ alembic current   # expect head: 20260530_047
 | `045` | `finance_activity_log`, SOP seeds, notification templates |
 | `046` | `case_escalations`, `pending_outbound_emails` |
 | `047` | mmlogistix CFO + Finance Manager users (`cfo.mmlogistix`, `finmanager.mmlogistix`) |
+
+### E1a — Production database (Supabase)
+
+Production finance data lives in **Supabase PostgreSQL** via `FINANCE_DATABASE_URL` — **not** the compose `db` service (`11` §6.1.1).
+
+```bash
+# Confirm app points at Supabase (host only)
+docker compose exec fastapi python -c "from app.core.config import settings; print(settings.database_url.split('@')[-1])"
+
+# Query cases / escalations via app session (example)
+docker compose exec fastapi python -c "
+import asyncio
+from sqlalchemy import text
+from app.core.database import get_session_factory
+async def main():
+    async with get_session_factory()() as s:
+        r = await s.execute(text(\"SELECT case_number, status FROM cases ORDER BY created_at DESC LIMIT 5\"))
+        print(r.fetchall())
+asyncio.run(main())
+"
+```
+
+Do **not** use `docker compose exec db psql … accfin` — local `db` is empty on Supabase deployments.
 
 ### E2 — Required secrets (`.env` from `.env.example`)
 
@@ -122,7 +146,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.8-wasabi-attachment-archive` |
+| E4.1 | `GET /health` (internal or via `https://finance.mmlogistix.bp0.work/health`) | `200`, version `0.13.9-outbound-smtp` |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | Approval UI (HTML), not FastAPI JSON 404 |
 | E4.1c | Browser login → remain signed in >15 min (silent refresh) | Session persists; no redirect to `/login` until refresh token expires (7d) |
 | E4.1d | Browser login → `/approvals` | Pending approvals load (client-side auth; not SSR 401) |
@@ -145,6 +169,7 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E5.3 | Wasabi `logs/finance_daily_{date}.csv` upload verified (when credentials live) | ☐ |
 | E5.3a | Wasabi `transactions/{case_number}/` attachment archive on intake verified (`FINANCE_WASABI__ARCHIVE_ON_INTAKE=true`) | ☐ |
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
+| E5.5 | Outbound SMTP for manager escalation, ack, clarification (`0.13.9-outbound-smtp`) | ☐ |
 
 ---
 
@@ -167,5 +192,6 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | `traefik/dynamic/README.md` | API path routing on finance host |
 | `05_API_Specification.md` §8.8a, §19.1 | Escalation + cron APIs |
 | `06_Database_Schema_Design.md` §7.4–§7.6 | SOP tables |
-| `17_Worker_Specifications.md` §10 | Executive email SOP |
+| `17_Worker_Specifications.md` §10 | Executive email SOP; §10.3.1 SMTP gap |
+| `11_Deployment_Operations_Runbook.md` §6.1.1, §19.4a | Supabase diagnostics; escalation without email |
 | `12_Testing_and_UAT_Strategy.md` §11.3 | UAT-010/011 |

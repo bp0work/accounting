@@ -117,6 +117,14 @@ class Settings(BaseSettings):
         default=True, alias="FINANCE_WASABI__ARCHIVE_ON_INTAKE"
     )
     smtp_enabled: bool = Field(default=False, alias="FINANCE_SMTP__ENABLED")
+    smtp_host: str = Field(default="bp0.work", alias="FINANCE_SMTP__HOST")
+    smtp_port: int = Field(default=465, alias="FINANCE_SMTP__PORT")
+    smtp_use_tls: bool = Field(default=True, alias="FINANCE_SMTP__USE_TLS")
+    smtp_use_starttls: bool = Field(default=False, alias="FINANCE_SMTP__USE_STARTTLS")
+    smtp_timeout_seconds: int = Field(default=30, alias="FINANCE_SMTP__TIMEOUT_SECONDS")
+    daily_log_sender_mailbox: str = Field(
+        default="acc.mmlogistix@bp0.work", alias="FINANCE_DAILY_LOG_SENDER_MAILBOX"
+    )
 
     internal_api_base_url: str = Field(
         default="http://fastapi:8000", alias="FINANCE_INTERNAL__API_BASE_URL"
@@ -136,8 +144,12 @@ class Settings(BaseSettings):
         return bool(self.wasabi_access_key_id and self.wasabi_secret_access_key)
 
     @property
+    def smtp_configured(self) -> bool:
+        return self.smtp_enabled and bool(self.smtp_host.strip())
+
+    @property
     def version(self) -> str:
-        return "0.13.8-wasabi-attachment-archive"
+        return "0.13.9-outbound-smtp"
 
     @property
     def edge_public_base_url(self) -> str:

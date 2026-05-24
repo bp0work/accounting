@@ -5,6 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
+| **0.13.9-outbound-smtp** | 2026-05-20 | — | Outbound SMTP: `SmtpMailService` + `OutboundMailService` (`aiosmtplib`, Jinja templates); `FINANCE_SMTP__*` relay settings in `config.py`; manager escalation, ack, and failure notify sent after queue; daily log CSV attachment; `POST /internal/jobs/flush-outbound-mail` catch-up. |
 | **0.13.8-wasabi-attachment-archive** | 2026-05-20 | `5f4de39` | `WasabiArchiveService` (`app/services/wasabi_archive.py`): boto3 upload to `transactions/{case_number}/{filename}` on `bp0workacc`; sets `email_attachments.wasabi_archive_path`. Triggered from `CaseService.on_case_linked_to_email()` after intake classification links email → case when `FINANCE_WASABI__ARCHIVE_ON_INTAKE=true`. Dependency: `boto3`. |
 | **0.13.7-worker-blpop-idle-fix** | 2026-05-20 | `beef354` | `QueueConsumer` default BLPOP block timeout 5s (`workers/base.py`) — reduces idle CPU spin on empty queues (accounts, AR, AP, expense). |
 | **0.13.6-finance-security-2fa** | 2026-05-20 | `9d3fac0` | finance-ui `/settings/security`: 2FA setup (QR via `qrcode`), verify, disable; mandatory-2FA banner for `cfo`/`finance_manager`. Retry button on case detail. Package `0.13.3-security-2fa`. Feature `47c0f57`. |

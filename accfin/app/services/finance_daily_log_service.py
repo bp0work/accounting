@@ -14,6 +14,7 @@ from app.core.config import get_settings
 from app.repositories.executive_mail import FinanceActivityLogRepository
 from app.repositories.system_settings import SystemSettingsRepository
 from app.schemas.executive_mail import FinanceDailyLogJobResponse
+from app.services.outbound_mail_service import OutboundMailService
 
 
 class FinanceDailyLogService:
@@ -56,12 +57,28 @@ class FinanceDailyLogService:
         local_path = self._write_local(csv_bytes, filename)
 
         sent_at = datetime.now(UTC)
-        await self._settings.set_value("last_finance_log_sent_at", sent_at.isoformat())
-
         message = None
         smtp_id = None
-        if not self._cfg.smtp_enabled:
-            message = f"SMTP not configured; CSV archived at {local_path}"
+
+        mailbox_summary = self._mailbox_summary(rows)
+        if self._cfg.smtp_configured:
+            outbound = OutboundMailService(self._session)
+            smtp_id = await outbound.send_daily_log(
+                business_date=biz,
+                recipient=self._cfg.daily_log_recipient,
+                csv_bytes=csv_bytes,
+                filename=filename,
+                row_count=len(rows),
+                mailbox_summary=mailbox_summary,
+            )
+            if smtp_id is None:
+                message = f"SMTP send failed; CSV archived at {local_path}"
+        elif not self._cfg.smtp_enabled:
+            message = f"SMTP disabled; CSV archived at {local_path}"
+        else:
+            message = f"SMTP host not configured; CSV archived at {local_path}"
+
+        await self._settings.set_value("last_finance_log_sent_at", sent_at.isoformat())
 
         return FinanceDailyLogJobResponse(
             status="sent",
@@ -109,6 +126,13 @@ class FinanceDailyLogService:
         if self._cfg.daily_log_csv_utf8_bom:
             return ("\ufeff" + text).encode("utf-8")
         return text.encode("utf-8")
+
+    def _mailbox_summary(self, rows) -> list[dict]:
+        counts: dict[str, int] = {}
+        for row in rows:
+            key = str(row.mailbox_id) if row.mailbox_id else "unknown"
+            counts[key] = counts.get(key, 0) + 1
+        return [{"mailbox": mailbox, "count": count} for mailbox, count in sorted(counts.items())]
 
     def _write_local(self, content: bytes, filename: str) -> Path:
         base = Path(self._cfg.attachment_storage_path) / "logs"

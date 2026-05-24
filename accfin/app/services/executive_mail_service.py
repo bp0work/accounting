@@ -18,6 +18,7 @@ from app.repositories.case import CaseRepository
 from app.repositories.executive_mail import CaseEscalationRepository
 from app.schemas.executive_mail import FinanceActivityLogCreate
 from app.services.finance_activity_log_service import FinanceActivityLogService
+from app.services.outbound_mail_service import OutboundMailService
 from app.services.queue_router import enqueue_accounts
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class ExecutiveMailService:
         self._escalations = CaseEscalationRepository(session)
         self._activity = FinanceActivityLogService(session)
         self._settings = get_settings()
+        self._outbound = OutboundMailService(session)
 
     @staticmethod
     def is_external_sender(from_address: str) -> bool:
@@ -182,6 +184,25 @@ class ExecutiveMailService:
             },
         )
         await self._session.flush()
+
+        smtp_id = await self._outbound.try_send_manager_escalation(
+            row,
+            case=case,
+            executive_mailbox=executive,
+            source_email=email,
+        )
+        if smtp_id:
+            await self.log_step(
+                action="escalation_email_sent",
+                summary=f"[{case.case_number}] Manager escalation email sent to {target_email}",
+                actor_type=actor_type,
+                actor_name=actor_name,
+                mailbox_id=executive.id,
+                case_id=case.id,
+                email_id=email.id if email else case.email_id,
+                metadata={"escalation_id": str(escalation_id), "smtp_message_id": smtp_id},
+            )
+
         return row
 
     async def queue_acknowledgement(
@@ -248,6 +269,19 @@ class ExecutiveMailService:
             email_id=email.id,
             metadata={"outbound_id": str(outbound.id), "to": email.from_address},
         )
+
+        smtp_id = await self._outbound.try_send_pending(outbound, source_email=email)
+        if smtp_id:
+            await self.log_step(
+                action="ack_delivered",
+                summary=f"[{case.case_number}] Acknowledgement sent to {email.from_address}",
+                actor_type="system",
+                actor_name=actor_name,
+                mailbox_id=mailbox.id,
+                case_id=case.id,
+                email_id=email.id,
+                metadata={"outbound_id": str(outbound.id), "smtp_message_id": smtp_id},
+            )
         return outbound
 
     async def queue_failure_notification(
@@ -310,6 +344,19 @@ class ExecutiveMailService:
             email_id=email.id,
             metadata={"outbound_id": str(outbound.id), "reason": reason},
         )
+
+        smtp_id = await self._outbound.try_send_pending(outbound, source_email=email)
+        if smtp_id:
+            await self.log_step(
+                action="failure_notification_delivered",
+                summary=f"[{case.case_number}] Failure notification sent to {email.from_address}",
+                actor_type="manager",
+                actor_name="escalation-reject",
+                mailbox_id=mailbox.id,
+                case_id=case.id,
+                email_id=email.id,
+                metadata={"outbound_id": str(outbound.id), "smtp_message_id": smtp_id},
+            )
         return outbound
 
     async def resume_after_manager_approve(

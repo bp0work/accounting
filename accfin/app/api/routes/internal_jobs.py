@@ -31,3 +31,16 @@ async def finance_daily_log(
     req = body or FinanceDailyLogJobRequest()
     service = FinanceDailyLogService(session)
     return await service.run_job(business_date=req.business_date, force=req.force)
+
+
+@router.post("/flush-outbound-mail")
+async def flush_outbound_mail(
+    _: None = Depends(_verify_cron_token),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, int]:
+    """Send approved rows in pending_outbound_emails (catch-up after SMTP enable)."""
+    from app.services.outbound_mail_service import OutboundMailService
+
+    sent = await OutboundMailService(session).flush_approved()
+    await session.commit()
+    return {"sent": sent}
