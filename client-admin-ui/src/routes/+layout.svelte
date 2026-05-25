@@ -39,9 +39,9 @@
         <a href="/chart-of-accounts">Chart of Accounts</a>
         <a href="/mailboxes">Mailboxes</a>
         <a href="/users">Users</a>
-        <a href="/policies">Policies</a>
+        <a href="/policies">Travel &amp; Expense Policy</a>
         <a href="/agreements">Agreements</a>
-        <a href="/travel-requests">Travel Requests</a>
+        <a href="/travel-info">Travel</a>
         <a href="/accounting-calendar">Accounting Calendar</a>
         <button type="button" class="link-btn" on:click={logout}>Logout</button>
       </nav>

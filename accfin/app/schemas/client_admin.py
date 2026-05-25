@@ -17,6 +17,8 @@ class TenantProfileResponse(BaseModel):
     contact_email: str | None = None
     contact_phone: str | None = None
     website: str | None = None
+    email_signature_html: str | None = None
+    email_signature_plain: str | None = None
 
 
 class TenantProfileUpdate(BaseModel):
@@ -28,6 +30,8 @@ class TenantProfileUpdate(BaseModel):
     contact_email: str | None = None
     contact_phone: str | None = None
     website: str | None = None
+    email_signature_html: str | None = None
+    email_signature_plain: str | None = None
 
 
 class CoaAccountResponse(BaseModel):
@@ -77,12 +81,13 @@ class MailConfigurationUpdate(BaseModel):
 
 
 class AdminUserResponse(BaseModel):
-    id: UUID
+    id: UUID | None = None
     role_label: str
     role_name: str
-    display_name: str
-    email: str
-    username: str
+    display_name: str | None = None
+    email: str | None = None
+    username: str | None = None
+    configured: bool = False
 
 
 class AdminUserUpdate(BaseModel):
@@ -108,6 +113,7 @@ class ExpensePolicyLimitsUpdate(BaseModel):
 
 class RegulatoryDocumentResponse(BaseModel):
     id: UUID
+    document_key: str | None = None
     name: str
     filename: str
     file_size: int
@@ -116,6 +122,31 @@ class RegulatoryDocumentResponse(BaseModel):
     download_url: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class RegulatoryCatalogItemResponse(BaseModel):
+    document_key: str
+    label: str
+    uploaded: bool
+    id: UUID | None = None
+    filename: str | None = None
+    file_size: int | None = None
+    uploaded_at: datetime | None = None
+    download_url: str | None = None
+
+
+class TravelPolicyDocumentResponse(BaseModel):
+    uploaded: bool
+    filename: str | None = None
+    file_size: int | None = None
+    uploaded_at: datetime | None = None
+    download_url: str | None = None
+    wasabi_path: str = "transactions/regulatory/travel-expense-policy.pdf"
+
+
+class CoaStatusResponse(BaseModel):
+    account_count: int
+    empty: bool
 
 
 class RentalAgreementResponse(BaseModel):
@@ -205,6 +236,7 @@ class DashboardCheckItem(BaseModel):
     label: str
     complete: bool
     href: str
+    detail: str | None = None
 
 
 class DashboardResponse(BaseModel):

@@ -8,6 +8,7 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
@@ -25,6 +26,13 @@ from app.models.travel import TravelRequest
 from app.models.user import User
 from app.models.rbac import Role
 from app.schemas.auth import TokenData
+from app.constants.client_admin import (
+    REGULATORY_CATALOG,
+    ROLE_ADMIN_NAMES,
+    ROLE_ORDER,
+    TRAVEL_EXPENSE_POLICY_KEY,
+    TRAVEL_EXPENSE_POLICY_LABEL,
+)
 from app.schemas.client_admin import (
     AccountingCalendarSettings,
     AccountingPeriodResponse,
@@ -33,6 +41,7 @@ from app.schemas.client_admin import (
     CoaAccountCreate,
     CoaAccountResponse,
     CoaAccountUpdate,
+    CoaStatusResponse,
     DashboardCheckItem,
     DashboardResponse,
     DirectorExpenseAgreementCreate,
@@ -41,13 +50,19 @@ from app.schemas.client_admin import (
     ExpensePolicyLimitsUpdate,
     MailConfigurationResponse,
     MailConfigurationUpdate,
+    RegulatoryCatalogItemResponse,
     RegulatoryDocumentResponse,
     RentalAgreementCreate,
     RentalAgreementResponse,
     TenantProfileResponse,
     TenantProfileUpdate,
+    TravelPolicyDocumentResponse,
     TravelRequestAdminResponse,
     TravelRequestStatusUpdate,
+)
+from app.services.regulatory_storage import (
+    TRAVEL_EXPENSE_POLICY_PATH,
+    RegulatoryStorageService,
 )
 from app.services.accounting_calendar import (
     add_working_days,
@@ -60,7 +75,7 @@ from app.services.accounting_calendar import (
 router = APIRouter(tags=["Client Admin"])
 
 TENANT_MMLOGISTIX = UUID("00000000-0000-0000-0000-000000000200")
-ROLE_ADMIN_USERS = ("general_manager", "cfo", "finance_manager", "accounts_clerk")
+ROLE_LABELS = dict(ROLE_ORDER)
 
 POLICY_KEYS = {
     "meal_limit_per_day": "meal_daily_limit",
@@ -83,6 +98,55 @@ def _mask_username(username: str) -> str:
     return username[:2] + "***"
 
 
+def _nonempty(value: str | None) -> bool:
+    return bool(value and str(value).strip())
+
+
+async def _regulatory_by_key(session: AsyncSession, tid: UUID) -> dict[str, RegulatoryDocument]:
+    result = await session.execute(
+        select(RegulatoryDocument).where(
+            RegulatoryDocument.tenant_id == tid,
+            RegulatoryDocument.document_key.isnot(None),
+        )
+    )
+    return {d.document_key: d for d in result.scalars().all() if d.document_key}
+
+
+async def _has_expense_limits(session: AsyncSession) -> bool:
+    for pname in POLICY_KEYS.values():
+        p = await _policy_by_name(session, pname)
+        if p and (p.daily_limit is not None or p.per_claim_limit is not None):
+            return True
+    return False
+
+
+def _period_year_month_add(year: int, month: int, offset: int) -> tuple[int, int]:
+    total = (year * 12 + (month - 1)) + offset
+    return total // 12, (total % 12) + 1
+
+
+async def _calendar_complete(session: AsyncSession, tid: UUID) -> tuple[bool, str]:
+    today = date.today()
+    y, m = today.year, today.month
+    missing: list[str] = []
+    for offset in range(13):
+        py, pm = _period_year_month_add(y, m, offset)
+        exists = await session.scalar(
+            select(func.count())
+            .select_from(AccountingPeriod)
+            .where(
+                AccountingPeriod.tenant_id == tid,
+                AccountingPeriod.period_year == py,
+                AccountingPeriod.period_month == pm,
+            )
+        )
+        if not exists:
+            missing.append(f"{py}-{pm:02d}")
+    if not missing:
+        return True, "Current month and next 12 months generated"
+    return False, f"Missing periods: {', '.join(missing[:3])}{'…' if len(missing) > 3 else ''}"
+
+
 # --- Dashboard ---
 
 
@@ -93,29 +157,108 @@ async def admin_dashboard(
 ) -> DashboardResponse:
     tid = await _tenant_id(user, session)
     profile = await session.get(TenantProfile, tid)
-    coa_count = await session.scalar(select(func.count()).select_from(CoaAccount).where(CoaAccount.is_active.is_(True)))
-    mailbox_count = await session.scalar(
-        select(func.count()).select_from(MailGatewayConfig).where(MailGatewayConfig.is_active.is_(True))
+    coa_count = await session.scalar(
+        select(func.count()).select_from(CoaAccount).where(CoaAccount.is_active.is_(True))
     )
-    key_users = await session.scalar(
-        select(func.count())
-        .select_from(User)
+    coa_n = coa_count or 0
+    mailboxes = (
+        await session.execute(
+            select(MailGatewayConfig).where(MailGatewayConfig.is_active.is_(True))
+        )
+    ).scalars().all()
+    mail_unconfigured = [m.email_address for m in mailboxes if not _nonempty(m.display_name)]
+    users_by_role: dict[str, User] = {}
+    user_rows = await session.execute(
+        select(User, Role)
         .join(Role, User.role_id == Role.id)
-        .where(Role.name.in_(ROLE_ADMIN_USERS), User.status == "active")
+        .where(Role.name.in_(ROLE_ADMIN_NAMES), User.status == "active")
     )
-    policy_count = await session.scalar(
-        select(func.count()).select_from(ExpensePolicy).where(ExpensePolicy.is_active.is_(True))
+    for u, r in user_rows.all():
+        users_by_role[r.name] = u
+    missing_roles = [label for role, label in ROLE_ORDER if role not in users_by_role or not _nonempty(users_by_role[role].email)]
+    reg_map = await _regulatory_by_key(session, tid)
+    travel_doc = reg_map.get(TRAVEL_EXPENSE_POLICY_KEY)
+    reg_missing = [label for key, label, _ in REGULATORY_CATALOG if key not in reg_map]
+    company_fields_ok = profile is not None and all(
+        _nonempty(getattr(profile, f, None))
+        for f in ("legal_name", "uen", "registered_address", "contact_email")
     )
-    period_count = await session.scalar(
-        select(func.count()).select_from(AccountingPeriod).where(AccountingPeriod.tenant_id == tid)
+    signature_ok = profile is not None and (
+        _nonempty(profile.email_signature_html) or _nonempty(profile.email_signature_plain)
     )
+    limits_ok = await _has_expense_limits(session)
+    cal_ok, cal_detail = await _calendar_complete(session, tid)
+
     checks = [
-        DashboardCheckItem(section="company", label="Company profile", complete=profile is not None and bool(profile.legal_name), href="/company"),
-        DashboardCheckItem(section="coa", label="Chart of accounts", complete=(coa_count or 0) > 0, href="/chart-of-accounts"),
-        DashboardCheckItem(section="mailboxes", label="Mailboxes configured", complete=(mailbox_count or 0) >= 9, href="/mailboxes"),
-        DashboardCheckItem(section="users", label="Key role emails", complete=(key_users or 0) >= 3, href="/users"),
-        DashboardCheckItem(section="policies", label="Expense policies", complete=(policy_count or 0) > 0, href="/policies"),
-        DashboardCheckItem(section="calendar", label="Accounting periods", complete=(period_count or 0) > 0, href="/accounting-calendar"),
+        DashboardCheckItem(
+            section="company",
+            label="Company profile",
+            complete=company_fields_ok,
+            href="/company",
+            detail=None if company_fields_ok else "Legal name, UEN, address, and contact email required",
+        ),
+        DashboardCheckItem(
+            section="signature",
+            label="Email signature",
+            complete=signature_ok,
+            href="/company",
+            detail=None if signature_ok else "HTML or plain-text signature not set",
+        ),
+        DashboardCheckItem(
+            section="coa",
+            label="Chart of accounts",
+            complete=coa_n > 0,
+            href="/chart-of-accounts",
+            detail=f"{coa_n} active account(s)" if coa_n else "No accounts — import CSV",
+        ),
+        DashboardCheckItem(
+            section="mailboxes",
+            label="Mailboxes",
+            complete=len(mail_unconfigured) == 0 and len(mailboxes) > 0,
+            href="/mailboxes",
+            detail="All mailboxes have display names"
+            if not mail_unconfigured
+            else f"Missing display name: {', '.join(mail_unconfigured[:2])}",
+        ),
+        DashboardCheckItem(
+            section="users",
+            label="Key role emails",
+            complete=len(missing_roles) == 0,
+            href="/users",
+            detail="CEO, CFO, Finance Manager, Accounts Manager configured"
+            if not missing_roles
+            else f"Missing or incomplete: {', '.join(missing_roles)}",
+        ),
+        DashboardCheckItem(
+            section="travel_policy",
+            label="Travel & expense policy (PDF)",
+            complete=travel_doc is not None,
+            href="/policies",
+            detail=travel_doc.filename if travel_doc else "Upload policy PDF on Policies page",
+        ),
+        DashboardCheckItem(
+            section="expense_limits",
+            label="Expense limits",
+            complete=limits_ok,
+            href="/policies",
+            detail=None if limits_ok else "Set at least one expense limit",
+        ),
+        DashboardCheckItem(
+            section="regulatory",
+            label="Regulatory documents",
+            complete=len(reg_missing) == 0,
+            href="/policies",
+            detail="All five documents uploaded"
+            if not reg_missing
+            else f"Missing: {', '.join(reg_missing)}",
+        ),
+        DashboardCheckItem(
+            section="calendar",
+            label="Accounting calendar",
+            complete=cal_ok,
+            href="/accounting-calendar",
+            detail=cal_detail,
+        ),
     ]
     complete = sum(1 for c in checks if c.complete)
     return DashboardResponse(checks=checks, complete_count=complete, total_count=len(checks))
@@ -181,6 +324,18 @@ async def list_coa(
         )
     result = await session.execute(stmt)
     return [CoaAccountResponse.model_validate(r) for r in result.scalars().all()]
+
+
+@router.get("/coa/status", response_model=CoaStatusResponse)
+async def coa_status(
+    _user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> CoaStatusResponse:
+    count = await session.scalar(
+        select(func.count()).select_from(CoaAccount).where(CoaAccount.is_active.is_(True))
+    )
+    n = count or 0
+    return CoaStatusResponse(account_count=n, empty=n == 0)
 
 
 @router.post("/coa", response_model=CoaAccountResponse, status_code=status.HTTP_201_CREATED)
@@ -331,29 +486,36 @@ async def list_admin_users(
     _user: TokenData = Depends(require_client_admin()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[AdminUserResponse]:
-    labels = {
-        "general_manager": "CEO / Managing Director",
-        "cfo": "CFO / Finance Director",
-        "finance_manager": "Finance Manager",
-        "accounts_clerk": "Accounts Manager",
-    }
     result = await session.execute(
         select(User, Role)
         .join(Role, User.role_id == Role.id)
-        .where(Role.name.in_(ROLE_ADMIN_USERS))
-        .order_by(Role.name)
+        .where(Role.name.in_(ROLE_ADMIN_NAMES), User.status == "active")
     )
-    return [
-        AdminUserResponse(
-            id=u.id,
-            role_label=labels.get(r.name, r.name),
-            role_name=r.name,
-            display_name=u.display_name,
-            email=u.email,
-            username=u.username,
-        )
-        for u, r in result.all()
-    ]
+    by_role = {r.name: u for u, r in result.all()}
+    out: list[AdminUserResponse] = []
+    for role_name, role_label in ROLE_ORDER:
+        u = by_role.get(role_name)
+        if u:
+            out.append(
+                AdminUserResponse(
+                    id=u.id,
+                    role_label=role_label,
+                    role_name=role_name,
+                    display_name=u.display_name,
+                    email=u.email,
+                    username=u.username,
+                    configured=_nonempty(u.email),
+                )
+            )
+        else:
+            out.append(
+                AdminUserResponse(
+                    role_label=role_label,
+                    role_name=role_name,
+                    configured=False,
+                )
+            )
+    return out
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserResponse)
@@ -373,14 +535,14 @@ async def patch_admin_user(
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(u, k, v)
     await session.commit()
-    labels = {"general_manager": "CEO / Managing Director", "cfo": "CFO / Finance Director"}
     return AdminUserResponse(
         id=u.id,
-        role_label=labels.get(r.name, r.name),
+        role_label=ROLE_LABELS.get(r.name, r.name),
         role_name=r.name,
         display_name=u.display_name,
         email=u.email,
         username=u.username,
+        configured=_nonempty(u.email),
     )
 
 
@@ -431,7 +593,75 @@ async def patch_expense_limits(
     return await get_expense_limits(_user=user, session=session)
 
 
-# --- Travel requests ---
+def _travel_policy_response(doc: RegulatoryDocument | None) -> TravelPolicyDocumentResponse:
+    if doc is None:
+        return TravelPolicyDocumentResponse(uploaded=False)
+    return TravelPolicyDocumentResponse(
+        uploaded=True,
+        filename=doc.filename,
+        file_size=doc.file_size,
+        uploaded_at=doc.uploaded_at,
+        download_url=f"/api/expense-policies/document/download",
+    )
+
+
+@router.get("/expense-policies/document", response_model=TravelPolicyDocumentResponse)
+async def get_travel_policy_document(
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> TravelPolicyDocumentResponse:
+    tid = await _tenant_id(user, session)
+    reg_map = await _regulatory_by_key(session, tid)
+    return _travel_policy_response(reg_map.get(TRAVEL_EXPENSE_POLICY_KEY))
+
+
+@router.post("/expense-policies/document", response_model=TravelPolicyDocumentResponse)
+async def upload_travel_policy_document(
+    file: UploadFile = File(...),
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> TravelPolicyDocumentResponse:
+    tid = await _tenant_id(user, session)
+    data = await file.read()
+    if not data:
+        raise AppHTTPException(status.HTTP_400_BAD_REQUEST, "EMPTY_FILE", "PDF file is required")
+    filename = file.filename or "travel-expense-policy.pdf"
+    storage = RegulatoryStorageService()
+    await storage.upload_bytes(
+        key=TRAVEL_EXPENSE_POLICY_PATH,
+        body=data,
+        content_type=file.content_type or "application/pdf",
+    )
+    doc = await _upsert_regulatory_document(
+        session,
+        tenant_id=tid,
+        document_key=TRAVEL_EXPENSE_POLICY_KEY,
+        label=TRAVEL_EXPENSE_POLICY_LABEL,
+        wasabi_path=TRAVEL_EXPENSE_POLICY_PATH,
+        filename=filename,
+        data=data,
+        content_type=file.content_type or "application/pdf",
+    )
+    await session.commit()
+    await session.refresh(doc)
+    return _travel_policy_response(doc)
+
+
+@router.get("/expense-policies/document/download")
+async def download_travel_policy_document(
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    tid = await _tenant_id(user, session)
+    reg_map = await _regulatory_by_key(session, tid)
+    doc = reg_map.get(TRAVEL_EXPENSE_POLICY_KEY)
+    if doc is None:
+        raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Policy document not uploaded")
+    storage = RegulatoryStorageService()
+    return await storage.download_response(key=doc.wasabi_path, filename=doc.filename)
+
+
+# --- Travel requests (API retained; UI uses email workflow) ---
 
 
 @router.get("/travel-requests", response_model=list[TravelRequestAdminResponse])
@@ -547,7 +777,75 @@ async def create_director_agreement(
     return DirectorExpenseAgreementResponse.model_validate(row)
 
 
-# --- Regulatory documents (metadata; upload stores path) ---
+# --- Regulatory documents ---
+
+
+async def _upsert_regulatory_document(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    document_key: str,
+    label: str,
+    wasabi_path: str,
+    filename: str,
+    data: bytes,
+    content_type: str,
+) -> RegulatoryDocument:
+    result = await session.execute(
+        select(RegulatoryDocument).where(
+            RegulatoryDocument.tenant_id == tenant_id,
+            RegulatoryDocument.document_key == document_key,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        row = RegulatoryDocument(
+            tenant_id=tenant_id,
+            document_key=document_key,
+            name=label,
+            filename=filename,
+            wasabi_path=wasabi_path,
+            file_size=len(data),
+            content_type=content_type,
+        )
+        session.add(row)
+    else:
+        row.name = label
+        row.filename = filename
+        row.wasabi_path = wasabi_path
+        row.file_size = len(data)
+        row.content_type = content_type
+        row.uploaded_at = utcnow()
+    await session.flush()
+    return row
+
+
+@router.get("/regulatory-documents/catalog", response_model=list[RegulatoryCatalogItemResponse])
+async def regulatory_catalog(
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[RegulatoryCatalogItemResponse]:
+    tid = await _tenant_id(user, session)
+    reg_map = await _regulatory_by_key(session, tid)
+    out: list[RegulatoryCatalogItemResponse] = []
+    for key, label, _path in REGULATORY_CATALOG:
+        doc = reg_map.get(key)
+        if doc:
+            out.append(
+                RegulatoryCatalogItemResponse(
+                    document_key=key,
+                    label=label,
+                    uploaded=True,
+                    id=doc.id,
+                    filename=doc.filename,
+                    file_size=doc.file_size,
+                    uploaded_at=doc.uploaded_at,
+                    download_url=f"/api/regulatory-documents/{doc.id}/download",
+                )
+            )
+        else:
+            out.append(RegulatoryCatalogItemResponse(document_key=key, label=label, uploaded=False))
+    return out
 
 
 @router.get("/regulatory-documents", response_model=list[RegulatoryDocumentResponse])
@@ -557,11 +855,14 @@ async def list_regulatory_documents(
 ) -> list[RegulatoryDocumentResponse]:
     tid = await _tenant_id(user, session)
     result = await session.execute(
-        select(RegulatoryDocument).where(RegulatoryDocument.tenant_id == tid).order_by(RegulatoryDocument.uploaded_at.desc())
+        select(RegulatoryDocument)
+        .where(RegulatoryDocument.tenant_id == tid)
+        .order_by(RegulatoryDocument.uploaded_at.desc())
     )
     return [
         RegulatoryDocumentResponse(
             id=d.id,
+            document_key=d.document_key,
             name=d.name,
             filename=d.filename,
             file_size=d.file_size,
@@ -575,28 +876,41 @@ async def list_regulatory_documents(
 
 @router.post("/regulatory-documents", response_model=RegulatoryDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_regulatory_document(
-    name: str = Query(...),
+    document_key: str = Query(...),
     file: UploadFile = File(...),
     user: TokenData = Depends(require_client_admin()),
     session: AsyncSession = Depends(get_db_session),
 ) -> RegulatoryDocumentResponse:
+    catalog = {k: (label, path) for k, label, path in REGULATORY_CATALOG}
+    if document_key not in catalog:
+        raise AppHTTPException(status.HTTP_400_BAD_REQUEST, "INVALID_KEY", "Unknown regulatory document key")
+    label, wasabi_path = catalog[document_key]
     tid = await _tenant_id(user, session)
     data = await file.read()
-    filename = file.filename or "document.pdf"
-    wasabi_path = f"transactions/regulatory/{filename}"
-    row = RegulatoryDocument(
-        tenant_id=tid,
-        name=name,
-        filename=filename,
-        wasabi_path=wasabi_path,
-        file_size=len(data),
+    if not data:
+        raise AppHTTPException(status.HTTP_400_BAD_REQUEST, "EMPTY_FILE", "PDF file is required")
+    filename = file.filename or wasabi_path.rsplit("/", 1)[-1]
+    storage = RegulatoryStorageService()
+    await storage.upload_bytes(
+        key=wasabi_path,
+        body=data,
         content_type=file.content_type or "application/pdf",
     )
-    session.add(row)
+    row = await _upsert_regulatory_document(
+        session,
+        tenant_id=tid,
+        document_key=document_key,
+        label=label,
+        wasabi_path=wasabi_path,
+        filename=filename,
+        data=data,
+        content_type=file.content_type or "application/pdf",
+    )
     await session.commit()
     await session.refresh(row)
     return RegulatoryDocumentResponse(
         id=row.id,
+        document_key=row.document_key,
         name=row.name,
         filename=row.filename,
         file_size=row.file_size,
@@ -604,6 +918,20 @@ async def upload_regulatory_document(
         uploaded_at=row.uploaded_at,
         download_url=f"/api/regulatory-documents/{row.id}/download",
     )
+
+
+@router.get("/regulatory-documents/{document_id}/download")
+async def download_regulatory_document(
+    document_id: UUID,
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    tid = await _tenant_id(user, session)
+    doc = await session.get(RegulatoryDocument, document_id)
+    if doc is None or doc.tenant_id != tid:
+        raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Document not found")
+    storage = RegulatoryStorageService()
+    return await storage.download_response(key=doc.wasabi_path, filename=doc.filename)
 
 
 # --- Accounting periods ---
@@ -634,22 +962,22 @@ async def get_calendar_settings(
 
 @router.post("/accounting-periods/generate", response_model=list[AccountingPeriodResponse])
 async def generate_accounting_periods(
-    months: int = Query(12, ge=1, le=24),
+    months: int = Query(13, ge=1, le=24),
     user: TokenData = Depends(require_client_admin()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[AccountingPeriodResponse]:
+    """Create periods for the current month and the next ``months - 1`` months (default 13)."""
     tid = await _tenant_id(user, session)
     today = date.today()
     y, m = today.year, today.month
     reviewer = "finfa.mmlogistix@bp0.work"
     created = []
-    for _ in range(months):
-        p = await ensure_period(session, tenant_id=tid, year=y, month=m, trial_balance_reviewer=reviewer)
+    for offset in range(months):
+        py, pm = _period_year_month_add(y, m, offset)
+        p = await ensure_period(
+            session, tenant_id=tid, year=py, month=pm, trial_balance_reviewer=reviewer
+        )
         created.append(p)
-        m -= 1
-        if m < 1:
-            m = 12
-            y -= 1
     await session.commit()
     return [AccountingPeriodResponse.model_validate(p) for p in created]
 

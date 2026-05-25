@@ -23,3 +23,5 @@ class TenantProfile(Base, TimestampMixin):
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     website: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email_signature_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email_signature_plain: Mapped[str | None] = mapped_column(Text, nullable=True)

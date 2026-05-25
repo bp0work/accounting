@@ -1,6 +1,6 @@
 {
   "name": "client-admin-ui",
-  "version": "0.14.1-client-admin-ui",
+  "version": "0.14.2-client-admin-fixes",
   "private": true,
   "type": "module",
   "scripts": {

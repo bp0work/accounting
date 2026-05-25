@@ -2,8 +2,20 @@ import { apiFetch } from './client';
 
 export const TENANT_ID = '00000000-0000-0000-0000-000000000200';
 
+export type DashboardCheck = {
+  section: string;
+  label: string;
+  complete: boolean;
+  href: string;
+  detail?: string | null;
+};
+
 export function fetchDashboard() {
-  return apiFetch<{ checks: { section: string; label: string; complete: boolean; href: string }[]; complete_count: number; total_count: number }>('/admin/dashboard');
+  return apiFetch<{
+    checks: DashboardCheck[];
+    complete_count: number;
+    total_count: number;
+  }>('/admin/dashboard');
 }
 
 export function fetchTenantProfile() {
@@ -12,6 +24,10 @@ export function fetchTenantProfile() {
 
 export function patchTenantProfile(body: Record<string, unknown>) {
   return apiFetch(`/tenants/${TENANT_ID}/profile`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function fetchCoaStatus() {
+  return apiFetch<{ account_count: number; empty: boolean }>('/coa/status');
 }
 
 export function listCoa(q?: string) {
@@ -64,8 +80,67 @@ export function patchExpenseLimits(body: Record<string, unknown>) {
   return apiFetch('/expense-policies/limits', { method: 'PATCH', body: JSON.stringify(body) });
 }
 
-export function listRegulatoryDocs() {
-  return apiFetch<Array<Record<string, unknown>>>('/regulatory-documents');
+export function getTravelPolicyDocument() {
+  return apiFetch<{
+    uploaded: boolean;
+    filename?: string;
+    file_size?: number;
+    uploaded_at?: string;
+    download_url?: string;
+  }>('/expense-policies/document');
+}
+
+export async function uploadTravelPolicyPdf(file: File) {
+  return uploadPdf('/api/expense-policies/document', file);
+}
+
+export function listRegulatoryCatalog() {
+  return apiFetch<
+    Array<{
+      document_key: string;
+      label: string;
+      uploaded: boolean;
+      id?: string;
+      filename?: string;
+      file_size?: number;
+      uploaded_at?: string;
+      download_url?: string;
+    }>
+  >('/regulatory-documents/catalog');
+}
+
+export async function uploadRegulatoryPdf(documentKey: string, file: File) {
+  return uploadPdf(`/api/regulatory-documents?document_key=${encodeURIComponent(documentKey)}`, file);
+}
+
+async function uploadPdf(url: string, file: File) {
+  const token = localStorage.getItem('client_admin_access_token');
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message || 'Upload failed');
+  }
+  return res.json();
+}
+
+export async function downloadAuthenticated(url: string, filename: string) {
+  const token = localStorage.getItem('client_admin_access_token');
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 export function listRentalAgreements() {
@@ -84,20 +159,15 @@ export function createDirectorAgreement(body: Record<string, unknown>) {
   return apiFetch('/agreements/director-expense', { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function listTravelRequests() {
-  return apiFetch<Array<Record<string, unknown>>>('/travel-requests');
-}
-
-export function patchTravelRequest(id: string, status: string) {
-  return apiFetch(`/travel-requests/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
-}
-
 export function listAccountingPeriods() {
   return apiFetch<Array<Record<string, unknown>>>('/accounting-periods');
 }
 
-export function generateAccountingPeriods(months = 12) {
-  return apiFetch<Array<Record<string, unknown>>>(`/accounting-periods/generate?months=${months}`, { method: 'POST' });
+export function generateAccountingPeriods(months = 13) {
+  return apiFetch<Array<Record<string, unknown>>>(
+    `/accounting-periods/generate?months=${months}`,
+    { method: 'POST' }
+  );
 }
 
 export function approveTrialBalance(periodId: string) {
