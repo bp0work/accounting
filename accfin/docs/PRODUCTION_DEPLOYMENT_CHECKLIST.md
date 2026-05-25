@@ -66,7 +66,7 @@ Reference: `19_Expense_Worker_Specification.md` §1, §11.
 | D2 | Manager mailboxes (`acc`, `fin`, `cfo`, `ceo`) are **not** on intake poller | ☐ |
 | D3 | `requires_outbound_client_approval` backfill applied (migration `045`) | ☐ |
 | D4 | Escalation / outbound approval emails include `[CAS-…]` in Subject | ☐ |
-| D5 | Outbound SMTP (`0.13.9+`): manager escalation, ack, failure notify when `FINANCE_SMTP__ENABLED=true`; ack includes attachment list + quote + re-attach (`0.13.10`); catch-up via `POST /internal/jobs/flush-outbound-mail` | ☐ |
+| D5 | Outbound SMTP (`0.13.9+`): manager escalation, ack, failure notify when `FINANCE_SMTP__ENABLED=true`; ack includes attachment list + quote + re-attach (`0.13.10`); catch-up via `POST /api/internal/jobs/flush-outbound-mail` | ☐ |
 
 Reference: `17_Worker_Specifications.md` §2.1.1–§10.
 
@@ -122,7 +122,7 @@ Do **not** use `docker compose exec db psql … accfin` — local `db` is empty 
 | `FINANCE_JWT__SECRET` | User sessions |
 | `FINANCE_PRIVACY_ENCRYPTION_KEY` | Fernet field encryption |
 | `FINANCE_HASH_SECRET` | Audit hash chain |
-| `FINANCE_INTERNAL_CRON__TOKEN` | `POST /internal/jobs/finance-daily-log` |
+| `FINANCE_INTERNAL_CRON__TOKEN` | `POST /api/internal/jobs/finance-daily-log` |
 | `FINANCE_MAIL_ACTION__SECRET` | Escalation / outbound signed links |
 | `FINANCE_HERMES_API_KEY` | Hermes service auth |
 | `FINANCE_WASABI__ACCESS_KEY_ID` / `SECRET_ACCESS_KEY` | Offsite logs (`bp0workacc`) |
@@ -144,7 +144,7 @@ Example (`11` §17.5):
 curl -sS -X POST \
   -H "Authorization: Bearer ${FINANCE_INTERNAL_CRON__TOKEN}" \
   -H "X-Request-ID: $(uuidgen)" \
-  http://fastapi:8000/internal/jobs/finance-daily-log
+  http://fastapi:8000/api/internal/jobs/finance-daily-log
 ```
 
 Configure `systemd` timer or host cron; verify idempotent `skipped` on second same-day run.
