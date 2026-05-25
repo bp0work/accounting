@@ -2,16 +2,19 @@
   import '../app.css';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { clearToken, getToken } from '$lib/api/client';
+  import { ACCESS_TOKEN_KEY, clearToken, getToken } from '$lib/api/client';
   import { APP_TITLE } from '$lib/branding';
 
   $: isLogin = $page.url.pathname === '/login';
-  let isLoggedIn =
-    typeof localStorage !== 'undefined' && !!localStorage.getItem('client_admin_access_token');
+  /** Re-run on navigation (e.g. after login) — initial `let` alone does not update on client route change. */
+  $: routePath = $page.url.pathname;
+  $: isLoggedIn =
+    !isLogin &&
+    typeof localStorage !== 'undefined' &&
+    (!!localStorage.getItem(ACCESS_TOKEN_KEY) || !!getToken());
 
   onMount(async () => {
-    isLoggedIn = !!getToken();
-    if (!isLogin && !isLoggedIn) {
+    if (!isLogin && !getToken()) {
       const { goto } = await import('$app/navigation');
       await goto('/login');
     }
@@ -19,7 +22,6 @@
 
   async function logout() {
     clearToken();
-    isLoggedIn = false;
     const { goto } = await import('$app/navigation');
     await goto('/login');
   }

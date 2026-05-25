@@ -1,7 +1,7 @@
 export const API_PREFIX = '/api';
-const ACCESS_TOKEN_KEY = 'client_admin_access_token';
+/** localStorage key — layout reads synchronously for first-paint nav. */
+export const ACCESS_TOKEN_KEY = 'client_admin_access_token';
 const REFRESH_TOKEN_KEY = 'client_admin_refresh_token';
-
 export function apiUrl(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`;
   if (normalized === API_PREFIX || normalized.startsWith(`${API_PREFIX}/`)) return normalized;
