@@ -4,20 +4,36 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { ensureValidAccessToken } from '$lib/api/client';
   import { listCases, type CaseItem } from '$lib/api/cases';
   import { documentTypeLabel, clientVendorColumnValue } from '$lib/case-labels';
 
   let items: CaseItem[] = [];
   let error = '';
+  let loading = true;
 
-  onMount(async () => {
+  onMount(() => {
+    void loadCases();
+  });
+
+  async function loadCases() {
+    error = '';
+    loading = true;
     try {
+      const token = await ensureValidAccessToken();
+      if (!token) {
+        const { goto } = await import('$app/navigation');
+        await goto('/login');
+        return;
+      }
       const res = await listCases(200);
       items = res.data;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
+    } finally {
+      loading = false;
     }
-  });
+  }
 
   function formatAmount(c: CaseItem) {
     if (c.amount_value == null) return '—';
@@ -35,7 +51,9 @@
 
 {#if error}<p class="error">{error}</p>{/if}
 
-{#if items.length === 0 && !error}
+{#if loading}
+  <p>Loading cases…</p>
+{:else if items.length === 0 && !error}
   <p>No cases found.</p>
 {:else}
   <div class="table-wrap card">

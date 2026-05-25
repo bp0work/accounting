@@ -1,7 +1,16 @@
 # API paths only — do NOT add PathPrefix(`/`) (matches every path and steals `/` from finance-ui).
 # Root `/` and SvelteKit routes: finance-ui router (Docker labels, priority 1).
+# Priority 110: top-level browser navigations to paths that overlap API prefixes (Sec-Fetch-Dest: document).
 http:
   routers:
+    finance-ui-html-overlap:
+      rule: "Host(`finance.mmlogistix.bp0.work`) && (Path(`/approvals`) || PathRegexp(`^/approvals/[^/]+$`) || PathRegexp(`^/cases/[^/]+$`)) && HeadersRegexp(`Sec-Fetch-Dest`, `^document$`)"
+      entryPoints:
+        - websecure
+      service: finance-ui-direct
+      tls:
+        certResolver: letsencrypt
+      priority: 110
     finance-api:
       rule: "Host(`finance.mmlogistix.bp0.work`) && (PathPrefix(`/auth`) || PathPrefix(`/mail`) || PathPrefix(`/approvals`) || PathPrefix(`/cases`) || PathPrefix(`/audit-logs`) || PathPrefix(`/events`) || PathPrefix(`/health`) || PathPrefix(`/metrics`) || PathPrefix(`/internal`) || PathPrefix(`/expense-claims`) || PathPrefix(`/reconciliation`) || PathPrefix(`/notification`) || PathPrefix(`/users`) || PathPrefix(`/workflow`) || PathPrefix(`/policies`))"
       entryPoints:
@@ -13,6 +22,10 @@ http:
       middlewares:
         - security-headers@file
   services:
+    finance-ui-direct:
+      loadBalancer:
+        servers:
+          - url: http://finance-ui:3000
     finance-api:
       loadBalancer:
         servers:
