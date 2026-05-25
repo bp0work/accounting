@@ -4,3 +4,4 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 traefik/letsencrypt/acme.json
+.finance_logs/
