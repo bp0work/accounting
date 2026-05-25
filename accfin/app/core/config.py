@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     login_rate_limit_attempts: int = Field(default=5)
 
     prometheus_enabled: bool = Field(default=True, alias="FINANCE_PROMETHEUS__ENABLED")
-    prometheus_path: str = Field(default="/metrics", alias="FINANCE_PROMETHEUS__PATH")
+    prometheus_path: str = Field(default="/api/metrics", alias="FINANCE_PROMETHEUS__PATH")
 
     internal_cron_token: str = Field(default="", alias="FINANCE_INTERNAL_CRON__TOKEN")
     mail_action_secret: str = Field(default="", alias="FINANCE_MAIL_ACTION__SECRET")

@@ -1,4 +1,15 @@
+/** All FastAPI routes are mounted under `/api` (Traefik PathPrefix `/api` only). */
+export const API_PREFIX = '/api';
+
 const ACCESS_TOKEN_KEY = 'finance_access_token';
+
+export function apiUrl(path: string): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  if (normalized === API_PREFIX || normalized.startsWith(`${API_PREFIX}/`)) {
+    return normalized;
+  }
+  return `${API_PREFIX}${normalized}`;
+}
 const REFRESH_TOKEN_KEY = 'finance_refresh_token';
 const SESSION_USER_KEY = 'finance_session_user';
 /** Refresh access token when within this many seconds of JWT `exp`. */
@@ -108,7 +119,7 @@ async function refreshAccessToken(): Promise<string> {
   if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
-    const res = await fetch('/auth/refresh', {
+    const res = await fetch(apiUrl('/auth/refresh'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
@@ -145,7 +156,7 @@ export async function downloadCsv(path: string, filename: string): Promise<void>
   const token = await ensureValidAccessToken();
   const headers = new Headers();
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  const res = await fetch(path, { headers });
+  const res = await fetch(apiUrl(path), { headers });
   if (res.status === 401) {
     await redirectToLogin();
     throw new Error('Session expired');
@@ -171,13 +182,14 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
-  let res = await fetch(path, { ...init, headers });
+  const url = apiUrl(path);
+  let res = await fetch(url, { ...init, headers });
 
   if (res.status === 401 && getRefreshToken()) {
     try {
       const newToken = await refreshAccessToken();
       headers.set('Authorization', `Bearer ${newToken}`);
-      res = await fetch(path, { ...init, headers });
+      res = await fetch(url, { ...init, headers });
     } catch {
       throw new Error('Session expired');
     }

@@ -51,14 +51,14 @@ async def test_approvals_list_and_approve(
     await db_session.commit()
 
     listed = await async_client.get(
-        "/approvals?my_pending=true", headers=auth_headers
+        "/api/approvals?my_pending=true", headers=auth_headers
     )
     assert listed.status_code == 200
     data = listed.json()["data"]
     assert any(row["id"] == str(approval.id) for row in data)
 
     approved = await async_client.post(
-        f"/approvals/{approval.id}/approve",
+        f"/api/approvals/{approval.id}/approve",
         headers=auth_headers,
         json={"note": "Verified — approved in test"},
     )
@@ -89,7 +89,7 @@ async def test_approvals_reject(
     await db_session.commit()
 
     resp = await async_client.post(
-        f"/approvals/{approval.id}/reject",
+        f"/api/approvals/{approval.id}/reject",
         headers=auth_headers,
         json={"reason": "Insufficient documentation", "rejection_category": "other"},
     )
@@ -101,12 +101,12 @@ async def test_approvals_reject(
 async def test_notification_preferences_roundtrip(
     async_client: AsyncClient, auth_headers
 ) -> None:
-    templates = await async_client.get("/notification-templates", headers=auth_headers)
+    templates = await async_client.get("/api/notification-templates", headers=auth_headers)
     assert templates.status_code == 200
     assert len(templates.json()) >= 1
 
     updated = await async_client.put(
-        "/users/me/notification-preferences",
+        "/api/users/me/notification-preferences",
         headers=auth_headers,
         json={
             "quiet_hours": {"enabled": False},

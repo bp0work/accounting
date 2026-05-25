@@ -8,12 +8,17 @@
   import { initSessionUser, sessionUser } from '$lib/stores/session';
 
   $: isLogin = $page.url.pathname === '/login';
-  $: authed = !!getToken();
-  $: show2faBanner = authed && requires2faWarning($sessionUser);
+
+  /** Sync read on first client paint — avoids nav hidden until async onMount. */
+  let isLoggedIn =
+    typeof localStorage !== 'undefined' && !!localStorage.getItem('finance_access_token');
+
+  $: show2faBanner = isLoggedIn && requires2faWarning($sessionUser);
 
   onMount(async () => {
     initSessionUser();
-    if (!isLogin && !getToken()) {
+    isLoggedIn = !!getToken();
+    if (!isLogin && !isLoggedIn) {
       const { goto } = await import('$app/navigation');
       await goto('/login');
     }
@@ -21,6 +26,7 @@
 
   async function logout() {
     clearToken();
+    isLoggedIn = false;
     sessionUser.set(null);
     const { goto } = await import('$app/navigation');
     await goto('/login');
@@ -34,7 +40,7 @@
 {#if !isLogin}
   <header class="app-header">
     <strong class="brand">{APP_TITLE}</strong>
-    {#if authed}
+    {#if isLoggedIn}
       <nav class="nav">
         <a href="/dashboard">Dashboard</a>
         <a href="/approvals">Cases & Approvals</a>

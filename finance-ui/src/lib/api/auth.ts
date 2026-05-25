@@ -1,4 +1,4 @@
-import { apiFetch } from './client';
+import { apiFetch, apiUrl } from './client';
 
 export type SessionUser = {
   id: string;
@@ -59,7 +59,7 @@ export async function loginRequest(
     body.totp_code = payload.totp_code;
   }
 
-  const res = await fetch('/auth/login', {
+  const res = await fetch(apiUrl('/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

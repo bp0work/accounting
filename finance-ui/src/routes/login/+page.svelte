@@ -4,51 +4,28 @@
 
 <script lang="ts">
   import { setTokens } from '$lib/api/client';
-  import {
-    isLoginTotpRequired,
-    loginRequest,
-    sessionUserFromLogin,
-  } from '$lib/api/auth';
+  import { loginRequest, sessionUserFromLogin } from '$lib/api/auth';
   import { updateSessionUser } from '$lib/stores/session';
   import { APP_TITLE } from '$lib/branding';
 
   let username = '';
   let password = '';
   let totpCode = '';
-  let needsTotp = false;
   let loading = false;
   let error = '';
-
-  function resetTotpStep() {
-    needsTotp = false;
-    totpCode = '';
-  }
-
-  function onCredentialsInput() {
-    if (needsTotp) {
-      resetTotpStep();
-      error = '';
-    }
-  }
 
   async function login() {
     error = '';
     loading = true;
     try {
+      const trimmedTotp = totpCode.trim();
       const result = await loginRequest({
         username,
         password,
-        totp_code: needsTotp ? totpCode : undefined,
+        totp_code: trimmedTotp.length > 0 ? trimmedTotp : undefined,
       });
 
       if (!result.ok) {
-        if (isLoginTotpRequired(result.error.code) && !needsTotp) {
-          needsTotp = true;
-          error =
-            result.error.message ||
-            'Two-factor authentication is enabled. Enter your 6-digit code.';
-          return;
-        }
         throw new Error(result.error.message);
       }
 
@@ -77,7 +54,6 @@
     <input
       id="username"
       bind:value={username}
-      on:input={onCredentialsInput}
       required
       autocomplete="username"
       disabled={loading}
@@ -90,34 +66,29 @@
       id="password"
       type="password"
       bind:value={password}
-      on:input={onCredentialsInput}
       required
       autocomplete="current-password"
       disabled={loading}
       style="width: 100%; padding: 0.5rem;"
     />
   </div>
+  <div style="margin-bottom: 0.75rem;">
+    <label for="totp">Authentication code (optional)</label><br />
+    <input
+      id="totp"
+      type="text"
+      bind:value={totpCode}
+      autocomplete="one-time-code"
+      maxlength="6"
+      disabled={loading}
+      style="width: 100%; padding: 0.5rem; letter-spacing: 0.2em;"
+    />
+    <p style="margin: 0.35rem 0 0; font-size: 0.875rem; color: #475569;">
+      Leave blank if 2FA is not enabled.
+    </p>
+  </div>
 
-  {#if needsTotp}
-    <div style="margin-bottom: 0.75rem;">
-      <label for="totp">Authentication code</label><br />
-      <input
-        id="totp"
-        type="text"
-        bind:value={totpCode}
-        autocomplete="one-time-code"
-        maxlength="6"
-        required
-        disabled={loading}
-        style="width: 100%; padding: 0.5rem; letter-spacing: 0.2em;"
-      />
-      <p style="margin: 0.35rem 0 0; font-size: 0.875rem; color: #475569;">
-        Enter the 6-digit code from your authenticator app.
-      </p>
-    </div>
-  {/if}
-
-  <button type="submit" disabled={loading || (needsTotp && totpCode.length !== 6)}>
+  <button type="submit" disabled={loading}>
     {loading ? 'Signing in…' : 'Sign in'}
   </button>
 </form>

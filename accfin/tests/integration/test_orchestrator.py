@@ -113,7 +113,7 @@ async def test_case_status_transition_api(
     await db_session.commit()
 
     response = await async_client.post(
-        f"/cases/{case.id}/status",
+        f"/api/cases/{case.id}/status",
         headers=auth_headers,
         json={"trigger": "processing_started", "context": {}},
     )

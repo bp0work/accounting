@@ -58,7 +58,7 @@ docker compose up -d ollama hermes fastapi
 docker compose --profile proxy up -d
 
 # Health
-curl http://localhost:8000/health
+curl http://localhost:8000/api/health
 ```
 
 ## Layout

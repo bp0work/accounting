@@ -38,12 +38,12 @@ async def _create_receipt_attachment(db_session: AsyncSession, *, uploaded_by) -
 @pytest.mark.integration
 async def test_submit_expense_claim_requires_permission(async_client: AsyncClient, auditor_user):
     login = await async_client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"username": auditor_user.username, "password": TEST_PASSWORD},
     )
     token = login.json()["access_token"]
     response = await async_client.post(
-        "/expense-claims",
+        "/api/expense-claims",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "category": "meals",
@@ -67,7 +67,7 @@ async def test_submit_and_list_expense_claim(
     receipt_id = await _create_receipt_attachment(db_session, uploaded_by=clerk_user.id)
 
     login = await async_client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"username": clerk_user.username, "password": TEST_PASSWORD},
     )
     assert login.status_code == 200
@@ -78,7 +78,7 @@ async def test_submit_and_list_expense_claim(
     # to that case (not a fixed UUID that may already exist on another case).
     submit_receipt_id = uuid.uuid4()
     submit = await async_client.post(
-        "/expense-claims",
+        "/api/expense-claims",
         headers=headers,
         json={
             "category": "transport",
@@ -95,12 +95,12 @@ async def test_submit_and_list_expense_claim(
     assert body["case_number"].startswith("CAS-")
     assert body["status"] == "processing"
 
-    listed = await async_client.get("/expense-claims", headers=headers)
+    listed = await async_client.get("/api/expense-claims", headers=headers)
     assert listed.status_code == 200
     items = listed.json()["data"]
     assert any(i["expense_claim_id"] == body["expense_claim_id"] for i in items)
 
-    detail = await async_client.get(f"/expense-claims/{body['expense_claim_id']}", headers=headers)
+    detail = await async_client.get(f"/api/expense-claims/{body['expense_claim_id']}", headers=headers)
     assert detail.status_code == 200
     assert detail.json()["data"]["merchant"] == "Grab"
 

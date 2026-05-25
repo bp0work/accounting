@@ -25,6 +25,7 @@ def test_html_escalation_form_includes_case_and_action():
     assert "Approved" in html
     assert 'name="comment"' in html
     assert "method=\"post\"" in html
+    assert "/api/mail/escalations/" in html
 
 
 def test_html_escalation_confirmation_shows_comment():

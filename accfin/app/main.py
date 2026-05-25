@@ -1,6 +1,6 @@
 import time
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -28,13 +28,13 @@ settings = get_settings()
 app = FastAPI(
     title="AI Finance Operations Platform API",
     version=settings.version,
-    description="finance.mmlogistix.bp0.work — UI at /; API path prefixes via Traefik only.",
+    description="finance.mmlogistix.bp0.work — UI at /; REST API under /api (Traefik PathPrefix `/api`).",
 )
 
 
 @app.middleware("http")
 async def prometheus_request_metrics(request: Request, call_next):
-    if not request.url.path.startswith("/metrics"):
+    if not request.url.path.startswith("/api/metrics"):
         start = time.perf_counter()
         response = await call_next(request)
         elapsed = time.perf_counter() - start
@@ -55,19 +55,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health.router)
-app.include_router(metrics.router)
-app.include_router(auth.router)
-app.include_router(mail.router)
-app.include_router(cases.router)
-app.include_router(reconciliation.router)
-app.include_router(approvals.router)
-app.include_router(notifications.router)
-app.include_router(events.router)
-app.include_router(audit.router)
-app.include_router(expense_claims.router)
-app.include_router(internal_jobs.router)
-app.include_router(mail_actions.router)
+api_router = APIRouter(prefix="/api")
+api_router.include_router(health.router)
+api_router.include_router(metrics.router)
+api_router.include_router(auth.router)
+api_router.include_router(mail.router)
+api_router.include_router(cases.router)
+api_router.include_router(reconciliation.router)
+api_router.include_router(approvals.router)
+api_router.include_router(notifications.router)
+api_router.include_router(events.router)
+api_router.include_router(audit.router)
+api_router.include_router(expense_claims.router)
+api_router.include_router(internal_jobs.router)
+api_router.include_router(mail_actions.router)
+app.include_router(api_router)
 
 
 @app.exception_handler(AppHTTPException)

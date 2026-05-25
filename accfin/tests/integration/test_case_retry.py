@@ -33,7 +33,7 @@ async def test_case_retry_requeues_manual_review(
     before = await redis.llen(settings.accounts_queue_name)
 
     response = await async_client.post(
-        f"/cases/{case.id}/retry",
+        f"/api/cases/{case.id}/retry",
         headers=auth_headers,
     )
     assert response.status_code == 200, response.text
@@ -66,7 +66,7 @@ async def test_case_retry_rejects_non_retryable_status(
     await db_session.commit()
 
     response = await async_client.post(
-        f"/cases/{case.id}/retry",
+        f"/api/cases/{case.id}/retry",
         headers=auth_headers,
     )
     assert response.status_code == 422

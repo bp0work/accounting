@@ -1,0 +1,6 @@
+﻿occurred_at,business_date,mailbox_id,case_id,email_id,actor_type,actor_name,action,summary
+2026-05-20T05:27:03.115979+00:00,2026-05-20,,,,system,,test_digest,pytest finance activity row
+2026-05-20T05:27:16.738655+00:00,2026-05-20,,,,system,,test_digest,pytest finance activity row
+2026-05-20T05:27:29.527602+00:00,2026-05-20,,,,system,,test_digest,pytest finance activity row
+2026-05-20T05:27:46.746338+00:00,2026-05-20,,,,system,,test_digest,pytest finance activity row
+2026-05-20T05:29:23.428075+00:00,2026-05-20,,,,system,,test_digest,pytest finance activity row

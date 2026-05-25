@@ -50,7 +50,7 @@ async def test_cases_dashboard_and_export(
     db_session.add(case)
     await db_session.commit()
 
-    dash = await async_client.get("/cases/dashboard", headers=auth_headers)
+    dash = await async_client.get("/api/cases/dashboard", headers=auth_headers)
     assert dash.status_code == 200
     body = dash.json()
     assert "queue_depths" in body
@@ -59,7 +59,7 @@ async def test_cases_dashboard_and_export(
 
     today = now.date().isoformat()
     export = await async_client.get(
-        f"/cases/export?date_from={today}&date_to={today}",
+        f"/api/cases/export?date_from={today}&date_to={today}",
         headers=auth_headers,
     )
     assert export.status_code == 200
@@ -68,7 +68,7 @@ async def test_cases_dashboard_and_export(
     assert "case_number" in export.text
     assert case.case_number in export.text
 
-    listed = await async_client.get("/cases?limit=10", headers=auth_headers)
+    listed = await async_client.get("/api/cases?limit=10", headers=auth_headers)
     assert listed.status_code == 200
     row = next((r for r in listed.json()["data"] if r["case_number"] == case.case_number), None)
     assert row is not None

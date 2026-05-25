@@ -164,7 +164,7 @@ async def auditor_user(db_session: AsyncSession) -> User:
 @pytest.fixture
 async def auditor_auth_headers(async_client: AsyncClient, auditor_user: User) -> dict[str, str]:
     response = await async_client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"username": auditor_user.username, "password": TEST_PASSWORD},
     )
     assert response.status_code == 200, response.text
@@ -175,7 +175,7 @@ async def auditor_auth_headers(async_client: AsyncClient, auditor_user: User) ->
 @pytest.fixture
 async def auth_headers(async_client: AsyncClient, test_user: User) -> dict[str, str]:
     response = await async_client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"username": test_user.username, "password": TEST_PASSWORD},
     )
     assert response.status_code == 200, response.text

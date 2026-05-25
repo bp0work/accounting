@@ -53,7 +53,7 @@ def html_escalation_form(
     <dt>Action</dt>
     <dd>{html.escape(label)}</dd>
   </dl>
-  <form method="post" action="/mail/escalations/{esc_id}/respond?action={act}&amp;token={tok}">
+  <form method="post" action="/api/mail/escalations/{esc_id}/respond?action={act}&amp;token={tok}">
     <label for="comment">Comment (optional)</label>
     <textarea id="comment" name="comment" maxlength="4000" placeholder="e.g. Approved — recurring ACRA fee, no PO required"></textarea>
     <button type="submit">Submit</button>

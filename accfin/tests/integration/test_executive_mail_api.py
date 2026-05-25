@@ -29,7 +29,7 @@ def _phase11b_env(monkeypatch):
 
 @pytest.mark.integration
 async def test_finance_daily_log_requires_cron_token(async_client: AsyncClient):
-    response = await async_client.post("/internal/jobs/finance-daily-log")
+    response = await async_client.post("/api/internal/jobs/finance-daily-log")
     assert response.status_code == 401
 
 
@@ -49,7 +49,7 @@ async def test_finance_daily_log_sent_and_idempotent(
 
     headers = {"Authorization": f"Bearer {CRON_TOKEN}"}
     first = await async_client.post(
-        "/internal/jobs/finance-daily-log",
+        "/api/internal/jobs/finance-daily-log",
         headers=headers,
         json={"force": True},
     )
@@ -59,7 +59,7 @@ async def test_finance_daily_log_sent_and_idempotent(
     assert body["row_count"] >= 1
     assert body["attachment_filename"].startswith("finance_daily_")
 
-    second = await async_client.post("/internal/jobs/finance-daily-log", headers=headers)
+    second = await async_client.post("/api/internal/jobs/finance-daily-log", headers=headers)
     assert second.status_code == 200
     assert second.json()["status"] == "skipped"
     assert second.json()["reason"] == "already_sent"
@@ -96,7 +96,7 @@ async def test_escalation_respond_approve(async_client: AsyncClient, db_session:
     await db_session.commit()
 
     response = await async_client.get(
-        f"/mail/escalations/{esc_id}/respond",
+        f"/api/mail/escalations/{esc_id}/respond",
         params={"action": "approve", "token": wire},
     )
     assert response.status_code == 200
@@ -104,7 +104,7 @@ async def test_escalation_respond_approve(async_client: AsyncClient, db_session:
     assert case.case_number in response.text
 
     response = await async_client.post(
-        f"/mail/escalations/{esc_id}/respond",
+        f"/api/mail/escalations/{esc_id}/respond",
         params={"action": "approve", "token": wire},
         data={"comment": "Approved — recurring ACRA fee, no PO required"},
         headers={"Accept": "application/json"},

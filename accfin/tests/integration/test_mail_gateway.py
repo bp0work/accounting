@@ -176,12 +176,12 @@ async def test_same_content_different_message_id_not_duplicate(
 @pytest.mark.asyncio
 async def test_mail_status_api(async_client: AsyncClient, auditor_user: User):
     login = await async_client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"username": auditor_user.username, "password": TEST_PASSWORD},
     )
     token = login.json()["access_token"]
     response = await async_client.get(
-        "/mail/status",
+        "/api/mail/status",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200

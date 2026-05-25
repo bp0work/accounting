@@ -25,7 +25,7 @@ def test_escalation_action_urls(monkeypatch):
     svc = ExecutiveMailService(session)
     esc_id = uuid.uuid4()
     urls = svc.escalation_action_urls(esc_id, "wire-token")
-    assert urls["approve_url"].startswith("https://finance.example.test/mail/escalations/")
+    assert urls["approve_url"].startswith("https://finance.example.test/api/mail/escalations/")
     assert "action=approve" in urls["approve_url"]
     assert "action=reject" in urls["reject_url"]
     assert "action=escalate" in urls["escalate_url"]

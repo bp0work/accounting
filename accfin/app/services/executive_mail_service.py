@@ -86,7 +86,7 @@ class ExecutiveMailService:
     ) -> dict[str, str]:
         base = self._settings.edge_public_base_url.rstrip("/")
         qs = f"token={wire_token}"
-        path = f"/mail/escalations/{escalation_id}/respond"
+        path = f"/api/mail/escalations/{escalation_id}/respond"
         urls = {
             "approve_url": f"{base}{path}?action=approve&{qs}",
             "reject_url": f"{base}{path}?action=reject&{qs}",
