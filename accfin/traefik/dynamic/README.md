@@ -6,8 +6,9 @@ Mounted read-only at `/etc/traefik/dynamic` (see `docker-compose.yml` → `traef
 
 | Traffic | Router | Priority | Backend |
 |---------|--------|----------|---------|
-| `/` and all SvelteKit UI routes (`/login`, `/dashboard`, `/approvals`, `/cases/{id}`, …) | `finance-ui` (Docker labels) | **1** | `finance-ui:3000` |
-| `PathPrefix(/api)` only | `finance-api` (`api-routes.yml`) | **100** | `http://fastapi:8000` |
+| `finance.mmlogistix.bp0.work` UI | `finance-ui` (Docker labels) | **1** | `finance-ui:3000` |
+| `admin.mmlogistix.bp0.work` UI | `client-admin-ui` (Docker labels) | **1** | `client-admin-ui:3000` |
+| `PathPrefix(/api)` on finance or admin host | `finance-api` / `client-admin-api` | **100** | `http://fastapi:8000` |
 
 **Do not** add `PathPrefix(\`/\`)` to `api-routes.yml` — that matches every path and sends `/` to FastAPI instead of the Approval UI.
 

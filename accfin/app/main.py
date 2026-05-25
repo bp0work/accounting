@@ -14,6 +14,7 @@ from app.api.routes import (
     health,
     internal_jobs,
     mail,
+    admin,
     mail_actions,
     metrics,
     notifications,
@@ -69,6 +70,7 @@ api_router.include_router(audit.router)
 api_router.include_router(expense_claims.router)
 api_router.include_router(internal_jobs.router)
 api_router.include_router(mail_actions.router)
+api_router.include_router(admin.router)
 app.include_router(api_router)
 
 

@@ -5,6 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
+| **0.14.0-client-admin-ui** | 2026-05-20 | — | **Client Admin UI** at `admin.mmlogistix.bp0.work`: SvelteKit app, Traefik host + `/api` router; migrations `049`/`050` (tenant_profiles, agreements, accounting_periods); admin API routes; `client_admin` JWT only. |
 | **0.13.12-api-prefix-routing** (finance-ui + accfin + traefik) | 2026-05-20 | `713be98` | **API under `/api`:** Traefik `PathPrefix(/api)` only; FastAPI routers mounted at `/api`; finance-ui `apiUrl()` + vite proxy `/api`. UI owns `/approvals`, `/cases/{id}`. Layout `isLoggedIn` sync from localStorage; one-step login TOTP field. |
 | **0.13.11-approvals-page-auth-routing** (finance-ui + traefik) | 2026-05-20 | `60741ce` | **/approvals 401 fix (superseded by 0.13.12):** `loadCases()` awaits `ensureValidAccessToken()`; `+page.ts`/`+layout.ts` `ssr = false`. Traefik `finance-ui-html-overlap` (priority 110) sends browser document navigations on `/approvals` and `/cases/{id}` to finance-ui; vite dev proxy bypasses HTML for `/approvals`. |
 | **0.13.10-ap-client-vendor-column-fix** (finance-ui) | 2026-05-20 | `cbd834f` | Approvals + case detail **Client / Vendor**: AP (`ap_invoice`, `ap_po_validation`, `ap_payment_proposal`) → `client_vendor_name`; AR → `counterparty_name` only (`clientVendorColumnValue` in `case-labels.ts`). Requires API `client_vendor_name` (`0.13.21`). |

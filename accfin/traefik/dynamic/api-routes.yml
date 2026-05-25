@@ -2,6 +2,16 @@
 # Do NOT add PathPrefix(`/`) (matches every path and steals `/` from finance-ui).
 http:
   routers:
+    client-admin-api:
+      rule: "Host(`admin.mmlogistix.bp0.work`) && PathPrefix(`/api`)"
+      entryPoints:
+        - websecure
+      service: finance-api
+      tls:
+        certResolver: letsencrypt
+      priority: 100
+      middlewares:
+        - security-headers@file
     finance-api:
       rule: "Host(`finance.mmlogistix.bp0.work`) && PathPrefix(`/api`)"
       entryPoints:

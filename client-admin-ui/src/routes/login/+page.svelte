@@ -1,0 +1,45 @@
+<script module lang="ts">
+  export const ssr = false;
+</script>
+<script lang="ts">
+  import { loginRequest, completeLogin } from '$lib/api/auth';
+  import { APP_TITLE } from '$lib/branding';
+  let username = '';
+  let password = '';
+  let totpCode = '';
+  let loading = false;
+  let error = '';
+  async function login() {
+    error = '';
+    loading = true;
+    try {
+      const t = totpCode.trim();
+      const data = await loginRequest(username, password, t || undefined);
+      completeLogin(data);
+      const { goto } = await import('$app/navigation');
+      await goto('/dashboard');
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Login failed';
+    } finally {
+      loading = false;
+    }
+  }
+</script>
+<h1>Sign in</h1>
+<p>{APP_TITLE}</p>
+{#if error}<p class="err">{error}</p>{/if}
+<form on:submit|preventDefault={login}>
+  <label>Username<br /><input bind:value={username} required disabled={loading} /></label>
+  <label>Password<br /><input type="password" bind:value={password} required disabled={loading} /></label>
+  <label>Authentication code (optional)<br />
+    <input bind:value={totpCode} maxlength="6" disabled={loading} />
+    <span class="hint">Leave blank if 2FA is not enabled.</span>
+  </label>
+  <button type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
+</form>
+<style>
+  form label { display: block; margin-bottom: 0.75rem; }
+  input { width: 100%; padding: 0.5rem; box-sizing: border-box; }
+  .err { color: #b91c1c; }
+  .hint { font-size: 0.875rem; color: #64748b; display: block; margin-top: 0.25rem; }
+</style>

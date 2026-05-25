@@ -48,6 +48,30 @@ services:
       - "traefik.http.routers.finance-ui.tls.certresolver=letsencrypt"
       - "traefik.http.services.finance-ui.loadbalancer.server.port=3000"
 
+  client-admin-ui:
+    build:
+      context: ../client-admin-ui
+      dockerfile: Dockerfile
+      args:
+        PUBLIC_API_URL: https://admin.mmlogistix.bp0.work
+    container_name: client-admin-ui
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      NODE_ENV: production
+    networks:
+      - frontend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=accfin_frontend"
+      - "traefik.http.routers.client-admin-ui.rule=Host(`admin.mmlogistix.bp0.work`)"
+      - "traefik.http.routers.client-admin-ui.priority=1"
+      - "traefik.http.routers.client-admin-ui.entrypoints=websecure"
+      - "traefik.http.routers.client-admin-ui.tls=true"
+      - "traefik.http.routers.client-admin-ui.tls.certresolver=letsencrypt"
+      - "traefik.http.services.client-admin-ui.loadbalancer.server.port=3000"
+
   fastapi:
     build:
       context: .

@@ -29,6 +29,21 @@ async def get_current_user(
     )
 
 
+def require_client_admin():
+    """Client Admin UI — `tenant:admin` permission (client_admin role)."""
+
+    async def _check(user: TokenData = Depends(get_current_user)) -> TokenData:
+        if user.role != "client_admin" and "tenant:admin" not in user.permissions:
+            raise AppHTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "INSUFFICIENT_PERMISSION",
+                "Client administrator access is required.",
+            )
+        return user
+
+    return _check
+
+
 def require_permission(permission_code: str):
     async def _check(user: TokenData = Depends(get_current_user)) -> TokenData:
         if permission_code not in user.permissions:
