@@ -5,6 +5,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
+  import { ensureValidAccessToken } from '$lib/api/client';
   import { approve, getApproval, reject, type ApprovalItem } from '$lib/api/approvals';
 
   let item: ApprovalItem | null = null;
@@ -18,7 +19,14 @@
   onMount(load);
 
   async function load() {
+    error = '';
     try {
+      const token = await ensureValidAccessToken();
+      if (!token) {
+        const { goto } = await import('$app/navigation');
+        await goto('/login');
+        return;
+      }
       item = await getApproval(id);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';

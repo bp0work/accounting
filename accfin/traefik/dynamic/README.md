@@ -8,7 +8,8 @@ Mounted read-only at `/etc/traefik/dynamic` (see `docker-compose.yml` → `traef
 
 | Traffic | Router | Priority | Backend |
 |---------|--------|----------|---------|
-| `/` and SvelteKit pages (`/login`, `/approvals`, …) | `finance-ui` (Docker labels) | **1** | `finance-ui:3000` |
+| `/` and SvelteKit pages (`/login`, `/dashboard`, …) | `finance-ui` (Docker labels) | **1** | `finance-ui:3000` |
+| Browser document navigation to `/approvals`, `/approvals/{id}`, `/cases/{id}` (overlaps API prefixes) | `finance-ui-html-overlap` (`api-routes.yml`) | **110** | `http://finance-ui:3000` |
 | API path prefixes only (see below) | `finance-api` (`api-routes.yml`) | **100** | `http://fastapi:8000` |
 
 **Do not** add `PathPrefix(\`/\`)` to `api-routes.yml` — in Traefik that matches every path and sends `/` to FastAPI instead of the Approval UI.
