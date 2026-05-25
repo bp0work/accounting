@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.13.22-escalation-respond-flow` (migrations `001`–`048`; finance-ui `0.13.9-ap-vendor-column-display`)
+**Target version:** `0.13.22-escalation-respond-flow` (migrations `001`–`048`; finance-ui `0.13.10-ap-client-vendor-column-fix`)
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -184,7 +184,8 @@ Configure `systemd` timer or host cron; verify idempotent `skipped` on second sa
 | E5.4 | SMTP digest to `FINANCE_DAILY_LOG_RECIPIENT` verified (when mail transport live) | ☐ |
 | E5.5 | Outbound SMTP: manager escalation (incl. missing-fields template `0.13.15` + inbound re-attach `0.13.16`), ack, clarification on Request More Info | ☐ |
 | E5.6 | finance-ui case detail shows manual review panel (`0.13.6-manual-review-detail`) | ☐ |
-| E5.7 | finance-ui Cases & Approvals: Document Type, Submitted By, Client / Vendor from `client_vendor_name` (`0.13.9`) | ☐ |
+| E5.7 | finance-ui Cases & Approvals: Document Type, Submitted By, Client / Vendor — AP from `client_vendor_name`, AR from `counterparty_name` (`0.13.10`) | ☐ |
+| E5.9 | Rebuild `finance-ui` after `0.13.10` (Client/Vendor column by case type) | ☐ |
 | E5.8 | Rebuild `gateway`, `ap-worker`, `expense-worker`, `hermes`, `fastapi` after `0.13.20` (`python-docx` dependency) | ☐ |
 | E5.10 | Rebuild `fastapi`, `ap-worker` after `0.13.22` (escalation respond form + PO override on manager approve) | ☐ |
 
