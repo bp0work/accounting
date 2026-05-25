@@ -5,6 +5,7 @@ Finance-ui package version: `finance-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
+| **0.13.10-ap-client-vendor-column-fix** (finance-ui) | 2026-05-20 | `cbd834f` | Approvals + case detail **Client / Vendor**: AP (`ap_invoice`, `ap_po_validation`, `ap_payment_proposal`) → `client_vendor_name`; AR → `counterparty_name` only (`clientVendorColumnValue` in `case-labels.ts`). Requires API `client_vendor_name` (`0.13.21`). |
 | **0.13.22-escalation-respond-flow** | 2026-05-24 | `13a1531` | **Escalation respond:** GET shows comment form; POST stores `manager_comment`. Approve → requeue with `override_po_check` + submitter ack; Reject → email submitter with comment; Escalate → forward to next tier with comment. Routes in `mail_actions.py` (`05` §8.8a). |
 | **0.13.21-ap-vendor-extraction-display** | 2026-05-24 | `1d0075b` | **Hermes AP:** `ap_invoice_extract-v2` — vendor is issuer (not payer); receipt/ref/ARN invoice numbers; paid receipt `due_date` = `invoice_date`. **API/UI:** `GET /cases` `client_vendor_name` from `extracted_fields.vendor_name` for AP; finance-ui Client/Vendor column (`0.13.9`). |
 | **0.13.9-ap-vendor-column-display** (finance-ui) | 2026-05-24 | `1d0075b` | Approvals + case detail use `client_vendor_name` for Client / Vendor column. |
