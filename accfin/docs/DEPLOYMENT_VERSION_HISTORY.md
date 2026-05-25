@@ -1,11 +1,12 @@
 # Deployment version history (`accfin/` + `finance-ui/`)
 
 Authoritative smoke-test version: `GET /api/health` → `version` from `app/core/config.py`.  
-Finance-ui package version: `finance-ui/package.json`.
+UI package versions: `finance-ui/package.json`, `client-admin-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.14.0-client-admin-ui** | 2026-05-20 | `3f15219` | **Client Admin UI** at `admin.mmlogistix.bp0.work`: SvelteKit app, Traefik host + `/api` router; migrations `049`/`050` (tenant_profiles, agreements, accounting_periods); admin API routes; `client_admin` JWT only. |
+| **0.14.1-client-admin-ui** | 2026-05-20 | `5580f55` | **Client Admin (shipped):** `admin.mmlogistix.bp0.work` — SvelteKit + adapter-node, `/api/*`, nav Dashboard→Accounting Calendar; reactive `client_admin_access_token` nav fix. **API** (`admin.py`, `require_client_admin`): dashboard, tenant profile, COA+CSV, mail config, users, expense limits, agreements, travel-requests, accounting-periods, regulatory docs. **Traefik:** `client-admin-ui` p1; `client-admin-api` `PathPrefix(/api)` p100. Migrations `049`/`050`. See `accfin/docs/CLIENT_ADMIN_UI.md`. |
+| **0.14.0-client-admin-ui** | 2026-05-20 | `3f15219` | Initial Client Admin UI + admin API (superseded by `0.14.1` nav fix). |
 | **0.13.12-api-prefix-routing** (finance-ui + accfin + traefik) | 2026-05-20 | `713be98` | **API under `/api`:** Traefik `PathPrefix(/api)` only; FastAPI routers mounted at `/api`; finance-ui `apiUrl()` + vite proxy `/api`. UI owns `/approvals`, `/cases/{id}`. Layout `isLoggedIn` sync from localStorage; one-step login TOTP field. |
 | **0.13.11-approvals-page-auth-routing** (finance-ui + traefik) | 2026-05-20 | `60741ce` | **/approvals 401 fix (superseded by 0.13.12):** `loadCases()` awaits `ensureValidAccessToken()`; `+page.ts`/`+layout.ts` `ssr = false`. Traefik `finance-ui-html-overlap` (priority 110) sends browser document navigations on `/approvals` and `/cases/{id}` to finance-ui; vite dev proxy bypasses HTML for `/approvals`. |
 | **0.13.10-ap-client-vendor-column-fix** (finance-ui) | 2026-05-20 | `cbd834f` | Approvals + case detail **Client / Vendor**: AP (`ap_invoice`, `ap_po_validation`, `ap_payment_proposal`) → `client_vendor_name`; AR → `counterparty_name` only (`clientVendorColumnValue` in `case-labels.ts`). Requires API `client_vendor_name` (`0.13.21`). |

@@ -7,7 +7,7 @@ Runnable code for the bp0.work finance platform. **Push this folder only** to Gi
 | `accfin/` | FastAPI API, workers, mail gateway, orchestrator, Hermes, Alembic, Docker Compose |
 | `finance-ui/` | Approval UI (SvelteKit) — Phase 9 |
 | `platform-admin-ui/` | Platform Admin UI — Phase 2+ |
-| `client-admin-ui/` | Client Admin UI — Phase 2+ |
+| `client-admin-ui/` | Client Admin UI — `0.14.1` @ `admin.mmlogistix.bp0.work` (see `accfin/docs/CLIENT_ADMIN_UI.md`) |
 
 ## Specifications
 
