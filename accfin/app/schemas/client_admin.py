@@ -4,10 +4,12 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TenantProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     tenant_id: UUID
     legal_name: str
     trading_name: str | None = None

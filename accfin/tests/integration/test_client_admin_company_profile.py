@@ -62,10 +62,12 @@ async def test_company_profile_for_system_mmlogistix_user(
     resp = await async_client.get("/api/admin/company-profile", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
+    assert body["tenant_id"] == str(TENANT_MMLOGISTIX)
     assert body["legal_name"]
     assert body["uen"] == "TEST-UEN-001"
     assert body["registered_address"]
     assert body["contact_email"]
+    assert "email_signature_html" in body
 
 
 @pytest.mark.integration
