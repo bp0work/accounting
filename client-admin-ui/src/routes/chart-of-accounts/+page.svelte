@@ -114,7 +114,7 @@
     </label>
     <label class="upload-btn">
       Upload CSV
-      <input type="file" accept=".csv" on:change={onCsv} hidden />
+      <input type="file" accept=".csv" onchange={onCsv} hidden />
     </label>
   </div>
 {:else}
@@ -143,7 +143,7 @@
       <input type="checkbox" bind:checked={replaceAllOnImport} />
       Replace entire chart on import
     </label>
-    <label class="csv-label">Import (CSV) <input type="file" accept=".csv" on:change={onCsv} /></label>
+    <label class="csv-label">Import (CSV) <input type="file" accept=".csv" onchange={onCsv} /></label>
   </div>
 {/if}
 
@@ -158,7 +158,7 @@
     <option value="revenue">revenue</option>
     <option value="expense">expense</option>
   </select>
-  <button type="button" on:click={add}>Add</button>
+  <button type="button" onclick={() => void add()}>Add</button>
 </div>
 
 {#if q.trim() && items.length === 0 && !empty}
@@ -172,7 +172,7 @@
           <td>{a.account_code}</td>
           <td>{a.account_name}</td>
           <td>{a.account_type}</td>
-          <td><button type="button" on:click={() => deactivate(String(a.id))}>Deactivate</button></td>
+          <td><button type="button" onclick={() => void deactivate(String(a.id))}>Deactivate</button></td>
         </tr>
       {/each}
     </tbody>
