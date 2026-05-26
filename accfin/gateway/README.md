@@ -1,3 +1,8 @@
-# Mail Gateway — Phase 3
+# gateway
 
-IMAP polling for `executive_agent` mailboxes → `intake_queue`. See `platform_dox/17` §2.1.
+IMAP polling for `executive_agent` mailboxes → Redis `intake_queue`.
+
+```bash
+cd ..
+docker compose up -d gateway
+```

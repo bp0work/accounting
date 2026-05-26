@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppHTTPException
 from app.core.state_machine import CaseStateMachine, TransitionResult
+from app.models.accounting_period import AccountingPeriod
 from app.policies.engine import PolicyEngine
 from app.repositories.case import CaseRepository
 from app.repositories.policy import PolicyRepository
@@ -150,14 +151,33 @@ class CaseService:
         await self._session.refresh(case)
         return result
 
+    async def _period_closed_hold_retryable(self, case) -> bool:
+        if case.status != "on_hold":
+            return False
+        meta = case.workflow_metadata or {}
+        if meta.get("reason_code") != "PERIOD_CLOSED" and meta.get("error_type") != "PERIOD_CLOSED":
+            return False
+        period_id = meta.get("gl_period_id")
+        if not period_id:
+            return False
+        try:
+            pid = UUID(str(period_id))
+        except (TypeError, ValueError):
+            return False
+        period = await self._session.get(AccountingPeriod, pid)
+        return period is not None and period.status != "closed"
+
     async def retry_case(self, case_id: UUID, *, user: TokenData) -> CaseRetryResponse:
         case = await self.get_case(case_id)
-        if case.status not in RETRYABLE_STATUSES:
+        retryable = case.status in RETRYABLE_STATUSES
+        if not retryable:
+            retryable = await self._period_closed_hold_retryable(case)
+        if not retryable:
             raise AppHTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "CASE_NOT_RETRYABLE",
                 f"Case in status '{case.status}' cannot be retried; "
-                f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))}",
+                f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))}, or on_hold after GL period reopen",
             )
 
         previous_status = case.status

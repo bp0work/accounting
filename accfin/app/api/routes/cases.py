@@ -15,6 +15,7 @@ from app.core.database import get_db_session
 from app.core.dependencies import require_permission
 from app.core.exceptions import AppHTTPException
 from app.core.redis_client import get_redis
+from app.models.accounting_period import AccountingPeriod
 from app.models.mail import Email
 from app.repositories.case import CaseRepository
 from app.repositories.policy import PolicyRepository
@@ -69,7 +70,25 @@ async def _load_from_address(session: AsyncSession, case) -> str | None:
     return str(fallback) if fallback else None
 
 
-def _case_response(case, *, from_address: str | None = None) -> CaseResponse:
+async def _linked_gl_period_status(session: AsyncSession, case) -> str | None:
+    meta = case.workflow_metadata or {}
+    period_id = meta.get("gl_period_id")
+    if not period_id:
+        return None
+    try:
+        pid = UUID(str(period_id))
+    except (TypeError, ValueError):
+        return None
+    period = await session.get(AccountingPeriod, pid)
+    return period.status if period else None
+
+
+def _case_response(
+    case,
+    *,
+    from_address: str | None = None,
+    linked_gl_period_status: str | None = None,
+) -> CaseResponse:
     base = CaseResponse.model_validate(case)
     if from_address is None:
         meta = case.classification_metadata or {}
@@ -89,6 +108,7 @@ def _case_response(case, *, from_address: str | None = None) -> CaseResponse:
             "last_activity_at": last_activity_at(case),
             "workflow_metadata": case.workflow_metadata or {},
             "classification_metadata": case.classification_metadata or {},
+            "linked_gl_period_status": linked_gl_period_status,
         }
     )
 
@@ -176,7 +196,10 @@ async def get_case(
     service = CaseService(session)
     case = await service.get_case(case_id)
     from_address = await _load_from_address(session, case)
-    return _case_response(case, from_address=from_address)
+    linked_gl = await _linked_gl_period_status(session, case)
+    return _case_response(
+        case, from_address=from_address, linked_gl_period_status=linked_gl
+    )
 
 
 @router.post("/cases/{case_id}/status", response_model=CaseStatusTransitionResponse)

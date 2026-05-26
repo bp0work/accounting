@@ -9,6 +9,7 @@
     generateAccountingPeriods,
     approveTrialBalance,
     closeGlPeriod,
+    reopenGlPeriod,
     getAccountingSettings,
     patchAccountingSettings,
     listGlCutoffReminders,
@@ -46,6 +47,7 @@
     is_active: true,
   };
   let closeTarget: Record<string, unknown> | null = null;
+  let reopenTarget: Record<string, unknown> | null = null;
   let closeForm = {
     audit_adjustments_completed: false,
     year_end_adjustments_completed: false,
@@ -115,6 +117,23 @@
       auditor_firm: '',
       sign_off_date: '',
     };
+  }
+
+  function openReopen(p: Record<string, unknown>) {
+    reopenTarget = p;
+  }
+
+  async function confirmReopen() {
+    if (!reopenTarget) return;
+    error = '';
+    try {
+      await reopenGlPeriod(String(reopenTarget.id));
+      msg = 'GL period reopened.';
+      reopenTarget = null;
+      await refresh();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Reopen failed';
+    }
   }
 
   async function confirmClose() {
@@ -244,6 +263,8 @@
             <button type="button" on:click={() => approve(String(p.id))}>Approve TB</button>
           {:else if p.status === 'review'}
             <button type="button" on:click={() => openClose(p)}>Close GL</button>
+          {:else if p.status === 'closed'}
+            <button type="button" class="reopen" title="Reopen period" on:click={() => openReopen(p)}>🔓</button>
           {:else}
             —
           {/if}
@@ -301,6 +322,22 @@
   {/if}
 </section>
 
+{#if reopenTarget}
+  <div class="modal-backdrop" role="presentation">
+    <div class="modal card">
+      <h2>Reopen GL period</h2>
+      <p>
+        Are you sure you want to reopen {periodLabel(reopenTarget)}? This will allow new postings
+        to this period. All previous postings will remain intact.
+      </p>
+      <div class="modal-actions">
+        <button type="button" on:click={confirmReopen}>Reopen period</button>
+        <button type="button" class="muted" on:click={() => (reopenTarget = null)}>Cancel</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 {#if closeTarget}
   <div class="modal-backdrop" role="presentation">
     <div class="modal card">
@@ -350,6 +387,7 @@
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal { max-width: 420px; width: 90%; }
   .modal-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+  .reopen { font-size: 1.1rem; padding: 0.25rem 0.5rem; cursor: pointer; background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; }
   .recipients { margin-top: 1.5rem; }
   .add-form { margin-top: 0.75rem; }
 </style>

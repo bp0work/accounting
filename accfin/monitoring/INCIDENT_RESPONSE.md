@@ -24,5 +24,5 @@
 
 ## Contacts
 
-- Platform on-call: see internal ops roster (`11` §17).
+- Platform on-call: see internal ops roster.
 - CFO digest issues: verify `system_settings.last_finance_log_sent_at` (Phase 11b).

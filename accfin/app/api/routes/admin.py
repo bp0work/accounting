@@ -12,7 +12,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
-from app.core.dependencies import require_client_admin, require_gl_posting_override
+from app.core.dependencies import (
+    require_client_admin,
+    require_gl_posting_override,
+    require_period_reopen,
+)
 from app.core.exceptions import AppHTTPException
 from app.models.accounting_period import AccountingPeriod
 from app.models.gl_cutoff_reminder import GlCutoffReminder
@@ -70,6 +74,7 @@ from app.schemas.client_admin import (
     TravelRequestStatusUpdate,
 )
 from app.services.gl_period_override_service import GlPeriodOverrideService
+from app.services.gl_period_reopen_service import GlPeriodReopenService
 from app.services.regulatory_storage import (
     TRAVEL_EXPENSE_POLICY_PATH,
     RegulatoryStorageService,
@@ -1216,4 +1221,18 @@ async def close_accounting_period(
     period.status = "closed"
     await session.commit()
     await session.refresh(period)
+    return AccountingPeriodResponse.model_validate(period)
+
+
+@router.post("/accounting-periods/{period_id}/reopen", response_model=AccountingPeriodResponse)
+async def reopen_accounting_period(
+    period_id: UUID,
+    user: TokenData = Depends(require_period_reopen()),
+    session: AsyncSession = Depends(get_db_session),
+) -> AccountingPeriodResponse:
+    tid = await _tenant_id(user, session)
+    existing = await session.get(AccountingPeriod, period_id)
+    if existing is None or existing.tenant_id != tid:
+        raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Period not found")
+    period = await GlPeriodReopenService(session).reopen(period_id=period_id, user=user)
     return AccountingPeriodResponse.model_validate(period)

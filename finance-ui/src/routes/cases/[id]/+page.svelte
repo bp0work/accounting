@@ -27,12 +27,18 @@
 
   const overrideRoles = new Set(['cfo', 'finance_manager']);
 
+  $: periodClosedHold =
+    item &&
+    item.status === 'on_hold' &&
+    (item.workflow_metadata?.reason_code === 'PERIOD_CLOSED' ||
+      item.workflow_metadata?.error_type === 'PERIOD_CLOSED');
+  $: glPeriodStillClosed = item?.linked_gl_period_status === 'closed';
   $: canOverrideGl =
     overrideRoles.has(($sessionUser?.role_name ?? '').toLowerCase()) &&
-    item &&
-    (item.status === 'on_hold' ||
-      item.workflow_metadata?.reason_code === 'PERIOD_CLOSED' ||
-      item.workflow_metadata?.error_type === 'PERIOD_CLOSED');
+    periodClosedHold &&
+    glPeriodStillClosed;
+  $: canRetryAfterReopen =
+    periodClosedHold && item?.linked_gl_period_status != null && !glPeriodStillClosed;
   $: glPeriodId = item?.workflow_metadata?.gl_period_id
     ? String(item.workflow_metadata.gl_period_id)
     : '';
@@ -219,10 +225,13 @@
       </button>
       <p class="hint">This case is blocked because the posting date falls in a closed GL period.</p>
     {/if}
-    {#if retryableStatuses.has(item.status)}
+    {#if retryableStatuses.has(item.status) || canRetryAfterReopen}
       <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
         {retrying ? 'Requeuing…' : 'Retry processing'}
       </button>
+      {#if canRetryAfterReopen}
+        <p class="hint">The GL period for this posting date has been reopened — you can reprocess without an override.</p>
+      {/if}
     {/if}
     {#if retryMessage}
       <p class="hint success">{retryMessage}</p>

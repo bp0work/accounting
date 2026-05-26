@@ -42,7 +42,7 @@ docker compose run --rm fastapi alembic upgrade head
    FINANCE_REDIS__PASSWORD=<from generate-keys>
    ```
 
-4. **Supabase Cloud** (production): use connection string from Supabase dashboard; see `platform_dox/16` §2.3.
+4. **Supabase Cloud** (production): use connection string from Supabase dashboard (`FINANCE_DATABASE_URL`).
 
 ## Compose
 
@@ -63,4 +63,4 @@ curl http://localhost:8000/api/health
 
 ## Layout
 
-See `platform_dox/03_Cursor_Development_Brief.md` §2. Production compose reference: `platform_dox/11` Appendix 20.
+Monorepo services: `gateway/`, `orchestrator/`, `workers/`, `hermes/`, `fastapi` app under `app/`. See `docker-compose.yml`.

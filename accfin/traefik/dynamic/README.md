@@ -21,5 +21,3 @@ Mounted read-only at `/etc/traefik/dynamic` (see `docker-compose.yml` → `traef
 | `security.yml` | Shared `security-headers` middleware |
 
 After edits: `docker compose up -d --force-recreate traefik`.
-
-See `accfin/docs/CLIENT_ADMIN_UI.md`, `11_Deployment_Operations_Runbook.md` §4.5g, `14_Environment_and_Configuration_Reference.md` §9.0.

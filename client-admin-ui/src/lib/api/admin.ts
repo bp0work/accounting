@@ -241,3 +241,7 @@ export function closeGlPeriod(
     body: body ? JSON.stringify(body) : undefined,
   });
 }
+
+export function reopenGlPeriod(periodId: string) {
+  return apiFetch(`/accounting-periods/${periodId}/reopen`, { method: 'POST' });
+}

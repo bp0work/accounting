@@ -1,5 +1,5 @@
 # Phase 1 infrastructure — local development
-# Production reference: platform_dox/11_Deployment_Operations_Runbook.md Appendix 20
+# Production: see accfin/README.md and docker-compose service definitions
 
 name: accfin
 

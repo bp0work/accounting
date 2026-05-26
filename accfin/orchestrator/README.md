@@ -4,5 +4,3 @@ Consumes `intake_queue`, creates cases, runs state transitions, routes to `accou
 
 - Health: `GET /health`
 - Manual process (tests): `POST /process-once`
-
-See `platform_dox/08_Workflow_State_Machine.md` and `10_Policy_Engine_Specification.md`.

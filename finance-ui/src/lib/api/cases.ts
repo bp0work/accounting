@@ -22,6 +22,7 @@ export type CaseItem = {
   last_activity_at?: string | null;
   workflow_metadata?: Record<string, unknown>;
   classification_metadata?: Record<string, unknown>;
+  linked_gl_period_status?: string | null;
 };
 
 export type TimelineEntry = {
