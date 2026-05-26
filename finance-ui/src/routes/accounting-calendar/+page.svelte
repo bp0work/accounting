@@ -18,7 +18,7 @@
     deleteGlCutoffReminder,
     type AccountingSettings,
     type GlCutoffReminder,
-  } from '$lib/api/admin';
+  } from '$lib/api/finance-setup';
 
   const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',

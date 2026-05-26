@@ -14,7 +14,7 @@
     listPaymentTerms,
     listTaxCodes,
     patchCounterpartyAccount,
-  } from '$lib/api/admin';
+  } from '$lib/api/finance-setup';
 
   type Tab = 'subaccounts' | 'terms' | 'tax';
 

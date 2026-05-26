@@ -24,7 +24,11 @@
   <ul class="checks">
     {#each data.checks as c}
       <li class:done={c.complete} class:pending={!c.complete}>
-        <a href={c.href}>{c.label}</a>
+        <a
+          href={c.href}
+          target={c.href.startsWith('http') ? '_blank' : undefined}
+          rel={c.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+        >{c.label}</a>
         <span class="status">{c.complete ? 'Complete' : 'Incomplete'}</span>
         {#if c.detail}
           <p class="detail">{c.detail}</p>

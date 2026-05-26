@@ -12,8 +12,10 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
+from app.core.config import get_settings
 from app.core.dependencies import (
     require_client_admin,
+    require_finance_setup_access,
     require_gl_posting_override,
     require_period_reopen,
 )
@@ -175,6 +177,7 @@ async def admin_dashboard(
     session: AsyncSession = Depends(get_db_session),
 ) -> DashboardResponse:
     tid = await _tenant_id(user, session)
+    finance_ui = get_settings().edge_public_base_url
     profile = await session.get(TenantProfile, tid)
     coa_count = await session.scalar(
         select(func.count()).select_from(CoaAccount).where(CoaAccount.is_active.is_(True))
@@ -248,14 +251,14 @@ async def admin_dashboard(
             section="payment_terms",
             label="Payment terms",
             complete=terms_ok,
-            href="/counterparty-accounts",
+            href=f"{finance_ui}/counterparty-accounts",
             detail=f"{terms_count or 0} active term(s)" if terms_ok else "Configure payment terms catalog",
         ),
         DashboardCheckItem(
             section="tax_codes",
             label="GST / tax codes",
             complete=tax_ok,
-            href="/counterparty-accounts",
+            href=f"{finance_ui}/counterparty-accounts",
             detail=f"{tax_count or 0} active tax code(s)" if tax_ok else "Map tax codes to GL accounts",
         ),
         DashboardCheckItem(
@@ -303,14 +306,14 @@ async def admin_dashboard(
             section="calendar",
             label="Accounting calendar",
             complete=cal_ok,
-            href="/accounting-calendar",
+            href=f"{finance_ui}/accounting-calendar",
             detail=cal_detail,
         ),
         DashboardCheckItem(
             section="gl_reminders",
             label="GL reminder recipients",
             complete=reminders_ok,
-            href="/accounting-calendar",
+            href=f"{finance_ui}/accounting-calendar",
             detail=f"{reminder_count or 0} active recipient(s)"
             if reminders_ok
             else "Add at least one active reminder recipient",
@@ -872,7 +875,7 @@ async def patch_travel_request(
 
 @router.get("/agreements/rental", response_model=list[RentalAgreementResponse])
 async def list_rental_agreements(
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[RentalAgreementResponse]:
     tid = await _tenant_id(user, session)
@@ -885,7 +888,7 @@ async def list_rental_agreements(
 @router.post("/agreements/rental", response_model=RentalAgreementResponse, status_code=status.HTTP_201_CREATED)
 async def create_rental_agreement(
     body: RentalAgreementCreate,
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> RentalAgreementResponse:
     tid = await _tenant_id(user, session)
@@ -898,7 +901,7 @@ async def create_rental_agreement(
 
 @router.get("/agreements/director-expense", response_model=list[DirectorExpenseAgreementResponse])
 async def list_director_agreements(
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[DirectorExpenseAgreementResponse]:
     tid = await _tenant_id(user, session)
@@ -913,7 +916,7 @@ async def list_director_agreements(
 @router.post("/agreements/director-expense", response_model=DirectorExpenseAgreementResponse, status_code=status.HTTP_201_CREATED)
 async def create_director_agreement(
     body: DirectorExpenseAgreementCreate,
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> DirectorExpenseAgreementResponse:
     tid = await _tenant_id(user, session)
@@ -1087,7 +1090,7 @@ async def download_regulatory_document(
 @router.get("/admin/accounting-settings", response_model=AccountingSettingsResponse)
 async def get_accounting_settings(
     session: AsyncSession = Depends(get_db_session),
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
 ) -> AccountingSettingsResponse:
     return AccountingSettingsResponse(
         accounting_fye_month=await accounting_fye_month(session),
@@ -1101,7 +1104,7 @@ async def get_accounting_settings(
 async def patch_accounting_settings(
     body: AccountingSettingsUpdate,
     session: AsyncSession = Depends(get_db_session),
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
 ) -> AccountingSettingsResponse:
     repo = SystemSettingsRepository(session)
     entries: dict[str, tuple[str, str, str]] = {}
@@ -1134,7 +1137,7 @@ async def patch_accounting_settings(
 
 @router.get("/admin/gl-cutoff-reminders", response_model=list[GlCutoffReminderResponse])
 async def list_gl_cutoff_reminders(
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[GlCutoffReminderResponse]:
     tid = await _tenant_id(user, session)
@@ -1153,7 +1156,7 @@ async def list_gl_cutoff_reminders(
 )
 async def create_gl_cutoff_reminder(
     body: GlCutoffReminderCreate,
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> GlCutoffReminderResponse:
     tid = await _tenant_id(user, session)
@@ -1168,7 +1171,7 @@ async def create_gl_cutoff_reminder(
 async def patch_gl_cutoff_reminder(
     reminder_id: UUID,
     body: GlCutoffReminderUpdate,
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> GlCutoffReminderResponse:
     tid = await _tenant_id(user, session)
@@ -1185,7 +1188,7 @@ async def patch_gl_cutoff_reminder(
 @router.delete("/admin/gl-cutoff-reminders/{reminder_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_gl_cutoff_reminder(
     reminder_id: UUID,
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> Response:
     tid = await _tenant_id(user, session)
@@ -1199,7 +1202,7 @@ async def delete_gl_cutoff_reminder(
 
 @router.get("/accounting-periods", response_model=list[AccountingPeriodResponse])
 async def list_accounting_periods(
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[AccountingPeriodResponse]:
     tid = await _tenant_id(user, session)
@@ -1223,7 +1226,7 @@ async def get_calendar_settings(
 @router.post("/accounting-periods/generate", response_model=list[AccountingPeriodResponse])
 async def generate_accounting_periods(
     months: int = Query(13, ge=1, le=24),
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[AccountingPeriodResponse]:
     """Create periods for the current month and the next ``months - 1`` months (default 13)."""
@@ -1274,11 +1277,11 @@ async def override_post_closed_period(
 @router.post("/accounting-periods/{period_id}/approve-trial-balance", response_model=AccountingPeriodResponse)
 async def approve_trial_balance(
     period_id: UUID,
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> AccountingPeriodResponse:
-    if user.role not in ("financial_analyst", "client_admin"):
-        raise AppHTTPException(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "finfa role required")
+    if user.role not in ("financial_analyst", "client_admin", "finance_manager", "cfo"):
+        raise AppHTTPException(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "Finance role required")
     period = await session.get(AccountingPeriod, period_id)
     if period is None:
         raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Period not found")
@@ -1294,10 +1297,10 @@ async def approve_trial_balance(
 async def close_accounting_period(
     period_id: UUID,
     body: AccountingPeriodCloseRequest | None = None,
-    user: TokenData = Depends(require_client_admin()),
+    user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> AccountingPeriodResponse:
-    if user.role not in ("finance_manager", "client_admin"):
+    if user.role not in ("finance_manager", "client_admin", "cfo"):
         raise AppHTTPException(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "Finance Manager role required")
     period = await session.get(AccountingPeriod, period_id)
     if period is None:

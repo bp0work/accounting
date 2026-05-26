@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
-from app.core.dependencies import require_client_admin
+from app.core.dependencies import require_finance_setup_access
 from app.core.exceptions import AppHTTPException
 from app.models.case import Counterparty
 from app.models.counterparty_master import CounterpartyAccount, PaymentTerm, TenantTaxCode
@@ -104,7 +104,7 @@ def _validate_tax_direction(
 async def list_counterparties(
     type: str | None = Query(default=None),
     q: str | None = Query(default=None),
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[CounterpartyResponse]:
     stmt = select(Counterparty).order_by(Counterparty.name)
@@ -122,7 +122,7 @@ async def list_counterparties(
 @router.post("/counterparties", response_model=CounterpartyResponse, status_code=status.HTTP_201_CREATED)
 async def create_counterparty(
     body: CounterpartyCreate,
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> CounterpartyResponse:
     if body.code:
@@ -146,7 +146,7 @@ async def create_counterparty(
 async def patch_counterparty(
     counterparty_id: UUID,
     body: CounterpartyUpdate,
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> CounterpartyResponse:
     row = await session.get(Counterparty, counterparty_id)
@@ -179,7 +179,7 @@ async def patch_counterparty(
 async def list_counterparty_accounts(
     counterparty_id: UUID | None = Query(default=None),
     q: str | None = Query(default=None),
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[CounterpartyAccountResponse]:
     stmt = (
@@ -212,7 +212,7 @@ async def list_counterparty_accounts(
 )
 async def create_counterparty_account(
     body: CounterpartyAccountCreate,
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> CounterpartyAccountResponse:
     cp = await session.get(Counterparty, body.counterparty_id)
@@ -247,7 +247,7 @@ async def create_counterparty_account(
 async def patch_counterparty_account(
     account_id: UUID,
     body: CounterpartyAccountUpdate,
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> CounterpartyAccountResponse:
     row = await session.get(
@@ -282,7 +282,7 @@ async def patch_counterparty_account(
 
 @router.get("/payment-terms", response_model=list[PaymentTermResponse])
 async def list_payment_terms(
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[PaymentTermResponse]:
     result = await session.execute(select(PaymentTerm).order_by(PaymentTerm.due_days, PaymentTerm.code))
@@ -292,7 +292,7 @@ async def list_payment_terms(
 @router.post("/payment-terms", response_model=PaymentTermResponse, status_code=status.HTTP_201_CREATED)
 async def create_payment_term(
     body: PaymentTermCreate,
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> PaymentTermResponse:
     dup = await session.scalar(
@@ -315,7 +315,7 @@ async def create_payment_term(
 async def patch_payment_term(
     term_id: UUID,
     body: PaymentTermUpdate,
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> PaymentTermResponse:
     row = await session.get(PaymentTerm, term_id)
@@ -333,7 +333,7 @@ async def patch_payment_term(
 
 @router.get("/tenant/tax-codes", response_model=list[TenantTaxCodeResponse])
 async def list_tax_codes(
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[TenantTaxCodeResponse]:
     result = await session.execute(select(TenantTaxCode).order_by(TenantTaxCode.code))
@@ -343,7 +343,7 @@ async def list_tax_codes(
 @router.post("/tenant/tax-codes", response_model=TenantTaxCodeResponse, status_code=status.HTTP_201_CREATED)
 async def create_tax_code(
     body: TenantTaxCodeCreate,
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantTaxCodeResponse:
     code = body.code.upper()
@@ -372,7 +372,7 @@ async def create_tax_code(
 async def patch_tax_code(
     tax_id: UUID,
     body: TenantTaxCodeUpdate,
-    _user: TokenData = Depends(require_client_admin()),
+    _user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> TenantTaxCodeResponse:
     row = await session.get(TenantTaxCode, tax_id)

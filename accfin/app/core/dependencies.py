@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import Depends, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.constants.finance_setup import FINANCE_SETUP_ROLE_NAMES
 from app.core.exceptions import AppHTTPException
 from app.core.jwt import decode_access_token
 from app.schemas.auth import TokenData
@@ -40,6 +41,23 @@ def require_client_admin():
                 "Client administrator access is required.",
             )
         return user
+
+    return _check
+
+
+def require_finance_setup_access():
+    """Finance UI setup: counterparty accounts, agreements, accounting calendar."""
+
+    async def _check(user: TokenData = Depends(get_current_user)) -> TokenData:
+        if user.role in FINANCE_SETUP_ROLE_NAMES:
+            return user
+        if "tenant:admin" in user.permissions:
+            return user
+        raise AppHTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "INSUFFICIENT_PERMISSION",
+            "Finance setup access is required.",
+        )
 
     return _check
 

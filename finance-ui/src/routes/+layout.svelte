@@ -44,6 +44,9 @@
       <nav class="nav">
         <a href="/dashboard">Dashboard</a>
         <a href="/approvals">Cases & Approvals</a>
+        <a href="/counterparty-accounts">Counterparty accounts</a>
+        <a href="/agreements">Agreements</a>
+        <a href="/accounting-calendar">Accounting calendar</a>
         <a href="/export">Export</a>
         <a href="/settings/notifications">Notifications</a>
         <a href="/settings/security">Security</a>
