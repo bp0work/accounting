@@ -3137,7 +3137,7 @@ UI package versions: `finance-ui/package.json`, `client-admin-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
-| **0.14.9-binding-authority** | 2026-05-26 | _(this commit)_ | **Binding authority:** migration `060` seeds approval threshold policies; workers route T1 STP / T2 acc / T3 CFO; Client Admin `/binding-authority`; finance-ui role queues + case approve/reject/escalate. Rebuild `fastapi`, `client-admin-ui`, `finance-ui`, `ar-worker`, `ap-worker`, `expense-worker`. §4.5k. |
+| **0.14.9-binding-authority** | 2026-05-26 | `c757aff` | **Binding authority:** migration `060` seeds approval threshold policies; workers route T1 STP / T2 acc / T3 CFO; Client Admin `/binding-authority`; finance-ui role queues + case approve/reject/escalate. Rebuild `fastapi`, `client-admin-ui`, `finance-ui`, `ar-worker`, `ap-worker`, `expense-worker`. §4.5k. |
 | **0.14.8-counterparty-accounts** (UI routing) | 2026-05-20 | `e73c869` | **Finance UI:** counterparty, agreements, accounting calendar on `finance.mmlogistix`; Client Admin nav trimmed (no Travel). Rebuild `fastapi` + `finance-ui`. §4.5j. |
 | **0.14.8-counterparty-accounts** (company profile fix) | 2026-05-20 | `a45a31e` | **FastAPI:** `TenantProfileResponse.from_attributes`; **Client Admin** `/company` load fix. Rebuild `fastapi` + `client-admin-ui`. |
 | **0.14.8-counterparty-accounts** (UI patch) | 2026-05-20 | `9b0662e` | **Finance UI:** Subaccounts tab **Edit/Save** (`15` §8.22 v2.29). Rebuild `finance-ui`. |
