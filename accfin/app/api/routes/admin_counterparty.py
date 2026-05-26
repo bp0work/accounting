@@ -137,7 +137,8 @@ async def create_counterparty(
             )
     row = Counterparty(**body.model_dump())
     session.add(row)
-    await session.flush()
+    await session.commit()
+    await session.refresh(row)
     return CounterpartyResponse.model_validate(row)
 
 
@@ -166,7 +167,8 @@ async def patch_counterparty(
             )
     for k, v in data.items():
         setattr(row, k, v)
-    await session.flush()
+    await session.commit()
+    await session.refresh(row)
     return CounterpartyResponse.model_validate(row)
 
 
@@ -236,7 +238,7 @@ async def create_counterparty_account(
             raise AppHTTPException(status_code=404, code="NOT_FOUND", message="Payment term not found")
     row = CounterpartyAccount(**body.model_dump())
     session.add(row)
-    await session.flush()
+    await session.commit()
     await session.refresh(row, ["payment_term"])
     return _account_response(row, cp.name)
 
@@ -269,7 +271,8 @@ async def patch_counterparty_account(
             raise AppHTTPException(status_code=404, code="NOT_FOUND", message="Payment term not found")
     for k, v in data.items():
         setattr(row, k, v)
-    await session.flush()
+    await session.commit()
+    await session.refresh(row, ["payment_term"])
     cp = await session.get(Counterparty, row.counterparty_id)
     return _account_response(row, cp.name if cp else None)
 
@@ -303,7 +306,8 @@ async def create_payment_term(
         )
     row = PaymentTerm(**{**body.model_dump(), "code": body.code.upper()})
     session.add(row)
-    await session.flush()
+    await session.commit()
+    await session.refresh(row)
     return PaymentTermResponse.model_validate(row)
 
 
@@ -319,7 +323,8 @@ async def patch_payment_term(
         raise AppHTTPException(status_code=404, code="NOT_FOUND", message="Payment term not found")
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(row, k, v)
-    await session.flush()
+    await session.commit()
+    await session.refresh(row)
     return PaymentTermResponse.model_validate(row)
 
 
@@ -358,7 +363,8 @@ async def create_tax_code(
         await _validate_tax_gl(session, body.input_gl_account_code)
     row = TenantTaxCode(**{**body.model_dump(), "code": code})
     session.add(row)
-    await session.flush()
+    await session.commit()
+    await session.refresh(row)
     return TenantTaxCodeResponse.model_validate(row)
 
 
@@ -383,5 +389,6 @@ async def patch_tax_code(
         await _validate_tax_gl(session, input_gl)
     for k, v in data.items():
         setattr(row, k, v)
-    await session.flush()
+    await session.commit()
+    await session.refresh(row)
     return TenantTaxCodeResponse.model_validate(row)
