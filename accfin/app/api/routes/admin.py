@@ -323,11 +323,19 @@ async def admin_dashboard(
 # --- Tenants / company profile ---
 
 
-@router.get("/tenants/{tenant_id}/profile", response_model=TenantProfileResponse)
-async def get_tenant_profile(
-    tenant_id: UUID,
-    _user: TokenData = Depends(require_client_admin()),
-    session: AsyncSession = Depends(get_db_session),
+async def _require_tenant_access(
+    user: TokenData, session: AsyncSession, tenant_id: UUID
+) -> UUID:
+    tid = await _tenant_id(user, session)
+    if tenant_id != tid:
+        raise AppHTTPException(
+            status.HTTP_403_FORBIDDEN, "FORBIDDEN", "Tenant profile access denied"
+        )
+    return tid
+
+
+async def _load_tenant_profile(
+    session: AsyncSession, tenant_id: UUID
 ) -> TenantProfileResponse:
     row = await session.get(TenantProfile, tenant_id)
     if row is None:
@@ -338,12 +346,8 @@ async def get_tenant_profile(
     return TenantProfileResponse.model_validate(row)
 
 
-@router.patch("/tenants/{tenant_id}/profile", response_model=TenantProfileResponse)
-async def patch_tenant_profile(
-    tenant_id: UUID,
-    body: TenantProfileUpdate,
-    _user: TokenData = Depends(require_client_admin()),
-    session: AsyncSession = Depends(get_db_session),
+async def _save_tenant_profile(
+    session: AsyncSession, tenant_id: UUID, body: TenantProfileUpdate
 ) -> TenantProfileResponse:
     row = await session.get(TenantProfile, tenant_id)
     if row is None:
@@ -358,6 +362,47 @@ async def patch_tenant_profile(
     await session.commit()
     await session.refresh(row)
     return TenantProfileResponse.model_validate(row)
+
+
+@router.get("/admin/company-profile", response_model=TenantProfileResponse)
+async def get_company_profile(
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantProfileResponse:
+    """Company profile for the authenticated client-admin user's tenant."""
+    tid = await _tenant_id(user, session)
+    return await _load_tenant_profile(session, tid)
+
+
+@router.patch("/admin/company-profile", response_model=TenantProfileResponse)
+async def patch_company_profile(
+    body: TenantProfileUpdate,
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantProfileResponse:
+    tid = await _tenant_id(user, session)
+    return await _save_tenant_profile(session, tid, body)
+
+
+@router.get("/tenants/{tenant_id}/profile", response_model=TenantProfileResponse)
+async def get_tenant_profile(
+    tenant_id: UUID,
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantProfileResponse:
+    await _require_tenant_access(user, session, tenant_id)
+    return await _load_tenant_profile(session, tenant_id)
+
+
+@router.patch("/tenants/{tenant_id}/profile", response_model=TenantProfileResponse)
+async def patch_tenant_profile(
+    tenant_id: UUID,
+    body: TenantProfileUpdate,
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> TenantProfileResponse:
+    await _require_tenant_access(user, session, tenant_id)
+    return await _save_tenant_profile(session, tenant_id, body)
 
 
 # --- COA ---

@@ -1,7 +1,5 @@
 import { apiFetch } from './client';
 
-export const TENANT_ID = '00000000-0000-0000-0000-000000000200';
-
 export type DashboardCheck = {
   section: string;
   label: string;
@@ -19,11 +17,15 @@ export function fetchDashboard() {
 }
 
 export function fetchTenantProfile() {
-  return apiFetch<Record<string, unknown>>(`/tenants/${TENANT_ID}/profile`);
+  return apiFetch<Record<string, unknown>>('/admin/company-profile');
 }
 
 export function patchTenantProfile(body: Record<string, unknown>) {
-  return apiFetch(`/tenants/${TENANT_ID}/profile`, { method: 'PATCH', body: JSON.stringify(body) });
+  const { tenant_id: _tenantId, ...payload } = body;
+  return apiFetch<Record<string, unknown>>('/admin/company-profile', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function fetchCoaStatus() {

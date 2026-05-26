@@ -5,33 +5,40 @@
   import { onMount } from 'svelte';
   import { ensureValidAccessToken } from '$lib/api/client';
   import { fetchTenantProfile, patchTenantProfile } from '$lib/api/admin';
-  let p: Record<string, unknown> = {};
-  let msg = '';
-  let error = '';
-  let showPreview = false;
+
+  let loading = $state(true);
+  let p = $state<Record<string, unknown>>({});
+  let msg = $state('');
+  let error = $state('');
+  let showPreview = $state(false);
 
   const sampleBodyHtml =
     '<p>Thank you for your email. We have received your message and will review it shortly.</p>';
   const sampleBodyPlain =
     'Thank you for your email. We have received your message and will review it shortly.';
 
-  $: signatureHtml = String(p.email_signature_html ?? '').trim();
-  $: signaturePlain = String(p.email_signature_plain ?? '').trim();
-  $: previewHtml =
+  const signatureHtml = $derived(String(p.email_signature_html ?? '').trim());
+  const signaturePlain = $derived(String(p.email_signature_plain ?? '').trim());
+  const previewHtml = $derived(
     signatureHtml
       ? `${sampleBodyHtml}<hr style="margin-top:2rem;border:none;border-top:1px solid #e2e8f0;"><div style="color:#6b7280;font-size:0.875rem;">${signatureHtml}</div>`
-      : sampleBodyHtml;
-  $: previewPlain = signaturePlain
-    ? `${sampleBodyPlain}\n\n--\n${signaturePlain}`
-    : sampleBodyPlain;
+      : sampleBodyHtml
+  );
+  const previewPlain = $derived(
+    signaturePlain ? `${sampleBodyPlain}\n\n--\n${signaturePlain}` : sampleBodyPlain
+  );
+
   onMount(async () => {
     if (!(await ensureValidAccessToken())) return;
     try {
       p = await fetchTenantProfile();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Load failed';
+    } finally {
+      loading = false;
     }
   });
+
   async function save() {
     msg = '';
     error = '';
@@ -47,7 +54,10 @@
 <p>Legal details and outbound email signature (appended to all tenant mailbox emails).</p>
 {#if error}<p class="err">{error}</p>{/if}
 {#if msg}<p class="ok">{msg}</p>{/if}
-<form on:submit|preventDefault={save} class="card">
+{#if loading}
+  <p class="hint">Loading company profile…</p>
+{:else}
+<form onsubmit={(e) => { e.preventDefault(); save(); }} class="card">
   <h2>Company details</h2>
   <label>Legal name <input bind:value={p.legal_name} required /></label>
   <label>Trading name <input bind:value={p.trading_name} /></label>
@@ -66,7 +76,7 @@
   <label>Plain text signature
     <textarea bind:value={p.email_signature_plain} rows="4" placeholder="Regards,&#10;MMLOGISTIX PTE. LTD."></textarea>
   </label>
-  <button type="button" class="preview-btn" on:click={() => (showPreview = !showPreview)}>
+  <button type="button" class="preview-btn" onclick={() => (showPreview = !showPreview)}>
     {showPreview ? 'Hide preview' : 'Preview signature in email'}
   </button>
   {#if showPreview}
@@ -86,6 +96,7 @@
   {/if}
   <button type="submit">Save</button>
 </form>
+{/if}
 <style>
   label { display: block; margin-bottom: 0.75rem; }
   input, textarea { width: 100%; padding: 0.5rem; box-sizing: border-box; }
