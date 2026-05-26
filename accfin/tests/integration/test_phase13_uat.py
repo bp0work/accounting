@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.core.security.password import hash_password
 from app.models.case import Case, Counterparty
@@ -33,6 +33,28 @@ from tests.conftest import TEST_PASSWORD
 from workers.ar.handlers import ARWorkerService
 
 ROLE_CLIENT_ADMIN = uuid.UUID("00000000-0000-0000-0000-000000000008")
+
+
+async def _ensure_coa_account(
+    session,
+    account_code: str,
+    account_name: str,
+    account_type: str,
+) -> None:
+    """Insert COA row only when missing — safe on shared VPS DB with tenant import."""
+    exists = await session.scalar(
+        select(func.count())
+        .select_from(CoaAccount)
+        .where(CoaAccount.account_code == account_code)
+    )
+    if not exists:
+        session.add(
+            CoaAccount(
+                account_code=account_code,
+                account_name=account_name,
+                account_type=account_type,
+            )
+        )
 
 
 @pytest.fixture
@@ -232,8 +254,8 @@ async def test_uat_015_e2e_ar_intake_with_subaccount_and_tax(db_session) -> None
     db_session.add(
         CoaAccount(account_code=out_gl, account_name="GST Payable", account_type="liability")
     )
-    db_session.add(CoaAccount(account_code="1300", account_name="AR", account_type="asset"))
-    db_session.add(CoaAccount(account_code="4100", account_name="Revenue", account_type="revenue"))
+    await _ensure_coa_account(db_session, "1300", "AR", "asset")
+    await _ensure_coa_account(db_session, "4100", "Revenue", "revenue")
     db_session.add(
         TenantTaxCode(
             code=tax_code,
@@ -254,7 +276,7 @@ async def test_uat_015_e2e_ar_intake_with_subaccount_and_tax(db_session) -> None
     db_session.add(
         CounterpartyAccount(
             counterparty_id=cp.id,
-            account_code="CUST-01",
+            account_code=f"CUST-{uuid4().hex[:4]}",
             display_name="Bill-to 01",
             payment_term_id=term.id,
         )
