@@ -8,6 +8,22 @@
   let p: Record<string, unknown> = {};
   let msg = '';
   let error = '';
+  let showPreview = false;
+
+  const sampleBodyHtml =
+    '<p>Thank you for your email. We have received your message and will review it shortly.</p>';
+  const sampleBodyPlain =
+    'Thank you for your email. We have received your message and will review it shortly.';
+
+  $: signatureHtml = String(p.email_signature_html ?? '').trim();
+  $: signaturePlain = String(p.email_signature_plain ?? '').trim();
+  $: previewHtml =
+    signatureHtml
+      ? `${sampleBodyHtml}<hr style="margin-top:2rem;border:none;border-top:1px solid #e2e8f0;"><div style="color:#6b7280;font-size:0.875rem;">${signatureHtml}</div>`
+      : sampleBodyHtml;
+  $: previewPlain = signaturePlain
+    ? `${sampleBodyPlain}\n\n--\n${signaturePlain}`
+    : sampleBodyPlain;
   onMount(async () => {
     if (!(await ensureValidAccessToken())) return;
     try {
@@ -50,6 +66,24 @@
   <label>Plain text signature
     <textarea bind:value={p.email_signature_plain} rows="4" placeholder="Regards,&#10;MMLOGISTIX PTE. LTD."></textarea>
   </label>
+  <button type="button" class="preview-btn" on:click={() => (showPreview = !showPreview)}>
+    {showPreview ? 'Hide preview' : 'Preview signature in email'}
+  </button>
+  {#if showPreview}
+    <section class="preview">
+      <h3>Email preview</h3>
+      <p class="hint">Sample acknowledgement body with your signature appended as recipients will see it.</p>
+      <div class="preview-pane html-preview">
+        <h4>HTML</h4>
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html previewHtml}
+      </div>
+      <div class="preview-pane">
+        <h4>Plain text</h4>
+        <pre>{previewPlain}</pre>
+      </div>
+    </section>
+  {/if}
   <button type="submit">Save</button>
 </form>
 <style>
@@ -60,4 +94,11 @@
   h2:first-child { margin-top: 0; }
   .hint { font-size: 0.875rem; color: #64748b; }
   .err { color: #b91c1c; } .ok { color: #15803d; }
+  .preview-btn { margin: 0.5rem 0 1rem; padding: 0.45rem 0.75rem; cursor: pointer; }
+  .preview { margin: 1rem 0; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+  .preview h3 { margin: 0 0 0.35rem; font-size: 1rem; }
+  .preview-pane { margin-top: 0.75rem; }
+  .preview-pane h4 { margin: 0 0 0.35rem; font-size: 0.875rem; color: #475569; }
+  .html-preview { background: #fff; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 6px; }
+  .preview pre { white-space: pre-wrap; margin: 0; font-size: 0.875rem; background: #fff; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 6px; }
 </style>

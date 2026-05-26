@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -18,10 +18,14 @@ from app.core.database import get_session_factory
 from app.models.case import Case
 from app.models.executive_mail import CaseEscalation, PendingOutboundEmail
 from app.models.mail import Email, EmailAttachment, MailGatewayConfig
+from app.models.tenant_profile import TenantProfile
 from app.services import mail_template_renderer as templates
+from app.services.mail_template_renderer import TenantEmailSignature
 from app.services.smtp_mail_service import MailAttachment, SmtpMailService
 
 logger = logging.getLogger(__name__)
+
+TENANT_MMLOGISTIX = UUID("00000000-0000-0000-0000-000000000200")
 
 PREFERRED_DAILY_LOG_SENDERS = (
     "acc.mmlogistix@bp0.work",
@@ -73,6 +77,21 @@ class OutboundMailService:
 
     def _smtp_ready(self) -> bool:
         return self._settings.smtp_configured
+
+    async def _load_tenant_signature(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID | None = None,
+    ) -> TenantEmailSignature:
+        tid = tenant_id or TENANT_MMLOGISTIX
+        profile = await session.get(TenantProfile, tid)
+        if profile is None:
+            return TenantEmailSignature()
+        return TenantEmailSignature(
+            html=(profile.email_signature_html or "").strip(),
+            plain=(profile.email_signature_plain or "").strip(),
+        )
 
     @staticmethod
     def _normalize_msg_id(message_id: str | None) -> str | None:
@@ -161,6 +180,7 @@ class OutboundMailService:
         if outbound.status != "approved":
             return None
 
+        signature = await self._load_tenant_signature(session)
         mailbox = await self._load_mailbox(session, outbound.mailbox_id)
         if mailbox is None:
             logger.warning("Outbound %s: mailbox %s not found", outbound.id, outbound.mailbox_id)
@@ -174,6 +194,7 @@ class OutboundMailService:
         references: list[str] | None = None
         reattach = bool(meta.get("reattach_inbound_attachments"))
         attachments: list[MailAttachment] = []
+        signed_via_template = False
 
         if template_key in MANAGER_ESCALATION_TEMPLATES:
             render_ctx = {
@@ -190,9 +211,13 @@ class OutboundMailService:
                 "extraction_confidence": meta.get("extraction_confidence"),
             }
             if template_key == "manager.escalation.missing_fields":
-                body_plain, body_html = templates.render_missing_fields_escalation(render_ctx)
+                body_plain, body_html = templates.render_missing_fields_escalation(
+                    render_ctx, signature=signature
+                )
             else:
-                body_plain, body_html = templates.render_manager_escalation(render_ctx)
+                body_plain, body_html = templates.render_manager_escalation(
+                    render_ctx, signature=signature
+                )
 
         if outbound.email_id:
             ack_data = await self._load_ack_source_data(session, outbound.email_id)
@@ -205,7 +230,10 @@ class OutboundMailService:
                         ack_data,
                         str(meta.get("case_number", "")),
                     )
-                    body_plain, body_html = templates.render_acknowledgement(ctx)
+                    body_plain, body_html = templates.render_acknowledgement(
+                        ctx, signature=signature
+                    )
+                    signed_via_template = True
                     if not reattach and ctx["attachment_filenames"]:
                         meta["reattach_inbound_attachments"] = True
                         reattach = True
@@ -222,6 +250,13 @@ class OutboundMailService:
                 session,
                 outbound.email_id,
                 reattach=reattach,
+            )
+
+        if not signed_via_template:
+            body_plain, body_html = templates.append_tenant_signature(
+                body_plain,
+                body_html,
+                signature=signature,
             )
 
         return OutboundSendPlan(
@@ -370,11 +405,14 @@ class OutboundMailService:
             "manager_comment": (escalation.context or {}).get("manager_comment"),
             "forwarded_from": (escalation.context or {}).get("forwarded_from"),
         }
+        signature = await self._load_tenant_signature(self._session)
         if template_key == "manager.escalation.missing_fields":
-            body_plain, body_html = templates.render_missing_fields_escalation(ctx)
+            body_plain, body_html = templates.render_missing_fields_escalation(
+                ctx, signature=signature
+            )
             subject = f"[{case.case_number}] Action required — missing invoice fields"
         else:
-            body_plain, body_html = templates.render_manager_escalation(ctx)
+            body_plain, body_html = templates.render_manager_escalation(ctx, signature=signature)
             subject = f"[{case.case_number}] Action required — manager review"
 
         try:
@@ -463,13 +501,14 @@ class OutboundMailService:
             logger.warning("Daily log SMTP skipped — no active sending mailbox")
             return None
 
+        signature = await self._load_tenant_signature(self._session)
         ctx = {
             "business_date": business_date.isoformat(),
             "row_count": row_count,
             "mailbox_summary": mailbox_summary or [],
             "attachment_filename": filename,
         }
-        body_plain, body_html = templates.render_daily_log(ctx)
+        body_plain, body_html = templates.render_daily_log(ctx, signature=signature)
         subject = f"Finance activity log — {business_date.isoformat()}"
 
         try:
@@ -493,6 +532,108 @@ class OutboundMailService:
             )
         except Exception:
             logger.exception("Daily log SMTP send failed to %s", recipient)
+            return None
+
+    async def send_notification(
+        self,
+        *,
+        mailbox: MailGatewayConfig,
+        to_addresses: list[str],
+        subject: str,
+        body_plain: str,
+        body_html: str | None = None,
+        tenant_id: UUID | None = None,
+        attachments: list[MailAttachment] | None = None,
+        in_reply_to: str | None = None,
+        references: list[str] | None = None,
+    ) -> str | None:
+        """Send a one-off SMTP notification with tenant signature appended."""
+        if not self._smtp_ready():
+            return None
+
+        signature = await self._load_tenant_signature(self._session, tenant_id=tenant_id)
+        signed_plain, signed_html = templates.append_tenant_signature(
+            body_plain,
+            body_html,
+            signature=signature,
+        )
+        try:
+            password = decrypt_field(mailbox.password_encrypted)
+            return await self._smtp.send_message(
+                from_address=mailbox.email_address,
+                from_name=mailbox.display_name,
+                username=mailbox.username,
+                password=password,
+                to_addresses=to_addresses,
+                subject=subject,
+                body_plain=signed_plain,
+                body_html=signed_html,
+                attachments=attachments or [],
+                in_reply_to=in_reply_to,
+                references=references,
+            )
+        except Exception:
+            logger.exception("Notification SMTP send failed to %s", to_addresses)
+            return None
+
+    async def send_gl_cutoff_reminder(
+        self,
+        *,
+        mailbox: MailGatewayConfig,
+        to_address: str,
+        days_until: int,
+        period_name: str,
+        period_type: str,
+        cutoff: date,
+        status: str,
+        reviewer: str,
+        tenant_id: UUID | None = None,
+    ) -> str | None:
+        """Send GL cutoff reminder email with tenant signature."""
+        if not self._smtp_ready():
+            return None
+
+        if days_until == 0:
+            subject = f"[Reminder] GL cutoff today — {period_name}"
+            lead = f"The GL posting cutoff for {period_name} is today ({cutoff.isoformat()})."
+        else:
+            subject = f"[Reminder] GL cutoff in {days_until} days — {period_name}"
+            lead = (
+                f"The GL posting cutoff for {period_name} is in {days_until} days "
+                f"({cutoff.isoformat()})."
+            )
+
+        signature = await self._load_tenant_signature(self._session, tenant_id=tenant_id)
+        body_plain, body_html = templates.render_gl_cutoff_reminder(
+            {
+                "lead": lead,
+                "period_type": period_type,
+                "cutoff_date": cutoff.isoformat(),
+                "status": status,
+                "reviewer": reviewer,
+                "calendar_url": "https://admin.mmlogistix.bp0.work/accounting-calendar",
+            },
+            signature=signature,
+        )
+
+        try:
+            password = decrypt_field(mailbox.password_encrypted)
+            return await self._smtp.send_message(
+                from_address=mailbox.email_address,
+                from_name=mailbox.display_name or "mmlogistix Accounts",
+                username=mailbox.username,
+                password=password,
+                to_addresses=[to_address],
+                subject=subject,
+                body_plain=body_plain,
+                body_html=body_html,
+            )
+        except Exception:
+            logger.exception(
+                "GL cutoff reminder SMTP failed period=%s recipient=%s",
+                period_name,
+                to_address,
+            )
             return None
 
     async def flush_approved(self, *, limit: int = 25) -> int:

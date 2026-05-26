@@ -2,7 +2,43 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from jinja2 import Environment, BaseLoader, select_autoescape
+
+
+@dataclass(frozen=True)
+class TenantEmailSignature:
+    html: str = ""
+    plain: str = ""
+
+
+def append_tenant_signature(
+    body_plain: str,
+    body_html: str | None,
+    *,
+    signature: TenantEmailSignature | None,
+) -> tuple[str, str | None]:
+    """Append tenant footer when HTML and/or plain signature is configured."""
+    if signature is None:
+        return body_plain, body_html
+    html_sig = signature.html.strip()
+    plain_sig = signature.plain.strip()
+    if not html_sig and not plain_sig:
+        return body_plain, body_html
+
+    plain = body_plain
+    if plain_sig:
+        plain = f"{body_plain.rstrip()}\n\n--\n{plain_sig}"
+
+    html = body_html
+    if html_sig and html is not None:
+        html = (
+            f"{html.rstrip()}"
+            '<hr style="margin-top:2rem;border:none;border-top:1px solid #e2e8f0;">'
+            f'<div style="color:#6b7280;font-size:0.875rem;">{html_sig}</div>'
+        )
+    return plain, html
 
 _ENV = Environment(
     loader=BaseLoader(),
@@ -167,26 +203,81 @@ _DAILY_LOG_HTML = """\
 <p>Full details are attached as <strong>{{ attachment_filename }}</strong>.</p>
 """
 
+_GL_CUTOFF_PLAIN = """\
+{{ lead }}
 
-def render_acknowledgement(context: dict) -> tuple[str, str]:
-    plain = _ENV.from_string(_ACK_PLAIN).render(**context)
-    html = _ENV.from_string(_ACK_HTML).render(**context)
-    return plain.strip(), html.strip()
+Period type: {{ period_type }}
+GL cutoff date: {{ cutoff_date }}
+Current status: {{ status }}
+Trial balance reviewer: {{ reviewer }}
+
+Accounting calendar: {{ calendar_url }}
+"""
+
+_GL_CUTOFF_HTML = """\
+<p>{{ lead }}</p>
+<ul>
+  <li><strong>Period type:</strong> {{ period_type }}</li>
+  <li><strong>GL cutoff date:</strong> {{ cutoff_date }}</li>
+  <li><strong>Current status:</strong> {{ status }}</li>
+  <li><strong>Trial balance reviewer:</strong> {{ reviewer }}</li>
+</ul>
+<p><a href="{{ calendar_url }}">Accounting calendar</a></p>
+"""
 
 
-def render_manager_escalation(context: dict) -> tuple[str, str]:
-    plain = _ENV.from_string(_ESCALATION_PLAIN).render(**context)
-    html = _ENV.from_string(_ESCALATION_HTML).render(**context)
-    return plain.strip(), html.strip()
+def _render_signed(
+    plain_template: str,
+    html_template: str,
+    context: dict,
+    *,
+    signature: TenantEmailSignature | None = None,
+) -> tuple[str, str]:
+    plain = _ENV.from_string(plain_template).render(**context).strip()
+    html = _ENV.from_string(html_template).render(**context).strip()
+    return append_tenant_signature(plain, html, signature=signature)
 
 
-def render_missing_fields_escalation(context: dict) -> tuple[str, str]:
-    plain = _ENV.from_string(_MISSING_FIELDS_ESCALATION_PLAIN).render(**context)
-    html = _ENV.from_string(_MISSING_FIELDS_ESCALATION_HTML).render(**context)
-    return plain.strip(), html.strip()
+def render_acknowledgement(
+    context: dict,
+    *,
+    signature: TenantEmailSignature | None = None,
+) -> tuple[str, str]:
+    return _render_signed(_ACK_PLAIN, _ACK_HTML, context, signature=signature)
 
 
-def render_daily_log(context: dict) -> tuple[str, str]:
-    plain = _ENV.from_string(_DAILY_LOG_PLAIN).render(**context)
-    html = _ENV.from_string(_DAILY_LOG_HTML).render(**context)
-    return plain.strip(), html.strip()
+def render_manager_escalation(
+    context: dict,
+    *,
+    signature: TenantEmailSignature | None = None,
+) -> tuple[str, str]:
+    return _render_signed(_ESCALATION_PLAIN, _ESCALATION_HTML, context, signature=signature)
+
+
+def render_missing_fields_escalation(
+    context: dict,
+    *,
+    signature: TenantEmailSignature | None = None,
+) -> tuple[str, str]:
+    return _render_signed(
+        _MISSING_FIELDS_ESCALATION_PLAIN,
+        _MISSING_FIELDS_ESCALATION_HTML,
+        context,
+        signature=signature,
+    )
+
+
+def render_daily_log(
+    context: dict,
+    *,
+    signature: TenantEmailSignature | None = None,
+) -> tuple[str, str]:
+    return _render_signed(_DAILY_LOG_PLAIN, _DAILY_LOG_HTML, context, signature=signature)
+
+
+def render_gl_cutoff_reminder(
+    context: dict,
+    *,
+    signature: TenantEmailSignature | None = None,
+) -> tuple[str, str]:
+    return _render_signed(_GL_CUTOFF_PLAIN, _GL_CUTOFF_HTML, context, signature=signature)

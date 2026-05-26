@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.5-reopen-period"
+        return "0.14.6-email-signature"
 
     @property
     def edge_public_base_url(self) -> str:
