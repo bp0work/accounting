@@ -37,6 +37,7 @@ class CaseResponse(BaseModel):
     last_activity_at: datetime | None = None
     workflow_metadata: dict = Field(default_factory=dict)
     classification_metadata: dict = Field(default_factory=dict)
+    linked_gl_period_status: str | None = None
 
 
 class CaseListResponse(BaseModel):

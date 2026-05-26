@@ -59,6 +59,23 @@ def require_gl_posting_override():
     return _check
 
 
+def require_period_reopen():
+    """CFO or Client Admin — reopen a closed GL period."""
+
+    async def _check(user: TokenData = Depends(get_current_user)) -> TokenData:
+        if user.role in ("cfo", "client_admin"):
+            return user
+        if "tenant:admin" in user.permissions:
+            return user
+        raise AppHTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "INSUFFICIENT_PERMISSION",
+            "CFO or Client Admin access is required.",
+        )
+
+    return _check
+
+
 def require_permission(permission_code: str):
     async def _check(user: TokenData = Depends(get_current_user)) -> TokenData:
         if permission_code not in user.permissions:

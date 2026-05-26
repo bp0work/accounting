@@ -1,25 +1,18 @@
 ---
-description: bp0.work spec-driven session protocol — read index + required prompt modules before coding
+description: bp0.work implementation repo — no specification documents in git
 alwaysApply: true
 ---
 
-# bp0.work — Agent session protocol (mandatory)
+# bp0.work — Application repository rules
 
-You are developing the **bp0.work AI Finance Operations Platform**. This is **specification-driven** — do not invent architecture, APIs, schema, workflows, or policies.
-
-## Before any implementation (every task)
-
-1. Read **`../platform_dox/cursor_master_development_prompt.md`** (index) **in full**.
-2. Classify the task using the index **module map** and read **every listed `cursor_prompt/M*.md` module in full**.
-3. Read all **MUST** numbered specs from **`../platform_dox/cursor_prompt/M04_spec_reading_matrix.md`**.
-4. In your **first reply**, state: current **Phase**, **modules read**, and **MUST specs read**. If not done, do not write code.
-5. On **new machine / fresh clone**: read **`M01_workspace_and_bootstrap.md`** and complete bootstrap before coding.
+This git repository contains **implementation code only**. Do **not** add platform specification documents, deployment checklists, or design-suite copies here.
 
 ## Non-negotiables
 
 | Rule | Detail |
 |------|--------|
-| **Code** | This `application/` folder only — **never** push `platform_dox/` to GitHub |
-| **Specs** | Read from `../platform_dox/` |
-| **Phases** | Strict **1 → 11** — see `M05`, `M06` |
-| **API** | **`../platform_dox/21_openapi.yaml` before `05`** |
+| **Scope** | Edit only files under this `application/` repository |
+| **No spec files in git** | Do not create or restore `accfin/docs/` specification stubs, version history tables, or copies of numbered design documents |
+| **READMEs** | Keep component READMEs limited to how to run/build that component in this repo |
+
+When design authority is required, use the **local specification workspace** on the developer machine (outside this git root). That content is not pushed to GitHub.

@@ -1,5 +1,3 @@
-# platform-admin-ui — Platform Admin (SvelteKit)
+# platform-admin-ui
 
-**Phase 2+** — tenant registry, Client Admin emails. See `platform_dox/15` §8.11.
-
-Host: `https://admin.bp0.work` (post-MVP).
+SvelteKit Platform Admin UI (post-MVP) — tenant registry and Client Admin email management.
