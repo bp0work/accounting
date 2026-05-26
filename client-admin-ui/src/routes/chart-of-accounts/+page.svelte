@@ -5,22 +5,29 @@
   import { onMount } from 'svelte';
   import { ensureValidAccessToken } from '$lib/api/client';
   import { fetchCoaStatus, listCoa, createCoa, patchCoa, importCoaCsv } from '$lib/api/admin';
-  let items: Array<Record<string, unknown>> = [];
-  let accountCount = 0;
-  let empty = true;
-  let q = '';
-  let error = '';
-  let msg = '';
-  let replaceAllOnImport = true;
-  let code = '';
-  let name = '';
-  let type = 'expense';
-  async function load() {
-    const status = await fetchCoaStatus();
-    accountCount = status.account_count;
-    empty = status.empty;
-    items = await listCoa(q || undefined);
+
+  let items = $state<Array<Record<string, unknown>>>([]);
+  let accountCount = $state(0);
+  let empty = $state(true);
+  let q = $state('');
+  let error = $state('');
+  let msg = $state('');
+  let replaceAllOnImport = $state(true);
+  let searching = $state(false);
+  let code = $state('');
+  let name = $state('');
+  let type = $state('expense');
+
+  async function load(opts?: { searchOnly?: boolean }) {
+    const term = q.trim();
+    if (!opts?.searchOnly) {
+      const status = await fetchCoaStatus();
+      accountCount = status.account_count;
+      empty = status.empty;
+    }
+    items = await listCoa(term || undefined);
   }
+
   onMount(async () => {
     if (!(await ensureValidAccessToken())) return;
     try {
@@ -29,12 +36,19 @@
       error = e instanceof Error ? e.message : 'Load failed';
     }
   });
+
   async function add() {
-    await createCoa({ account_code: code, account_name: name, account_type: type });
-    code = '';
-    name = '';
-    await load();
+    error = '';
+    try {
+      await createCoa({ account_code: code, account_name: name, account_type: type });
+      code = '';
+      name = '';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Add failed';
+    }
   }
+
   async function onCsv(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
@@ -50,12 +64,40 @@
       (e.target as HTMLInputElement).value = '';
     }
   }
+
   async function deactivate(id: string) {
-    await patchCoa(id, { is_active: false });
-    await load();
+    error = '';
+    try {
+      await patchCoa(id, { is_active: false });
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Deactivate failed';
+    }
   }
-  async function search() {
-    await load();
+
+  async function applySearch() {
+    error = '';
+    searching = true;
+    try {
+      await load({ searchOnly: true });
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Search failed';
+    } finally {
+      searching = false;
+    }
+  }
+
+  async function clearSearch() {
+    q = '';
+    error = '';
+    searching = true;
+    try {
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Load failed';
+    } finally {
+      searching = false;
+    }
   }
 </script>
 <h1>Chart of accounts</h1>
@@ -77,9 +119,26 @@
   </div>
 {:else}
   <p class="meta">{accountCount} active account(s)</p>
-  <div class="card">
-    <label>Search <input bind:value={q} on:keydown={(e) => e.key === 'Enter' && search()} placeholder="Code or name" /></label>
-    <button type="button" on:click={search}>Search</button>
+  <div class="card search-row">
+    <label class="search-field">
+      <span class="search-label">Filter by code or name</span>
+      <input
+        bind:value={q}
+        placeholder="e.g. 1000 or Cash"
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            void applySearch();
+          }
+        }}
+      />
+    </label>
+    <button type="button" onclick={() => void applySearch()} disabled={searching}>
+      {searching ? 'Searching…' : 'Search'}
+    </button>
+    {#if q.trim()}
+      <button type="button" class="muted" onclick={() => void clearSearch()}>Clear</button>
+    {/if}
     <label class="replace">
       <input type="checkbox" bind:checked={replaceAllOnImport} />
       Replace entire chart on import
@@ -102,7 +161,9 @@
   <button type="button" on:click={add}>Add</button>
 </div>
 
-{#if items.length > 0}
+{#if q.trim() && items.length === 0 && !empty}
+  <p class="meta">No accounts match “{q.trim()}”.</p>
+{:else if items.length > 0}
   <table>
     <thead><tr><th>Code</th><th>Name</th><th>Type</th><th></th></tr></thead>
     <tbody>
@@ -127,4 +188,9 @@
   .err { color: #b91c1c; }
   .ok { color: #15803d; margin-bottom: 0.5rem; }
   .replace { display: block; margin: 0.5rem 0; font-size: 0.875rem; }
+  .search-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; }
+  .search-field { flex: 1; min-width: 12rem; }
+  .search-label { display: block; font-size: 0.875rem; margin-bottom: 0.25rem; }
+  .search-field input { width: 100%; padding: 0.4rem; box-sizing: border-box; }
+  .muted { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 0.4rem 0.75rem; border-radius: 6px; cursor: pointer; }
 </style>
