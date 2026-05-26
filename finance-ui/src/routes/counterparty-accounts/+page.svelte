@@ -28,8 +28,14 @@
   let taxCodes = $state<Array<Record<string, unknown>>>([]);
 
   let cpName = $state('');
-  let cpType = $state('supplier');
+  let cpType = $state('vendor');
   let cpCode = $state('');
+  let cpHasContract = $state(false);
+  let cpContractReference = $state('');
+  let cpContractStartDate = $state('');
+  let cpContractExpiryDate = $state('');
+  let cpSupplierOwner = $state('');
+  let cpContractWarningDays = $state(30);
 
   let saCounterpartyId = $state('');
   let saCode = $state('');
@@ -77,18 +83,51 @@
     error = '';
     msg = '';
     try {
+      const isVendor = cpType === 'vendor' || cpType === 'supplier';
       await createCounterparty({
         name: cpName,
         type: cpType,
         code: cpCode || null,
+        has_contract: isVendor ? cpHasContract : false,
+        contract_reference: isVendor && cpContractReference.trim() ? cpContractReference.trim() : null,
+        contract_start_date: isVendor && cpContractStartDate ? cpContractStartDate : null,
+        contract_expiry_date: isVendor && cpContractExpiryDate ? cpContractExpiryDate : null,
+        supplier_owner: isVendor && cpSupplierOwner.trim() ? cpSupplierOwner.trim() : null,
+        contract_warning_days: isVendor ? cpContractWarningDays : 30,
       });
       cpName = '';
       cpCode = '';
+      cpHasContract = false;
+      cpContractReference = '';
+      cpContractStartDate = '';
+      cpContractExpiryDate = '';
+      cpSupplierOwner = '';
+      cpContractWarningDays = 30;
       msg = 'Counterparty created';
       await loadAll();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Create failed';
     }
+  }
+
+  function displayCounterpartyType(value: unknown): string {
+    const t = String(value ?? '').toLowerCase();
+    if (t === 'supplier') return 'vendor';
+    return t || '—';
+  }
+
+  function contractExpiringSoon(cp: Record<string, unknown>): boolean {
+    const t = String(cp.type ?? '').toLowerCase();
+    const isVendor = t === 'vendor' || t === 'supplier';
+    if (!isVendor) return false;
+    if (!cp.contract_expiry_date) return false;
+    const expiry = new Date(String(cp.contract_expiry_date));
+    if (Number.isNaN(expiry.getTime())) return false;
+    const warn = Number(cp.contract_warning_days ?? 30);
+    const warnDays = Number.isFinite(warn) ? warn : 30;
+    const now = new Date();
+    const diffDays = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 && diffDays <= warnDays;
   }
 
   function formatCredit(row: Record<string, unknown>) {
@@ -165,6 +204,18 @@
     }
   }
 
+  async function reactivateSub(id: string) {
+    error = '';
+    try {
+      await patchCounterpartyAccount(id, { is_active: true });
+      editingId = null;
+      msg = 'Subaccount reactivated';
+      await loadAll();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Reactivate failed';
+    }
+  }
+
   async function addTerm() {
     error = '';
     msg = '';
@@ -225,14 +276,38 @@
       <input bind:value={cpName} placeholder="Legal name" />
       <select bind:value={cpType}>
         <option value="customer">Customer</option>
-        <option value="supplier">Supplier</option>
+        <option value="vendor">Vendor</option>
       </select>
       <input bind:value={cpCode} placeholder="Code (optional)" />
       <button type="button" onclick={addCounterparty}>Add counterparty</button>
     </div>
+    {#if cpType === 'vendor'}
+      <div class="row wrap vendor-contract">
+        <label class="inline">
+          <input type="checkbox" bind:checked={cpHasContract} />
+          Contract in place
+        </label>
+        <input bind:value={cpContractReference} placeholder="Contract reference (optional)" maxlength="255" />
+        <input type="date" bind:value={cpContractStartDate} title="Contract start date" />
+        <input type="date" bind:value={cpContractExpiryDate} title="Contract expiry date" />
+        <input bind:value={cpSupplierOwner} placeholder="Vendor owner (optional)" />
+        <input
+          type="number"
+          min="0"
+          bind:value={cpContractWarningDays}
+          title="Days before expiry to show warning"
+          placeholder="Warning days"
+        />
+      </div>
+    {/if}
     <ul>
       {#each counterparties as cp}
-        <li>{cp.name} ({cp.type}) — {cp.code ?? 'no code'}</li>
+        <li>
+          {cp.name} ({displayCounterpartyType(cp.type)}) — {cp.code ?? 'no code'}
+          {#if contractExpiringSoon(cp)}
+            <span class="warn" title="Contract expiring soon">⚠️</span>
+          {/if}
+        </li>
       {/each}
     </ul>
   </section>
@@ -322,6 +397,8 @@
                     Deactivate
                   </button>
                 {/if}
+              {:else}
+                <button type="button" onclick={() => reactivateSub(String(row.id))}>Reactivate</button>
               {/if}
             </td>
           </tr>
@@ -409,4 +486,7 @@
   .actions { white-space: nowrap; }
   .actions button { margin-right: 0.25rem; }
   button.secondary { background: #eee; color: #333; border: 1px solid #ccc; }
+  .warn { margin-left: 0.5rem; }
+  .vendor-contract input { min-width: 12rem; }
+  label.inline { display: inline-flex; gap: 0.35rem; align-items: center; }
 </style>

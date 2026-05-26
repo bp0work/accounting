@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date
+from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
@@ -23,6 +24,7 @@ from app.core.exceptions import AppHTTPException
 from app.models.accounting_period import AccountingPeriod
 from app.models.gl_cutoff_reminder import GlCutoffReminder
 from app.models.agreements import DirectorExpenseAgreement, RentalAgreement
+from app.models.case import Counterparty
 from app.models.counterparty_master import PaymentTerm, TenantTaxCode
 from app.models.expense import ExpensePolicy
 from app.models.ledger import CoaAccount
@@ -232,6 +234,20 @@ async def admin_dashboard(
     terms_ok = (terms_count or 0) > 0
     tax_ok = (tax_count or 0) > 0
 
+    today = date.today()
+    expiring_until = today + timedelta(days=30)
+    expiring_contracts = await session.scalar(
+        select(func.count())
+        .select_from(Counterparty)
+        .where(
+            Counterparty.type.in_(("vendor", "supplier")),
+            Counterparty.contract_expiry_date.is_not(None),
+            Counterparty.contract_expiry_date >= today,
+            Counterparty.contract_expiry_date <= expiring_until,
+        )
+    )
+    expiring_n = expiring_contracts or 0
+
     checks = [
         DashboardCheckItem(
             section="company",
@@ -267,6 +283,13 @@ async def admin_dashboard(
             complete=tax_ok,
             href=f"{finance_ui}/counterparty-accounts",
             detail=f"{tax_count or 0} active tax code(s)" if tax_ok else "Map tax codes to GL accounts",
+        ),
+        DashboardCheckItem(
+            section="vendor_contracts",
+            label="Vendor contracts (expiry warnings)",
+            complete=expiring_n == 0,
+            href=f"{finance_ui}/counterparty-accounts",
+            detail=None if expiring_n == 0 else f"{expiring_n} vendor contract(s) expiring within 30 days",
         ),
         DashboardCheckItem(
             section="mailboxes",

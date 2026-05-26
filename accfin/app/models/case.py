@@ -1,12 +1,13 @@
 """ORM: counterparty, cases, timeline, notes, attachments — `06` §4."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
     CHAR,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -40,6 +41,12 @@ class Counterparty(Base, TimestampMixin):
     last_transaction_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    has_contract: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    contract_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contract_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    contract_expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    supplier_owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    contract_warning_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("30"))
     extra_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
 
 

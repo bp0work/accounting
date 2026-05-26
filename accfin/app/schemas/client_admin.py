@@ -360,6 +360,12 @@ class CounterpartyResponse(BaseModel):
     contact_phone: str | None = None
     address: str | None = None
     is_recurring: bool = False
+    has_contract: bool = False
+    contract_reference: str | None = None
+    contract_start_date: date | None = None
+    contract_expiry_date: date | None = None
+    supplier_owner: str | None = None
+    contract_warning_days: int = 30
 
     model_config = {"from_attributes": True}
 
@@ -367,21 +373,33 @@ class CounterpartyResponse(BaseModel):
 class CounterpartyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     code: str | None = Field(default=None, max_length=50)
-    type: str = Field(pattern="^(customer|supplier|employee|bank|other)$")
+    type: str = Field(default="vendor", pattern="^(customer|vendor|supplier|employee|bank|other)$")
     contact_email: str | None = None
     contact_phone: str | None = None
     address: str | None = None
     is_recurring: bool = False
+    has_contract: bool = False
+    contract_reference: str | None = Field(default=None, max_length=255)
+    contract_start_date: date | None = None
+    contract_expiry_date: date | None = None
+    supplier_owner: str | None = None
+    contract_warning_days: int = Field(default=30, ge=0)
 
 
 class CounterpartyUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     code: str | None = Field(default=None, max_length=50)
-    type: str | None = Field(default=None, pattern="^(customer|supplier|employee|bank|other)$")
+    type: str | None = Field(default=None, pattern="^(customer|vendor|supplier|employee|bank|other)$")
     contact_email: str | None = None
     contact_phone: str | None = None
     address: str | None = None
     is_recurring: bool | None = None
+    has_contract: bool | None = None
+    contract_reference: str | None = Field(default=None, max_length=255)
+    contract_start_date: date | None = None
+    contract_expiry_date: date | None = None
+    supplier_owner: str | None = None
+    contract_warning_days: int | None = Field(default=None, ge=0)
 
 
 class PaymentTermResponse(BaseModel):
