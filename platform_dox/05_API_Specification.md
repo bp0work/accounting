@@ -1249,7 +1249,7 @@ PUT /tenant/expense-policies/{policy_id}
 
 ---
 
-## 4.16d Client Admin operational API (shipped — `0.14.6-email-signature`)
+## 4.16d Client Admin operational API (shipped — `0.14.10-counterparty-fixes`)
 
 **Base path:** `/api` (Traefik `PathPrefix(/api)` on `admin.mmlogistix.bp0.work` and `finance.mmlogistix.bp0.work`).
 
@@ -1261,7 +1261,7 @@ PUT /tenant/expense-policies/{policy_id}
 GET /api/admin/dashboard
 ```
 
-**Response (200):** Completeness checklist (company profile, COA, mailboxes, users, expense limits, policy PDF, regulatory docs, GL reminder recipients, accounting periods).
+**Response (200):** Completeness checklist (company profile, COA, mailboxes, users, expense limits, policy PDF, regulatory docs, GL reminder recipients, accounting periods, vendor contract expiry warnings).
 
 ### 4.16d.2 Tenant profile (company)
 
@@ -1322,7 +1322,7 @@ Returns a JSON **array** of `CoaAccountResponse` (not wrapped in `{ "data": [...
 
 **Production data:** Migration `20260531_054` removes demo seed codes (`1200`, `1300`, `2000`, `2100`, `4100`, `5200`, `5500`, `1190`) when unused by journals, expense lines, or reconciliation runs (`06` §18.4). Fresh installs must import tenant COA via Client Admin — no prepopulated chart.
 
-### 4.16d.4 Counterparty accounts & payment terms (`0.14.8-counterparty-accounts`, shipped)
+### 4.16d.4 Counterparty accounts & payment terms (`0.14.10-counterparty-fixes`, shipped)
 
 **Permission:** **`require_finance_setup_access`** (`e73c869`) — `cfo`, `finance_manager`, `accounts_clerk`, `financial_analyst`, `ar_executive`, `ap_executive`, `general_manager`, `client_admin`, or `tenant:admin`. Same gate on §4.16d.8 (agreements) and §4.16d.11–§4.16d.13 (accounting calendar).
 
@@ -1331,15 +1331,22 @@ Returns a JSON **array** of `CoaAccountResponse` (not wrapped in `{ "data": [...
 #### Counterparty master
 
 ```
-GET /api/counterparties?type=customer|supplier&q=
+GET /api/counterparties?type=customer|vendor|supplier&q=
 POST /api/counterparties
 PATCH /api/counterparties/{counterparty_id}
 ```
 
 | Field | Notes |
 |-------|-------|
-| `name`, `code`, `type` | `type` ∈ `customer`, `supplier`, … (`06` §4.1) |
+| `name`, `code`, `type` | `type` ∈ `customer`, `vendor`, `supplier`, … (`06` §4.1). UI uses `vendor` wording; `supplier` is accepted for backward compatibility. |
 | `contact_email`, `address` | Master-level defaults |
+| Vendor contract fields *(optional)* | Applied to `type = vendor` (supplier legacy accepted). |
+| `has_contract` | Boolean toggle for “Contract in place” |
+| `contract_reference` | Contract number/description |
+| `contract_start_date` | Contract start date |
+| `contract_expiry_date` | Contract expiry date |
+| `supplier_owner` | Supplier owner (free-text) |
+| `contract_warning_days` | Integer warning window (default `30`) for “expiring soon” badge/warnings |
 
 #### Counterparty accounts (subaccounts)
 
@@ -1359,6 +1366,7 @@ PATCH /api/counterparty-accounts/{account_id}
 **Finance UI:** Subaccounts tab captures payment terms + credit limit on create; **inline Edit** on active rows updates `payment_term_id`, `credit_limit_amount`, and `credit_limit_currency` via `PATCH` (`15` §8.22 v2.29, git `9b0662e`). Payment terms tab is catalog only (catalog rows: `PATCH /api/payment-terms/{term_id}` for `label`, `due_days`, discounts, `is_active` — `code` is immutable).
 
 **Deactivate:** `PATCH` with `{ "is_active": false }` — blocked when open AR/AP balance exists for this subaccount.
+**Reactivate:** `PATCH` with `{ "is_active": true }` — unblocks inactive subaccounts; UI refreshes list after patch.
 
 #### Payment terms catalog
 

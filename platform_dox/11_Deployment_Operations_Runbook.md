@@ -3076,7 +3076,7 @@ Generate: `python scripts/generate-keys.py`
 
 | # | Check | Expected |
 |---|-------|----------|
-| E4.1 | `GET /api/health` | `200`, version **`0.14.6-email-signature`** |
+| E4.1 | `GET /api/health` | `200`, version **`0.14.10-counterparty-fixes`** |
 | E4.1b | `GET https://finance.mmlogistix.bp0.work/` | finance-ui HTML |
 | E4.1c | Browser session >15 min | Silent JWT refresh (`0.12.8`) |
 | E4.1d | `/approvals` after login | Loads (no SSR 401; `0.13.12`) |
@@ -3115,6 +3115,7 @@ Generate: `python scripts/generate-keys.py`
 | E5.16 | Outbound email signature: set on `/company`, preview, verify ack/clarification footer (`0.14.6`; `18` §10.2) | ☐ |
 | E5.17 | Rebuild `fastapi` (+ `client-admin-ui` for preview) after `0.14.6` | ☐ |
 | E5.18 | `alembic current` → `20260531_058` after `0.14.8` deploy | ☐ |
+| E5.22 | `alembic current` → `20260527_061` after `0.14.10` deploy | ☐ |
 | E5.19 | `./scripts/uat_phase13.sh` — 4/4 integration UAT (incl. UAT-012 subaccount create) | ☐ |
 | E5.19 | Client Admin COA: import CSV with **Replace entire chart**; green summary; accounts persist after navigation (`15` §8.10) | ☐ |
 | E5.20 | Client Admin COA: **Filter by code or name** → Search narrows table; Clear restores list (`7502b3e`) | ☐ |
@@ -3137,6 +3138,7 @@ UI package versions: `finance-ui/package.json`, `client-admin-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
+| **0.14.10-counterparty-fixes** | 2026-05-27 | `036ac82` | **Counterparty fixes:** Reactivate inactive subaccounts on `/counterparty-accounts`; vendor contract fields + expiry warning badge; Client Admin dashboard adds vendor-contract expiring-within-30-days warning. Migration `061` adds vendor contract columns to `counterparty`. Rebuild `fastapi`, `finance-ui`, `client-admin-ui`, `ar-worker`, `ap-worker`, `expense-worker`. §4.5l. |
 | **0.14.9-binding-authority** | 2026-05-26 | `c757aff` | **Binding authority:** migration `060` seeds approval threshold policies; workers route T1 STP / T2 acc / T3 CFO; Client Admin `/binding-authority`; finance-ui role queues + case approve/reject/escalate. Rebuild `fastapi`, `client-admin-ui`, `finance-ui`, `ar-worker`, `ap-worker`, `expense-worker`. §4.5k. |
 | **0.14.8-counterparty-accounts** (UI routing) | 2026-05-20 | `e73c869` | **Finance UI:** counterparty, agreements, accounting calendar on `finance.mmlogistix`; Client Admin nav trimmed (no Travel). Rebuild `fastapi` + `finance-ui`. §4.5j. |
 | **0.14.8-counterparty-accounts** (company profile fix) | 2026-05-20 | `a45a31e` | **FastAPI:** `TenantProfileResponse.from_attributes`; **Client Admin** `/company` load fix. Rebuild `fastapi` + `client-admin-ui`. |

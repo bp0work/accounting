@@ -91,6 +91,7 @@ When adding a numbered spec file, update the **Companion Documents** table in ev
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.25 | 2026-05-27 | **`0.14.10-counterparty-fixes` shipped.** Reactivate inactive subaccounts, add vendor contract fields + expiry warning badge, and Client Admin dashboard vendor-contract warning. Migration `061`. |
 | 1.24 | 2026-05-26 | **`0.14.9-binding-authority` shipped.** Binding authority tiers in workers; Client Admin `/binding-authority`; finance approval queues. `11` §4.5k; `05` v1.3.24; `10` §7; `15` v2.31; `16` v2.7. |
 | 1.23 | 2026-05-20 | **Finance UI setup screens.** Counterparty, agreements, accounting calendar moved to `finance.mmlogistix`; Client Admin drops Travel tab. `15` v2.30; `05` v1.3.23; `11` v2.51 §4.5j (`e73c869`). |
 | 1.22 | 2026-05-20 | **Subaccount edit UI.** `15` v2.29 §8.22; `05` v1.3.22 §4.16d.4; `11` v2.50 §4.5i. Inline Edit/Save for payment terms + credit (`9b0662e`). |

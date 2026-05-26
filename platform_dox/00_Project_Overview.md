@@ -622,6 +622,7 @@ Each phase is considered complete when:
 | Version | Date | Changes |
 |---------|------|---------|
 | 2.65 | 2026-05-26 | **`0.14.9-binding-authority` shipped.** `10` §7 tiers in workers; `11` §4.5k; `05` v1.3.24; `15` v2.31; `16` v2.7 — migration `060`, Client Admin thresholds, finance role approval queues. |
+| 2.66 | 2026-05-27 | **`0.14.10-counterparty-fixes` shipped.** Reactivate inactive subaccounts on `/counterparty-accounts`; add vendor contract fields + expiry warning badge and Client Admin dashboard warning. Migration `061`; config version bumped to `0.14.10`. |
 | 2.64 | 2026-05-20 | **Finance UI setup screens.** `15` v2.30, `05` v1.3.23, `11` v2.51 — counterparty/agreements/calendar on finance.mmlogistix; Client Admin travel tab removed (`e73c869`). |
 | 2.63 | 2026-05-20 | **Subaccount edit UI.** `15` v2.29, `05` v1.3.22, `11` v2.50 — inline Edit/Save for payment terms + credit on Subaccounts tab (`9b0662e`). |
 | 2.62 | 2026-05-20 | **Credit limit UI.** `15` v2.28, `05` v1.3.21, `11` v2.49 — subaccount credit limit in Client Admin (not payment-terms catalog). |

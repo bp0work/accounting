@@ -1730,8 +1730,11 @@ This table is the single canonical mapping between the logical labels in `00_Pro
 | 13 | `0.14.8-counterparty-accounts` | `058_cases_counterparty_account_fk.py` | `058` — `cases.counterparty_account_id` nullable FK |
 | 14 | `0.14.9-binding-authority` | `059_seed_accounts_manager_user.py` | `059` — key-role user seed (if not already applied) |
 | 14 | `0.14.9-binding-authority` | `060_binding_authority_thresholds.py` | `060` — seed/update `ap_approval_thresholds`, `ar_approval_thresholds`, `expense_approval_thresholds` JSON rules |
+| 14 | `0.14.10-counterparty-fixes` | `061_counterparty_contract_fields.py` | `061` — add vendor contract columns + expiry warning settings to `counterparty` |
 
 > **Binding authority (`0.14.9`, shipped):** **`060`** updates active `ap_approval_thresholds` and `ar_approval_thresholds` policies and inserts `expense_approval_thresholds` with default tier ceilings (3k / 10k / 10k), STP confidence 0.9, SLA 4h / 8h. No new tables — uses existing `policies.rules` JSONB (`06` §3.5). Implementation: `app/policies/binding_authority.py`, `app/services/binding_authority_service.py`, `PolicyEngine.evaluate_approval_tier`.
+
+> **Vendor contract fields (`0.14.10`, shipped):** **`061`** adds optional vendor-contract metadata to `counterparty` (`has_contract`, `contract_reference`, `contract_start_date`, `contract_expiry_date`, `supplier_owner`, `contract_warning_days` default 30). Finance UI shows a warning badge when `contract_expiry_date` is within the per-vendor warning window; Client Admin dashboard adds a completeness warning for vendors expiring within 30 days.
 
 > **Phase 13 counterparty subaccounts (`0.14.8`, planned):** Runs after **`054`** (or latest `053` head on branch). **`055`** creates `counterparty_accounts` (DDL `06` §4.1a). **`056`** creates `payment_terms` + seeds default terms. **`057`** creates `tenant_tax_codes`. **`058`** adds `cases.counterparty_account_id UUID REFERENCES counterparty_accounts(id)` and optional index. ORM (manual, follow §7 patterns): `app/models/counterparty.py` — `CounterpartyAccount`, `PaymentTerm`; `app/models/tax.py` or `tenant.py` — `TenantTaxCode`. Wire `Case.counterparty_account` relationship. API + workers per `03` §2.1, `17` §3.2.1–§3.2.3. Do **not** use autogenerate for seed data in `056`.
 
