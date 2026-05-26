@@ -38,6 +38,11 @@
   let saCreditLimit = $state('');
   let saCreditCurrency = $state('SGD');
 
+  let editingId = $state<string | null>(null);
+  let editTermId = $state('');
+  let editCreditLimit = $state('');
+  let editCreditCurrency = $state('SGD');
+
   let termCode = $state('');
   let termLabel = $state('');
   let termDays = $state(30);
@@ -117,10 +122,43 @@
     }
   }
 
+  function startEditSub(row: Record<string, unknown>) {
+    editingId = String(row.id);
+    editTermId = row.payment_term_id ? String(row.payment_term_id) : '';
+    const amt = row.credit_limit_amount;
+    editCreditLimit = amt != null && amt !== '' ? String(amt) : '';
+    editCreditCurrency = String(row.credit_limit_currency ?? 'SGD');
+    error = '';
+    msg = '';
+  }
+
+  function cancelEditSub() {
+    editingId = null;
+  }
+
+  async function saveEditSub(id: string) {
+    error = '';
+    msg = '';
+    try {
+      const creditTrim = editCreditLimit.trim();
+      await patchCounterpartyAccount(id, {
+        payment_term_id: editTermId || null,
+        credit_limit_amount: creditTrim ? creditTrim : null,
+        credit_limit_currency: creditTrim ? editCreditCurrency || 'SGD' : null,
+      });
+      editingId = null;
+      msg = 'Subaccount updated';
+      await loadAll();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Update failed';
+    }
+  }
+
   async function deactivateSub(id: string) {
     error = '';
     try {
       await patchCounterpartyAccount(id, { is_active: false });
+      editingId = null;
       await loadAll();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Deactivate failed';
@@ -236,16 +274,54 @@
       </thead>
       <tbody>
         {#each subaccounts as row}
-          <tr>
+          <tr class:editing={editingId === String(row.id)}>
             <td>{row.account_code}</td>
             <td>{row.display_name}</td>
             <td>{row.counterparty_name}</td>
-            <td>{row.payment_term_code ?? '—'}</td>
-            <td>{formatCredit(row)}</td>
-            <td>{row.is_active ? 'Yes' : 'No'}</td>
             <td>
+              {#if editingId === String(row.id)}
+                <select bind:value={editTermId} class="cell-input">
+                  <option value="">None</option>
+                  {#each terms.filter((t) => t.is_active !== false) as t}
+                    <option value={String(t.id)}>{t.code} ({t.due_days}d)</option>
+                  {/each}
+                </select>
+              {:else}
+                {row.payment_term_code ?? '—'}
+              {/if}
+            </td>
+            <td>
+              {#if editingId === String(row.id)}
+                <div class="credit-edit">
+                  <input
+                    bind:value={editCreditLimit}
+                    placeholder="Amount"
+                    inputmode="decimal"
+                    class="cell-input"
+                  />
+                  <select bind:value={editCreditCurrency} class="cell-input narrow">
+                    <option value="SGD">SGD</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="MYR">MYR</option>
+                  </select>
+                </div>
+              {:else}
+                {formatCredit(row)}
+              {/if}
+            </td>
+            <td>{row.is_active ? 'Yes' : 'No'}</td>
+            <td class="actions">
               {#if row.is_active}
-                <button type="button" onclick={() => deactivateSub(String(row.id))}>Deactivate</button>
+                {#if editingId === String(row.id)}
+                  <button type="button" onclick={() => saveEditSub(String(row.id))}>Save</button>
+                  <button type="button" class="secondary" onclick={cancelEditSub}>Cancel</button>
+                {:else}
+                  <button type="button" onclick={() => startEditSub(row)}>Edit</button>
+                  <button type="button" class="secondary" onclick={() => deactivateSub(String(row.id))}>
+                    Deactivate
+                  </button>
+                {/if}
               {/if}
             </td>
           </tr>
@@ -325,5 +401,12 @@
   .row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; align-items: center; }
   .wrap { flex-wrap: wrap; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { border: 1px solid #ddd; padding: 0.4rem; text-align: left; }
+  th, td { border: 1px solid #ddd; padding: 0.4rem; text-align: left; vertical-align: middle; }
+  tr.editing { background: #f0f7ff; }
+  .cell-input { max-width: 10rem; padding: 0.25rem; }
+  .cell-input.narrow { max-width: 5rem; }
+  .credit-edit { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
+  .actions { white-space: nowrap; }
+  .actions button { margin-right: 0.25rem; }
+  button.secondary { background: #eee; color: #333; border: 1px solid #ccc; }
 </style>
