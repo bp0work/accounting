@@ -815,6 +815,9 @@ class ExecutiveMailService:
         escalation: CaseEscalation,
         actor_name: str = "manager",
         override_po_check: bool = True,
+        override_gl_period: bool = False,
+        gl_period_override_reason: str | None = None,
+        gl_period_posted_by: str | None = None,
     ) -> str | None:
         """Step 3: re-enqueue for reprocessing after manager approval."""
         meta = dict(case.workflow_metadata or {})
@@ -830,6 +833,12 @@ class ExecutiveMailService:
             meta["manager_comment"] = escalation.manager_comment
         if override_po_check:
             meta["override_po_check"] = True
+        if override_gl_period:
+            meta["gl_period_override"] = True
+            meta["gl_period_override_reason"] = gl_period_override_reason or escalation.manager_comment or "Manager approved GL period override"
+            meta["gl_period_posted_by"] = gl_period_posted_by or actor_name
+            meta.pop("error_type", None)
+            meta.pop("reason_code", None)
         case.workflow_metadata = meta
         case.status = "classified"
 
@@ -862,6 +871,9 @@ class ExecutiveMailService:
             confidence_score=float(case.confidence_score or 0),
             source="manager-escalation-approve",
             override_po_check=override_po_check,
+            gl_period_override=override_gl_period,
+            gl_period_override_reason=meta.get("gl_period_override_reason"),
+            gl_period_posted_by=meta.get("gl_period_posted_by"),
         )
         if email is not None:
             await self.queue_manager_approval_acknowledgement(

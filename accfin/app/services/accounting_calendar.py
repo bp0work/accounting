@@ -7,11 +7,14 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.accounting_errors import PeriodClosedError
 from app.models.accounting_period import AccountingPeriod
 from app.repositories.system_settings import SystemSettingsRepository
+from app.schemas.executive_mail import FinanceActivityLogCreate
+from app.services.finance_activity_log_service import FinanceActivityLogService
 
 AuditFrequency = Literal["annual", "semi_annual", "quarterly"]
 PeriodType = Literal["monthly", "audit", "year_end"]
@@ -181,25 +184,94 @@ async def ensure_period(
     return row
 
 
-async def assert_period_allows_posting(session: AsyncSession, *, tenant_id: UUID, entry_date: date) -> None:
-    """Reject journal posting when GL period is not open."""
+async def accounting_periods_configured(session: AsyncSession) -> bool:
+    """Bootstrap mode: no rows → skip period enforcement."""
+    count = await session.scalar(select(func.count()).select_from(AccountingPeriod))
+    return (count or 0) > 0
+
+
+async def find_period_for_date(session: AsyncSession, posting_date: date) -> AccountingPeriod | None:
     result = await session.execute(
         select(AccountingPeriod).where(
-            AccountingPeriod.tenant_id == tenant_id,
-            AccountingPeriod.period_year == entry_date.year,
-            AccountingPeriod.period_month == entry_date.month,
+            AccountingPeriod.period_year == posting_date.year,
+            AccountingPeriod.period_month == posting_date.month,
         )
     )
-    period = result.scalar_one_or_none()
-    if period is None or period.status != "open":
-        from app.core.exceptions import AppHTTPException
-        from fastapi import status
+    return result.scalar_one_or_none()
 
-        raise AppHTTPException(
-            status.HTTP_409_CONFLICT,
-            "GL_PERIOD_CLOSED",
-            "Accounting period is not open for posting; escalate to Finance Manager.",
+
+async def assert_period_allows_posting(
+    session: AsyncSession,
+    posting_date: date,
+    *,
+    override: bool = False,
+    override_reason: str | None = None,
+    posted_by: str | None = None,
+    case_id: UUID | None = None,
+    case_number: str | None = None,
+) -> None:
+    """
+    Enforce GL period status before journal posting.
+
+    - No periods in DB → allow (bootstrap / initial setup).
+    - No period for date → allow (period not generated yet).
+    - open → allow.
+    - review → allow; warning logged to finance_activity_log.
+    - closed → PeriodClosedError unless override=True (requires reason + posted_by).
+    """
+    if not await accounting_periods_configured(session):
+        return
+
+    period = await find_period_for_date(session, posting_date)
+    if period is None:
+        return
+
+    if period.status == "open":
+        return
+
+    activity = FinanceActivityLogService(session)
+    label = case_number or (str(case_id) if case_id else "—")
+
+    if period.status == "review":
+        await activity.log(
+            FinanceActivityLogCreate(
+                actor_type="system",
+                actor_name="gl-period-check",
+                action="gl_period_review_warning",
+                summary=f"[{label}] Posting to period in review ({posting_date})",
+                case_id=case_id,
+                metadata={
+                    "posting_date": posting_date.isoformat(),
+                    "period_id": str(period.id),
+                    "period_status": period.status,
+                },
+            )
         )
+        return
+
+    if period.status == "closed":
+        if override:
+            if not (override_reason and override_reason.strip()):
+                raise ValueError("override_reason is required when overriding a closed period")
+            if not (posted_by and posted_by.strip()):
+                raise ValueError("posted_by is required when overriding a closed period")
+            await activity.log(
+                FinanceActivityLogCreate(
+                    actor_type="manager",
+                    actor_name=posted_by,
+                    action="gl_period_override_post",
+                    summary=f"[{label}] Override post to closed period {period.period_year}-{period.period_month:02d}",
+                    case_id=case_id,
+                    metadata={
+                        "posting_date": posting_date.isoformat(),
+                        "period_id": str(period.id),
+                        "override_reason": override_reason,
+                        "posted_by": posted_by,
+                    },
+                )
+            )
+            return
+        raise PeriodClosedError(period=period, posting_date=posting_date)
 
 
 def utcnow() -> datetime:

@@ -44,6 +44,21 @@ def require_client_admin():
     return _check
 
 
+def require_gl_posting_override():
+    """CFO, Finance Manager, or Client Admin — retroactive GL period posting."""
+
+    async def _check(user: TokenData = Depends(get_current_user)) -> TokenData:
+        if user.role in ("client_admin", "cfo", "finance_manager"):
+            return user
+        raise AppHTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "INSUFFICIENT_PERMISSION",
+            "CFO, Finance Manager, or Client Admin access is required.",
+        )
+
+    return _check
+
+
 def require_permission(permission_code: str):
     async def _check(user: TokenData = Depends(get_current_user)) -> TokenData:
         if permission_code not in user.permissions:

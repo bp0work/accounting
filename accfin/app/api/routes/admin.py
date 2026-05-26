@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
-from app.core.dependencies import require_client_admin
+from app.core.dependencies import require_client_admin, require_gl_posting_override
 from app.core.exceptions import AppHTTPException
 from app.models.accounting_period import AccountingPeriod
 from app.models.gl_cutoff_reminder import GlCutoffReminder
@@ -43,6 +43,8 @@ from app.schemas.client_admin import (
     GlCutoffReminderCreate,
     GlCutoffReminderResponse,
     GlCutoffReminderUpdate,
+    GlPeriodOverridePostRequest,
+    GlPeriodOverridePostResponse,
     AdminUserResponse,
     AdminUserUpdate,
     CoaAccountCreate,
@@ -67,6 +69,7 @@ from app.schemas.client_admin import (
     TravelRequestAdminResponse,
     TravelRequestStatusUpdate,
 )
+from app.services.gl_period_override_service import GlPeriodOverrideService
 from app.services.regulatory_storage import (
     TRAVEL_EXPENSE_POLICY_PATH,
     RegulatoryStorageService,
@@ -1129,6 +1132,25 @@ async def generate_accounting_periods(
         created.append(p)
     await session.commit()
     return [AccountingPeriodResponse.model_validate(p) for p in created]
+
+
+@router.post(
+    "/accounting-periods/{period_id}/override-post",
+    response_model=GlPeriodOverridePostResponse,
+)
+async def override_post_closed_period(
+    period_id: UUID,
+    body: GlPeriodOverridePostRequest,
+    user: TokenData = Depends(require_gl_posting_override()),
+    session: AsyncSession = Depends(get_db_session),
+) -> GlPeriodOverridePostResponse:
+    result = await GlPeriodOverrideService(session).override_and_requeue(
+        period_id=period_id,
+        case_id=body.case_id,
+        override_reason=body.override_reason,
+        user=user,
+    )
+    return GlPeriodOverridePostResponse(**result)
 
 
 @router.post("/accounting-periods/{period_id}/approve-trial-balance", response_model=AccountingPeriodResponse)

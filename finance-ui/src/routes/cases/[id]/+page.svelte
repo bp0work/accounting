@@ -9,16 +9,33 @@
     fetchCase,
     fetchCaseTimeline,
     retryCase,
+    overrideGlPeriodPost,
     type CaseItem,
     type TimelineEntry,
   } from '$lib/api/cases';
   import { clientVendorColumnValue } from '$lib/case-labels';
+  import { sessionUser } from '$lib/stores/session';
 
   let item: CaseItem | null = null;
   let timeline: TimelineEntry[] = [];
   let error = '';
   let retrying = false;
   let retryMessage = '';
+  let showOverrideModal = false;
+  let overrideReason = '';
+  let overrideSubmitting = false;
+
+  const overrideRoles = new Set(['cfo', 'finance_manager']);
+
+  $: canOverrideGl =
+    overrideRoles.has(($sessionUser?.role_name ?? '').toLowerCase()) &&
+    item &&
+    (item.status === 'on_hold' ||
+      item.workflow_metadata?.reason_code === 'PERIOD_CLOSED' ||
+      item.workflow_metadata?.error_type === 'PERIOD_CLOSED');
+  $: glPeriodId = item?.workflow_metadata?.gl_period_id
+    ? String(item.workflow_metadata.gl_period_id)
+    : '';
 
   const retryableStatuses = new Set(['exception', 'manual_review']);
 
@@ -33,6 +50,28 @@
       [item, timeline] = await Promise.all([fetchCase(id), fetchCaseTimeline(id)]);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
+    }
+  }
+
+  async function handleOverridePost() {
+    if (!item || !glPeriodId || overrideSubmitting) return;
+    const reason = overrideReason.trim();
+    if (!reason) {
+      error = 'Override reason is required.';
+      return;
+    }
+    overrideSubmitting = true;
+    error = '';
+    try {
+      const result = await overrideGlPeriodPost(glPeriodId, id, reason);
+      retryMessage = `Override authorized — case requeued (${result.status}).`;
+      showOverrideModal = false;
+      overrideReason = '';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Override failed';
+    } finally {
+      overrideSubmitting = false;
     }
   }
 
@@ -174,13 +213,19 @@
     {#if item.sla_deadline}
       <p>SLA deadline: {new Date(item.sla_deadline).toLocaleString()}</p>
     {/if}
+    {#if canOverrideGl}
+      <button type="button" class="override" onclick={() => (showOverrideModal = true)}>
+        Override &amp; post
+      </button>
+      <p class="hint">This case is blocked because the posting date falls in a closed GL period.</p>
+    {/if}
     {#if retryableStatuses.has(item.status)}
       <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
         {retrying ? 'Requeuing…' : 'Retry processing'}
       </button>
-      {#if retryMessage}
-        <p class="hint success">{retryMessage}</p>
-      {/if}
+    {/if}
+    {#if retryMessage}
+      <p class="hint success">{retryMessage}</p>
     {/if}
   </div>
 
@@ -213,6 +258,25 @@
       </ol>
     {/if}
   </section>
+{/if}
+
+{#if showOverrideModal}
+  <div class="modal-backdrop" role="presentation">
+    <div class="modal card">
+      <h2>Override &amp; post to closed period</h2>
+      <p>Provide a reason for retroactive posting. This is recorded in the audit log.</p>
+      <label>
+        Override reason
+        <textarea bind:value={overrideReason} rows="4" placeholder="e.g. Year-end adjustment approved by CFO"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" disabled={overrideSubmitting} onclick={handleOverridePost}>
+          {overrideSubmitting ? 'Submitting…' : 'Confirm override'}
+        </button>
+        <button type="button" class="muted" onclick={() => (showOverrideModal = false)}>Cancel</button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -259,6 +323,47 @@
   .retry:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+  .override {
+    margin-top: 0.75rem;
+    margin-right: 0.5rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid #1d4ed8;
+    border-radius: 6px;
+    background: #eff6ff;
+    color: #1e40af;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  .modal {
+    max-width: 440px;
+    width: 90%;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+  }
+  .modal textarea {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.35rem;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+  .muted {
+    background: #f1f5f9;
   }
   .timeline h2 {
     margin-top: 0;

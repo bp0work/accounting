@@ -301,3 +301,15 @@ class DashboardResponse(BaseModel):
     checks: list[DashboardCheckItem]
     complete_count: int
     total_count: int
+
+
+class GlPeriodOverridePostRequest(BaseModel):
+    case_id: UUID
+    override_reason: str = Field(min_length=3, max_length=2000)
+
+
+class GlPeriodOverridePostResponse(BaseModel):
+    case_id: str
+    period_id: str
+    message_id: str
+    status: str

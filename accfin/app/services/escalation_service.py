@@ -141,11 +141,20 @@ class EscalationService:
             row.manager_comment = trimmed_comment
             case = await self._cases.get(row.case_id)
             if case:
+                ctx = row.context or {}
+                reason_code = ctx.get("reason_code") or (case.workflow_metadata or {}).get(
+                    "reason_code"
+                )
+                period_closed = reason_code == "PERIOD_CLOSED"
                 await self._executive_mail.resume_after_manager_approve(
                     case=case,
                     escalation=row,
                     actor_name=responder,
-                    override_po_check=True,
+                    override_po_check=reason_code != "PERIOD_CLOSED",
+                    override_gl_period=period_closed,
+                    gl_period_override_reason=trimmed_comment
+                    or "Manager approved GL period override",
+                    gl_period_posted_by=responder,
                 )
                 message = "Approved. Case requeued for processing and submitter notified."
 

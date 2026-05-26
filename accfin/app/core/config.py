@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.3-gl-cutoff-reminders"
+        return "0.14.4-gl-period-posting-controls"
 
     @property
     def edge_public_base_url(self) -> str:

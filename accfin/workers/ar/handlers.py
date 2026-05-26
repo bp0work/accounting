@@ -34,6 +34,7 @@ from workers.ar.extraction import (
     evaluate_extraction_path,
     has_critical_missing,
 )
+from workers.common.gl_period_check import ensure_gl_period_allows_posting
 from workers.common.processing_failure import route_processing_failure
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,22 @@ class ARWorkerService:
             stp_eligible=stp,
             risk_flags=risk_flags,
         )
+
+        posting_date = inv.invoice_date or date.today()
+        email = await self._email_for_case(case)
+        period_block = await ensure_gl_period_allows_posting(
+            self._session,
+            case,
+            message,
+            posting_date=posting_date,
+            email=email,
+            actor_name="ar-worker",
+        )
+        if period_block:
+            await self._start_processing(case)
+            await self._timeline_completed(case, "ar_invoice", inv.invoice_number, "manual_review", None)
+            await self._session.flush()
+            return period_block
 
         await self._start_processing(case)
         journal_id = None

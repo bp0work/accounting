@@ -25,6 +25,7 @@ from app.services.approval_service import ApprovalService
 from app.services.email_context import ensure_attachment_texts
 from app.services.executive_mail_service import ExecutiveMailService
 from app.services.expense_policy_evaluator import evaluate_expense_claim
+from workers.common.gl_period_check import ensure_gl_period_allows_posting
 from workers.common.policy_escalation import route_travel_request_escalation
 from workers.common.processing_failure import route_processing_failure
 from workers.common.travel_detection import claim_requires_travel_request
@@ -146,6 +147,35 @@ class ExpenseWorkerService:
                     "travel_request_number": travel.request_number,
                 },
             }
+
+        posting_date = claim.claim_period_to or claim.claim_period_from or date.today()
+        email = None
+        if case.email_id:
+            result = await self._session.execute(
+                select(Email).where(Email.id == case.email_id)
+            )
+            email = result.scalar_one_or_none()
+        period_block = await ensure_gl_period_allows_posting(
+            self._session,
+            case,
+            message,
+            posting_date=posting_date,
+            email=email,
+            actor_name="expense-worker",
+            expense=True,
+        )
+        if period_block:
+            claim.status = "manual_review"
+            await self._cases.add_timeline(
+                case_id=case.id,
+                event_type="processing_completed",
+                from_status="processing",
+                to_status="on_hold",
+                actor="expense-worker",
+                description="Blocked by closed GL period",
+            )
+            await self._session.flush()
+            return period_block
 
         entry_id = await self._create_reimbursement_journal(case, claim, posted=evaluation.stp_eligible)
         if entry_id is None:

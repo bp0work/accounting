@@ -30,6 +30,9 @@ async def enqueue_accounts(
     retry_count: int = 0,
     source: str = "accounts-worker",
     override_po_check: bool = False,
+    gl_period_override: bool = False,
+    gl_period_override_reason: str | None = None,
+    gl_period_posted_by: str | None = None,
 ) -> str:
     message_id = str(uuid4())
     payload = {
@@ -52,6 +55,12 @@ async def enqueue_accounts(
     }
     if override_po_check:
         payload["override_po_check"] = True
+    if gl_period_override:
+        payload["gl_period_override"] = True
+        if gl_period_override_reason:
+            payload["gl_period_override_reason"] = gl_period_override_reason
+        if gl_period_posted_by:
+            payload["gl_period_posted_by"] = gl_period_posted_by
     redis = get_redis()
     await redis.rpush(get_settings().accounts_queue_name, json.dumps(payload))
     return message_id

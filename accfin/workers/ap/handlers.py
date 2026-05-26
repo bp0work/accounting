@@ -40,6 +40,7 @@ from workers.common.policy_escalation import (
     route_po_mismatch_escalation,
     route_po_not_found_escalation,
 )
+from workers.common.gl_period_check import ensure_gl_period_allows_posting
 from workers.common.processing_failure import route_processing_failure
 
 logger = logging.getLogger(__name__)
@@ -217,6 +218,24 @@ class APWorkerService:
         )
 
         expense_code = resolve_expense_account_code(po.line_items if po else None)
+
+        posting_date = inv.invoice_date or date.today()
+        email = await self._email_for_case(case)
+        period_block = await ensure_gl_period_allows_posting(
+            self._session,
+            case,
+            message,
+            posting_date=posting_date,
+            email=email,
+            actor_name="ap-worker",
+        )
+        if period_block:
+            await self._start_processing(case)
+            await self._timeline_completed(
+                case, "ap_invoice", inv.invoice_number, "manual_review", None
+            )
+            await self._session.flush()
+            return period_block
 
         await self._start_processing(case)
         journal_id = None

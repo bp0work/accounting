@@ -76,6 +76,20 @@ export function retryCase(caseId: string) {
   return apiFetch<CaseRetryResult>(`/cases/${caseId}/retry`, { method: 'POST' });
 }
 
+export function overrideGlPeriodPost(
+  periodId: string,
+  caseId: string,
+  overrideReason: string
+) {
+  return apiFetch<{ case_id: string; period_id: string; message_id: string; status: string }>(
+    `/accounting-periods/${periodId}/override-post`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ case_id: caseId, override_reason: overrideReason }),
+    }
+  );
+}
+
 export function exportCasesCsv(dateFrom: string, dateTo: string) {
   const q = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
   return downloadCsv(`/cases/export?${q}`, `transactions_${dateFrom}_${dateTo}.csv`);

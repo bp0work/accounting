@@ -2,8 +2,14 @@
 
 **Host:** `https://admin.mmlogistix.bp0.work`  
 **Branding:** mmlogistix Client Admin  
-**Deploy version:** `0.14.3-gl-cutoff-reminders` (`accfin` `GET /api/health` → `version`)  
-**Package:** `client-admin-ui/package.json` → `0.14.3-gl-cutoff-reminders`
+**Deploy version:** `0.14.4-gl-period-posting-controls` (`accfin` `GET /api/health` → `version`)  
+**Package:** `client-admin-ui/package.json` → `0.14.3-gl-cutoff-reminders` (finance-ui unchanged `0.13.12`)
+
+### GL period posting (`0.14.4`)
+
+- Workers call `assert_period_allows_posting` before journal create (bootstrap if no periods).
+- Closed period → manager escalation (`PERIOD_CLOSED`); email approve reprocesses with override.
+- `POST /api/accounting-periods/{period_id}/override-post` — body `{ case_id, override_reason }` (CFO / Finance Manager / Client Admin).
 
 ## Stack
 
