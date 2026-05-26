@@ -87,6 +87,13 @@ export function patchUser(id: string, body: Record<string, unknown>) {
   return apiFetch(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
+export function upsertRoleUser(roleName: string, body: Record<string, unknown>) {
+  return apiFetch<Record<string, unknown>>(`/users/by-role/${encodeURIComponent(roleName)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
 export function getExpenseLimits() {
   return apiFetch<Record<string, string | null>>('/expense-policies/limits');
 }

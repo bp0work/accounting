@@ -35,9 +35,11 @@ from app.models.user import User
 from app.models.rbac import Role
 from app.schemas.auth import TokenData
 from app.constants.client_admin import (
+    BOOTSTRAP_PASSWORD_HASH,
     REGULATORY_CATALOG,
     ROLE_ADMIN_NAMES,
     ROLE_ORDER,
+    ROLE_PROVISION,
     TRAVEL_EXPENSE_POLICY_KEY,
     TRAVEL_EXPENSE_POLICY_LABEL,
 )
@@ -281,7 +283,7 @@ async def admin_dashboard(
         ),
         DashboardCheckItem(
             section="travel_policy",
-            label="Travel & expense policy (PDF)",
+            label="Travel & Entertainment policy (PDF)",
             complete=travel_doc is not None,
             href="/policies",
             detail=travel_doc.filename if travel_doc else "Upload policy PDF on Policies page",
@@ -694,6 +696,82 @@ async def patch_admin_user(
         username=u.username,
         configured=_nonempty(u.email),
     )
+
+
+def _admin_user_response(u: User, role_name: str) -> AdminUserResponse:
+    return AdminUserResponse(
+        id=u.id,
+        role_label=ROLE_LABELS.get(role_name, role_name),
+        role_name=role_name,
+        display_name=u.display_name,
+        email=u.email,
+        username=u.username,
+        configured=_nonempty(u.email),
+    )
+
+
+@router.put("/users/by-role/{role_name}", response_model=AdminUserResponse)
+async def upsert_admin_user_by_role(
+    role_name: str,
+    body: AdminUserUpdate,
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> AdminUserResponse:
+    if role_name not in ROLE_ADMIN_NAMES:
+        raise AppHTTPException(
+            status.HTTP_404_NOT_FOUND, "NOT_FOUND", f"Unknown role: {role_name}"
+        )
+    email = (body.email or "").strip()
+    display_name = (body.display_name or "").strip()
+    if not email or not display_name:
+        raise AppHTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "VALIDATION_ERROR",
+            "display_name and email are required",
+        )
+    tid = await _tenant_id(user, session)
+    role_row = await session.execute(select(Role).where(Role.name == role_name))
+    role = role_row.scalar_one_or_none()
+    if role is None:
+        raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Role not found")
+
+    existing = await session.execute(
+        select(User)
+        .join(Role, User.role_id == Role.id)
+        .where(Role.name == role_name, User.status == "active")
+    )
+    u = existing.scalar_one_or_none()
+    if u is None:
+        username, user_id_str = ROLE_PROVISION[role_name]
+        u = await session.get(User, UUID(user_id_str))
+        if u is None:
+            u = User(
+                id=UUID(user_id_str),
+                username=username,
+                display_name=display_name,
+                email=email,
+                password_hash=BOOTSTRAP_PASSWORD_HASH,
+                role_id=role.id,
+                tenant_id=tid,
+                status="active",
+                two_factor_enabled=False,
+            )
+            session.add(u)
+        else:
+            u.display_name = display_name
+            u.email = email
+            u.role_id = role.id
+            u.tenant_id = tid
+            u.status = "active"
+    else:
+        u.display_name = display_name
+        u.email = email
+        if u.tenant_id is None:
+            u.tenant_id = tid
+
+    await session.commit()
+    await session.refresh(u)
+    return _admin_user_response(u, role_name)
 
 
 # --- Expense policy limits (named policies) ---

@@ -4,39 +4,89 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ensureValidAccessToken } from '$lib/api/client';
-  import { listRoleUsers, patchUser } from '$lib/api/admin';
-  let items: Array<Record<string, unknown>> = [];
+  import { listRoleUsers, patchUser, upsertRoleUser } from '$lib/api/admin';
+
+  type RoleRow = {
+    id?: string;
+    role_name: string;
+    role_label: string;
+    display_name: string;
+    email: string;
+    username?: string;
+  };
+
+  let items: RoleRow[] = [];
   let error = '';
   let msg = '';
+
   onMount(async () => {
     if (!(await ensureValidAccessToken())) return;
+    await reload();
+  });
+
+  async function reload() {
+    error = '';
     try {
-      items = await listRoleUsers();
+      const rows = await listRoleUsers();
+      items = rows.map((u) => ({
+        id: u.id ? String(u.id) : undefined,
+        role_name: String(u.role_name ?? ''),
+        role_label: String(u.role_label ?? ''),
+        display_name: String(u.display_name ?? ''),
+        email: String(u.email ?? ''),
+        username: u.username ? String(u.username) : undefined,
+      }));
     } catch (e) {
       error = e instanceof Error ? e.message : 'Load failed';
     }
-  });
-  async function save(u: Record<string, unknown>) {
-    if (!u.id) return;
-    await patchUser(String(u.id), { email: u.email, display_name: u.display_name });
-    msg = 'Saved.';
+  }
+
+  async function save(row: RoleRow) {
+    error = '';
+    msg = '';
+    const body = {
+      display_name: row.display_name.trim(),
+      email: row.email.trim(),
+    };
+    if (!body.email) {
+      error = 'Email is required.';
+      return;
+    }
+    if (!body.display_name) {
+      error = 'Display name is required.';
+      return;
+    }
+    try {
+      if (row.id) {
+        await patchUser(row.id, body);
+      } else {
+        const updated = await upsertRoleUser(row.role_name, body);
+        row.id = updated.id ? String(updated.id) : row.id;
+        row.username = updated.username ? String(updated.username) : row.username;
+      }
+      msg = 'Saved.';
+      await reload();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Save failed';
+    }
   }
 </script>
 <h1>Key role emails</h1>
 <p>Operational contacts for approvals and escalations (order matches org hierarchy).</p>
 {#if error}<p class="err">{error}</p>{/if}
 {#if msg}<p class="ok">{msg}</p>{/if}
-{#each items as u}
+{#each items as row, i}
   <div class="card">
-    <strong>{u.role_label}</strong>
-    {#if !u.id}
-      <p class="warn">No active user for this role — contact the platform administrator to provision the account.</p>
-    {:else}
-      <label>Display name <input bind:value={u.display_name} /></label>
-      <label>Email <input type="email" bind:value={u.email} /></label>
-      <p class="meta">Username: {u.username}</p>
-      <button type="button" on:click={() => save(u)}>Save</button>
+    <strong>{row.role_label}</strong>
+    {#if !row.id}
+      <p class="hint">No login account yet — enter contact details and save to provision this role.</p>
     {/if}
+    <label>Display name <input bind:value={items[i].display_name} /></label>
+    <label>Email <input type="email" bind:value={items[i].email} /></label>
+    {#if row.username}
+      <p class="meta">Username: {row.username}</p>
+    {/if}
+    <button type="button" on:click={() => save(row)}>Save</button>
   </div>
 {/each}
 <style>
@@ -44,7 +94,7 @@
   label { display: block; margin: 0.5rem 0; }
   input { width: 100%; padding: 0.4rem; box-sizing: border-box; }
   .meta { font-size: 0.8rem; color: #64748b; }
-  .warn { color: #b45309; font-size: 0.875rem; }
+  .hint { color: #64748b; font-size: 0.875rem; }
   .err { color: #b91c1c; }
   .ok { color: #15803d; }
 </style>

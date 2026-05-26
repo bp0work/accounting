@@ -59,7 +59,7 @@
     try {
       await uploadTravelPolicyPdf(f);
       await refresh();
-      msg = 'Travel & expense policy uploaded.';
+      msg = 'Travel & Entertainment policy uploaded.';
     } catch (err) {
       error = err instanceof Error ? err.message : 'Upload failed';
     }
@@ -89,7 +89,7 @@
   }
 </script>
 
-<h1>Travel &amp; Expense Policy</h1>
+<h1>Travel &amp; Entertainment</h1>
 {#if error}<p class="err">{error}</p>{/if}
 {#if msg}<p class="ok">{msg}</p>{/if}
 
