@@ -27,14 +27,31 @@ class SystemSettingsRepository:
         except ValueError:
             return default
 
-    async def set_value(self, key: str, value: str) -> None:
+    async def set_value(
+        self,
+        key: str,
+        value: str,
+        *,
+        category: str = "mail",
+        value_type: str = "string",
+        commit: bool = True,
+    ) -> None:
         stmt = (
             insert(SystemSetting)
-            .values(key=key, value=value, value_type="string", category="mail")
+            .values(key=key, value=value, value_type=value_type, category=category)
             .on_conflict_do_update(
                 index_elements=["key"],
-                set_={"value": value},
+                set_={"value": value, "category": category, "value_type": value_type},
             )
         )
         await self._session.execute(stmt)
+        if commit:
+            await self._session.commit()
+
+    async def set_many(self, entries: dict[str, tuple[str, str, str]]) -> None:
+        """``entries``: key → (value, value_type, category)."""
+        for key, (value, value_type, category) in entries.items():
+            await self.set_value(
+                key, value, category=category, value_type=value_type, commit=False
+            )
         await self._session.commit()

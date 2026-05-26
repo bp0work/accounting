@@ -4,12 +4,13 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, text
-from sqlalchemy.dialects.postgresql import ENUM, UUID
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
 
 _PERIOD_STATUS = ENUM("open", "review", "closed", name="accounting_period_status", create_type=False)
+_PERIOD_TYPE = ENUM("monthly", "audit", "year_end", name="accounting_period_type", create_type=False)
 
 
 class AccountingPeriod(Base, TimestampMixin):
@@ -23,7 +24,9 @@ class AccountingPeriod(Base, TimestampMixin):
     )
     period_year: Mapped[int] = mapped_column(Integer, nullable=False)
     period_month: Mapped[int] = mapped_column(Integer, nullable=False)
+    period_type: Mapped[str] = mapped_column(_PERIOD_TYPE, nullable=False, server_default="monthly")
     gl_cutoff_date: Mapped[date] = mapped_column(Date, nullable=False)
+    audit_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     trial_balance_reviewer: Mapped[str] = mapped_column(
         String(255), nullable=False, server_default="finfa.mmlogistix@bp0.work"
     )

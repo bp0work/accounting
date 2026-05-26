@@ -8,6 +8,7 @@ from app.core.database import get_db_session
 from app.core.exceptions import AppHTTPException
 from app.schemas.executive_mail import FinanceDailyLogJobRequest, FinanceDailyLogJobResponse
 from app.services.finance_daily_log_service import FinanceDailyLogService
+from app.services.gl_cutoff_reminder_service import GlCutoffReminderService
 
 router = APIRouter(prefix="/internal/jobs", tags=["Internal Jobs"])
 
@@ -31,6 +32,19 @@ async def finance_daily_log(
     req = body or FinanceDailyLogJobRequest()
     service = FinanceDailyLogService(session)
     return await service.run_job(business_date=req.business_date, force=req.force)
+
+
+@router.post("/gl-cutoff-reminders")
+async def gl_cutoff_reminders(
+    _: None = Depends(_verify_cron_token),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, int | bool]:
+    result = await GlCutoffReminderService(session).run()
+    return {
+        "periods_checked": result.periods_checked,
+        "emails_sent": result.emails_sent,
+        "skipped_smtp": result.skipped_smtp,
+    }
 
 
 @router.post("/flush-outbound-mail")

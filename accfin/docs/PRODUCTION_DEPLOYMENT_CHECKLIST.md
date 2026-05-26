@@ -2,7 +2,7 @@
 
 Operational go-live checklist for the AI Finance Operations Platform backend (`accfin/`). Authoritative gates: `platform_dox/11_Deployment_Operations_Runbook.md` Appendix **§20.0**.
 
-**Target version:** `0.14.2-client-admin-fixes` (migrations `001`–`051`; finance-ui `0.13.12`; client-admin-ui `0.14.2`) — see `CLIENT_ADMIN_UI.md`
+**Target version:** `0.14.3-gl-cutoff-reminders` (migrations `001`–`053`; finance-ui `0.13.12`; client-admin-ui `0.14.3`) — see `CLIENT_ADMIN_UI.md`
 
 See `DEPLOYMENT_VERSION_HISTORY.md` for the full deploy timeline (Phase 11b → Traefik → URL structure → routing fixes → branding → client auth).
 
@@ -137,6 +137,7 @@ Generate: `python scripts/generate-keys.py`
 | Job | Schedule | Endpoint |
 |-----|----------|----------|
 | Finance daily activity digest | **21:00 Asia/Singapore** daily | `POST /api/internal/jobs/finance-daily-log` |
+| GL cutoff reminders | **08:00 Asia/Singapore** daily (`00:00 UTC`) | `POST /api/internal/jobs/gl-cutoff-reminders` |
 
 Example (`11` §17.5):
 

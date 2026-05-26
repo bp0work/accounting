@@ -2,7 +2,7 @@
 
 **mmlogistix Client Admin** — tenant configuration at `https://admin.mmlogistix.bp0.work`.
 
-**Version:** `0.14.2-client-admin-fixes`  
+**Version:** `0.14.3-gl-cutoff-reminders`  
 **Authoritative spec:** `accfin/docs/CLIENT_ADMIN_UI.md`
 
 ## Stack

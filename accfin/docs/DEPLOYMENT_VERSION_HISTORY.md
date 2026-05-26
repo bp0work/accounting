@@ -5,6 +5,7 @@ UI package versions: `finance-ui/package.json`, `client-admin-ui/package.json`.
 
 | Deploy version | Date | Git (main) | Summary |
 |----------------|------|------------|---------|
+| **0.14.3-gl-cutoff-reminders** | 2026-05-25 | — | **GL cutoff reminders:** `gl_cutoff_reminders` (`052`); `period_type` + `audit_metadata` (`053`); accounting settings API; enhanced period generate (FYE/audit/cutoff); cron `POST /api/internal/jobs/gl-cutoff-reminders`; calendar UI settings + recipients. |
 | **0.14.2-client-admin-fixes** | 2026-05-20 | — | **Client Admin fixes:** live dashboard checks; company email signatures (`051`); COA empty state; mailbox credential note; users CEO→acc order; Travel & Expense Policy PDF + regulatory uploads (Wasabi); `/travel-info` replaces travel UI; calendar generate forward 13 months. |
 | **0.14.1-client-admin-ui** | 2026-05-20 | `5580f55` | **Client Admin (shipped):** `admin.mmlogistix.bp0.work` — SvelteKit + adapter-node, `/api/*`, nav Dashboard→Accounting Calendar; reactive `client_admin_access_token` nav fix. **API** (`admin.py`, `require_client_admin`): dashboard, tenant profile, COA+CSV, mail config, users, expense limits, agreements, travel-requests, accounting-periods, regulatory docs. **Traefik:** `client-admin-ui` p1; `client-admin-api` `PathPrefix(/api)` p100. Migrations `049`/`050`. See `accfin/docs/CLIENT_ADMIN_UI.md`. |
 | **0.14.0-client-admin-ui** | 2026-05-20 | `3f15219` | Initial Client Admin UI + admin API (superseded by `0.14.1` nav fix). |

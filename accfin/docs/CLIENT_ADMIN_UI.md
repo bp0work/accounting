@@ -2,94 +2,79 @@
 
 **Host:** `https://admin.mmlogistix.bp0.work`  
 **Branding:** mmlogistix Client Admin  
-**Deploy version:** `0.14.2-client-admin-fixes` (`accfin` `GET /api/health` → `version`)  
-**Package:** `client-admin-ui/package.json` → `0.14.2-client-admin-fixes`
+**Deploy version:** `0.14.3-gl-cutoff-reminders` (`accfin` `GET /api/health` → `version`)  
+**Package:** `client-admin-ui/package.json` → `0.14.3-gl-cutoff-reminders`
 
 ## Stack
 
 | Layer | Detail |
 |-------|--------|
-| UI | SvelteKit 2, `@sveltejs/adapter-node`, `export const ssr = false` on layout/pages |
-| Auth | JWT (`client_admin` role only); optional TOTP on single login form |
-| API | All browser calls use `/api/*` (FastAPI mounted at `/api`) |
-| Tokens | `localStorage`: `client_admin_access_token`, `client_admin_refresh_token` |
+| UI | SvelteKit 2, `@sveltejs/adapter-node`, `export const ssr = false` |
+| Auth | JWT (`client_admin` role only) |
+| API | `/api/*` (FastAPI) |
 
-**Login (seed):** `system.mmlogistix` / `ChangeMeOnFirstLogin!` — rotate on first use.
+## Accounting calendar (`0.14.3`)
 
-## Navigation (header)
+**Settings** (`GET|PATCH /api/admin/accounting-settings` → `system_settings`):
 
-Dashboard | Company | Chart of Accounts | Mailboxes | Users | Travel & Expense Policy | Agreements | Travel | Accounting Calendar | Logout
+| Key | Values |
+|-----|--------|
+| `accounting_fye_month` | 1–12 (default 12) |
+| `trial_balance_frequency` | `monthly` \| `weekly` |
+| `audit_frequency` | `annual` \| `semi_annual` \| `quarterly` |
+| `gl_cutoff_working_days` | integer (default 3; also mirrors `gl_posting_cutoff_working_days`) |
 
-- **Travel** (`/travel-info`) — documentation only; no in-app travel approval (email workflow).
-- `/travel-requests` redirects to `/travel-info`.
+**Period generation** (`POST /api/accounting-periods/generate?months=13`):
 
-## UI routes
+- Current month + next 12 months (forward)
+- `period_type`: `monthly` \| `audit` \| `year_end` from FYE + audit frequency
+- GL cutoff = N **working days** after month end (weekends + Singapore public holidays skipped)
 
-| Path | Purpose |
-|------|---------|
-| `/login` | Username, password, optional TOTP |
-| `/dashboard` | Live configuration completeness (per-section detail text) |
-| `/company` | Company profile + HTML/plain email signature |
-| `/chart-of-accounts` | Empty-state banner + CSV upload; searchable table when populated |
-| `/mailboxes` | Display names / escalation; IMAP/SMTP note (platform admin for credentials) |
-| `/users` | CEO → CFO → Finance Manager (fin) → Accounts Manager (acc) |
-| `/policies` | Travel & expense policy PDF + expense limits; regulatory PDF catalog |
-| `/travel-info` | How employees submit travel via `accexp.mmlogistix@bp0.work` |
-| `/agreements` | Rental + director expense agreements |
-| `/accounting-calendar` | Generate current + 12 months; Approve TB / Close GL |
+**GL close** (`POST /api/accounting-periods/{id}/close`):
 
-## Traefik (`accfin/traefik/dynamic/api-routes.yml`)
+- All: trial balance approved first
+- `audit`: requires `audit_adjustments_completed`
+- `year_end`: requires `year_end_adjustments_completed`
+- Optional `auditor_name`, `auditor_firm`, `sign_off_date` → `audit_metadata` JSONB
 
-| Router | Rule | Priority | Backend |
-|--------|------|----------|---------|
-| `client-admin-ui` | `Host(admin.mmlogistix.bp0.work)` | **1** | `client-admin-ui:3000` (Docker labels) |
-| `client-admin-api` | `Host(admin.mmlogistix.bp0.work) && PathPrefix(/api)` | **100** | `http://fastapi:8000` |
+**GL cutoff reminders** (`gl_cutoff_reminders` table, migration `052`):
 
-## Backend API (`require_client_admin`)
+| Method | Path |
+|--------|------|
+| GET | `/api/admin/gl-cutoff-reminders` |
+| POST | `/api/admin/gl-cutoff-reminders` |
+| PATCH | `/api/admin/gl-cutoff-reminders/{id}` |
+| DELETE | `/api/admin/gl-cutoff-reminders/{id}` |
 
-All paths prefixed with `/api` in production.
+**Cron** (daily 08:00 SGT = 00:00 UTC):
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/admin/dashboard` | Completeness checks (company, signature, COA, mailboxes, users, policy PDF, limits, regulatory×5, calendar×13) |
-| GET, PATCH | `/tenants/{id}/profile` | Company profile + `email_signature_html` / `email_signature_plain` |
-| GET | `/coa/status` | Account count / empty flag |
-| GET, POST, PATCH | `/coa` | Chart of accounts |
-| POST | `/coa/import` | CSV import |
-| GET, PATCH | `/mail/configuration` | Mailboxes |
-| GET, PATCH | `/users` | Four role holders (fixed order) |
-| GET, PATCH | `/expense-policies/limits` | Numeric expense limits |
-| GET, POST | `/expense-policies/document` | Travel policy PDF → `transactions/regulatory/travel-expense-policy.pdf` |
-| GET | `/expense-policies/document/download` | Download policy PDF |
-| GET | `/regulatory-documents/catalog` | Five regulatory slots + upload status |
-| POST | `/regulatory-documents?document_key=` | Upload regulatory PDF (Wasabi + metadata) |
-| GET | `/regulatory-documents/{id}/download` | Download regulatory PDF |
-| GET, POST | `/agreements/rental`, `/agreements/director-expense` | Agreements |
-| GET | `/accounting-periods` | Period list |
-| POST | `/accounting-periods/generate?months=13` | Current month + next 12 (forward) |
-| POST | `/accounting-periods/{id}/approve-trial-balance` | Approve TB |
-| POST | `/accounting-periods/{id}/close` | Close GL |
+```bash
+0 0 * * * curl -s -X POST http://localhost:8000/api/internal/jobs/gl-cutoff-reminders \
+  -H "Authorization: Bearer $FINANCE_INTERNAL_CRON__TOKEN" \
+  -H "Content-Type: application/json" >> /var/log/gl-cutoff-reminders.log 2>&1
+```
 
-Implementation: `accfin/app/api/routes/admin.py`, storage: `accfin/app/services/regulatory_storage.py`.
+- Sender: `acc.mmlogistix@bp0.work` (SMTP)
+- Logs: `finance_activity_log` action `gl_cutoff_reminder_sent`
+
+**Dashboard:** “GL reminder recipients” complete when ≥1 active recipient.
 
 ## Migrations
 
 | Revision | Summary |
 |----------|---------|
-| `20260531_049` | Client Admin tables |
-| `20260531_050` | Seed tenant profile, CEO, settings |
-| `20260531_051` | `email_signature_*` on `tenant_profiles`; `document_key` on `regulatory_documents` |
+| `052` | `gl_cutoff_reminders` |
+| `053` | `accounting_periods.period_type`, `audit_metadata` |
 
-## Deploy (VPS)
+## Deploy
 
 ```bash
-cd /opt/bp0work/accounting && git pull origin main
 cd accfin
-docker compose run --rm fastapi alembic upgrade head   # through 051
+docker compose run --rm fastapi alembic upgrade head   # through 053
 docker compose build fastapi client-admin-ui
 docker compose up -d --force-recreate traefik fastapi client-admin-ui
 curl -s http://localhost:8000/api/health | jq .version
-# → "0.14.2-client-admin-fixes"
+# → "0.14.3-gl-cutoff-reminders"
 ```
 
-Cross-ref: `platform_dox/15_Approval_UI_Specification.md` §8.13, `11_Deployment_Operations_Runbook.md` §4.5g.
+Cross-ref: `platform_dox/06_Database_Schema_Design.md`, `05_API_Specification.md` §19, `11_Deployment_Operations_Runbook.md` §4.5g.

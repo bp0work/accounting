@@ -15,6 +15,7 @@ from app.core.database import get_db_session
 from app.core.dependencies import require_client_admin
 from app.core.exceptions import AppHTTPException
 from app.models.accounting_period import AccountingPeriod
+from app.models.gl_cutoff_reminder import GlCutoffReminder
 from app.models.agreements import DirectorExpenseAgreement, RentalAgreement
 from app.models.expense import ExpensePolicy
 from app.models.ledger import CoaAccount
@@ -35,7 +36,13 @@ from app.constants.client_admin import (
 )
 from app.schemas.client_admin import (
     AccountingCalendarSettings,
+    AccountingPeriodCloseRequest,
     AccountingPeriodResponse,
+    AccountingSettingsResponse,
+    AccountingSettingsUpdate,
+    GlCutoffReminderCreate,
+    GlCutoffReminderResponse,
+    GlCutoffReminderUpdate,
     AdminUserResponse,
     AdminUserUpdate,
     CoaAccountCreate,
@@ -64,11 +71,13 @@ from app.services.regulatory_storage import (
     TRAVEL_EXPENSE_POLICY_PATH,
     RegulatoryStorageService,
 )
+from app.repositories.system_settings import SystemSettingsRepository
 from app.services.accounting_calendar import (
-    add_working_days,
+    accounting_fye_month,
+    audit_frequency,
     ensure_period,
     gl_cutoff_working_days,
-    month_end,
+    trial_balance_frequency,
     utcnow,
 )
 
@@ -188,6 +197,12 @@ async def admin_dashboard(
     )
     limits_ok = await _has_expense_limits(session)
     cal_ok, cal_detail = await _calendar_complete(session, tid)
+    reminder_count = await session.scalar(
+        select(func.count())
+        .select_from(GlCutoffReminder)
+        .where(GlCutoffReminder.tenant_id == tid, GlCutoffReminder.is_active.is_(True))
+    )
+    reminders_ok = (reminder_count or 0) > 0
 
     checks = [
         DashboardCheckItem(
@@ -258,6 +273,15 @@ async def admin_dashboard(
             complete=cal_ok,
             href="/accounting-calendar",
             detail=cal_detail,
+        ),
+        DashboardCheckItem(
+            section="gl_reminders",
+            label="GL reminder recipients",
+            complete=reminders_ok,
+            href="/accounting-calendar",
+            detail=f"{reminder_count or 0} active recipient(s)"
+            if reminders_ok
+            else "Add at least one active reminder recipient",
         ),
     ]
     complete = sum(1 for c in checks if c.complete)
@@ -934,6 +958,121 @@ async def download_regulatory_document(
     return await storage.download_response(key=doc.wasabi_path, filename=doc.filename)
 
 
+# --- Accounting settings & GL cutoff reminders ---
+
+
+@router.get("/admin/accounting-settings", response_model=AccountingSettingsResponse)
+async def get_accounting_settings(
+    session: AsyncSession = Depends(get_db_session),
+    _user: TokenData = Depends(require_client_admin()),
+) -> AccountingSettingsResponse:
+    return AccountingSettingsResponse(
+        accounting_fye_month=await accounting_fye_month(session),
+        trial_balance_frequency=await trial_balance_frequency(session),
+        audit_frequency=await audit_frequency(session),
+        gl_cutoff_working_days=await gl_cutoff_working_days(session),
+    )
+
+
+@router.patch("/admin/accounting-settings", response_model=AccountingSettingsResponse)
+async def patch_accounting_settings(
+    body: AccountingSettingsUpdate,
+    session: AsyncSession = Depends(get_db_session),
+    _user: TokenData = Depends(require_client_admin()),
+) -> AccountingSettingsResponse:
+    repo = SystemSettingsRepository(session)
+    entries: dict[str, tuple[str, str, str]] = {}
+    if body.accounting_fye_month is not None:
+        entries["accounting_fye_month"] = (str(body.accounting_fye_month), "integer", "accounting")
+    if body.trial_balance_frequency is not None:
+        if body.trial_balance_frequency not in ("monthly", "weekly"):
+            raise AppHTTPException(status.HTTP_400_BAD_REQUEST, "INVALID_VALUE", "trial_balance_frequency")
+        entries["trial_balance_frequency"] = (body.trial_balance_frequency, "string", "accounting")
+    if body.audit_frequency is not None:
+        if body.audit_frequency not in ("annual", "semi_annual", "quarterly"):
+            raise AppHTTPException(status.HTTP_400_BAD_REQUEST, "INVALID_VALUE", "audit_frequency")
+        entries["audit_frequency"] = (body.audit_frequency, "string", "accounting")
+    if body.gl_cutoff_working_days is not None:
+        entries["gl_cutoff_working_days"] = (str(body.gl_cutoff_working_days), "integer", "accounting")
+        entries["gl_posting_cutoff_working_days"] = (
+            str(body.gl_cutoff_working_days),
+            "integer",
+            "accounting",
+        )
+    if entries:
+        await repo.set_many(entries)
+    return AccountingSettingsResponse(
+        accounting_fye_month=await accounting_fye_month(session),
+        trial_balance_frequency=await trial_balance_frequency(session),
+        audit_frequency=await audit_frequency(session),
+        gl_cutoff_working_days=await gl_cutoff_working_days(session),
+    )
+
+
+@router.get("/admin/gl-cutoff-reminders", response_model=list[GlCutoffReminderResponse])
+async def list_gl_cutoff_reminders(
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[GlCutoffReminderResponse]:
+    tid = await _tenant_id(user, session)
+    result = await session.execute(
+        select(GlCutoffReminder)
+        .where(GlCutoffReminder.tenant_id == tid)
+        .order_by(GlCutoffReminder.email)
+    )
+    return [GlCutoffReminderResponse.model_validate(r) for r in result.scalars().all()]
+
+
+@router.post(
+    "/admin/gl-cutoff-reminders",
+    response_model=GlCutoffReminderResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_gl_cutoff_reminder(
+    body: GlCutoffReminderCreate,
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> GlCutoffReminderResponse:
+    tid = await _tenant_id(user, session)
+    row = GlCutoffReminder(tenant_id=tid, **body.model_dump())
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return GlCutoffReminderResponse.model_validate(row)
+
+
+@router.patch("/admin/gl-cutoff-reminders/{reminder_id}", response_model=GlCutoffReminderResponse)
+async def patch_gl_cutoff_reminder(
+    reminder_id: UUID,
+    body: GlCutoffReminderUpdate,
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> GlCutoffReminderResponse:
+    tid = await _tenant_id(user, session)
+    row = await session.get(GlCutoffReminder, reminder_id)
+    if row is None or row.tenant_id != tid:
+        raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Reminder not found")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(row, k, v)
+    await session.commit()
+    await session.refresh(row)
+    return GlCutoffReminderResponse.model_validate(row)
+
+
+@router.delete("/admin/gl-cutoff-reminders/{reminder_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_gl_cutoff_reminder(
+    reminder_id: UUID,
+    user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    tid = await _tenant_id(user, session)
+    row = await session.get(GlCutoffReminder, reminder_id)
+    if row is None or row.tenant_id != tid:
+        raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Reminder not found")
+    await session.delete(row)
+    await session.commit()
+
+
 # --- Accounting periods ---
 
 
@@ -971,11 +1110,21 @@ async def generate_accounting_periods(
     today = date.today()
     y, m = today.year, today.month
     reviewer = "finfa.mmlogistix@bp0.work"
+    fye = await accounting_fye_month(session)
+    freq = await audit_frequency(session)
+    days = await gl_cutoff_working_days(session)
     created = []
     for offset in range(months):
         py, pm = _period_year_month_add(y, m, offset)
         p = await ensure_period(
-            session, tenant_id=tid, year=py, month=pm, trial_balance_reviewer=reviewer
+            session,
+            tenant_id=tid,
+            year=py,
+            month=pm,
+            trial_balance_reviewer=reviewer,
+            fye_month=fye,
+            audit_freq=freq,
+            cutoff_days=days,
         )
         created.append(p)
     await session.commit()
@@ -1004,6 +1153,7 @@ async def approve_trial_balance(
 @router.post("/accounting-periods/{period_id}/close", response_model=AccountingPeriodResponse)
 async def close_accounting_period(
     period_id: UUID,
+    body: AccountingPeriodCloseRequest | None = None,
     user: TokenData = Depends(require_client_admin()),
     session: AsyncSession = Depends(get_db_session),
 ) -> AccountingPeriodResponse:
@@ -1014,6 +1164,31 @@ async def close_accounting_period(
         raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Period not found")
     if period.trial_balance_approved_at is None:
         raise AppHTTPException(status.HTTP_409_CONFLICT, "TB_NOT_APPROVED", "Trial balance must be approved first")
+    req = body or AccountingPeriodCloseRequest()
+    meta = dict(period.audit_metadata or {})
+    if period.period_type == "audit":
+        if not req.audit_adjustments_completed:
+            raise AppHTTPException(
+                status.HTTP_409_CONFLICT,
+                "AUDIT_NOT_COMPLETE",
+                "Audit adjustments must be completed before GL close",
+            )
+        meta["audit_adjustments_completed"] = True
+    if period.period_type == "year_end":
+        if not req.year_end_adjustments_completed:
+            raise AppHTTPException(
+                status.HTTP_409_CONFLICT,
+                "YEAR_END_NOT_COMPLETE",
+                "Year-end adjustments must be completed before GL close",
+            )
+        meta["year_end_adjustments_completed"] = True
+    if req.auditor_name:
+        meta["auditor_name"] = req.auditor_name
+    if req.auditor_firm:
+        meta["auditor_firm"] = req.auditor_firm
+    if req.sign_off_date:
+        meta["sign_off_date"] = req.sign_off_date.isoformat()
+    period.audit_metadata = meta or period.audit_metadata
     period.gl_closed_at = utcnow()
     period.gl_closed_by = user.user_id
     period.status = "closed"

@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.2-client-admin-fixes"
+        return "0.14.3-gl-cutoff-reminders"
 
     @property
     def edge_public_base_url(self) -> str:

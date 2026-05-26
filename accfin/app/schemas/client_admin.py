@@ -218,12 +218,70 @@ class AccountingPeriodResponse(BaseModel):
     id: UUID
     period_year: int
     period_month: int
+    period_type: str = "monthly"
     gl_cutoff_date: date
     trial_balance_reviewer: str
     trial_balance_approved_at: datetime | None
     status: str
+    audit_metadata: dict | None = None
 
     model_config = {"from_attributes": True}
+
+
+class AccountingPeriodCloseRequest(BaseModel):
+    audit_adjustments_completed: bool | None = None
+    year_end_adjustments_completed: bool | None = None
+    auditor_name: str | None = None
+    auditor_firm: str | None = None
+    sign_off_date: date | None = None
+
+
+class AccountingSettingsResponse(BaseModel):
+    accounting_fye_month: int = 12
+    trial_balance_frequency: str = "monthly"
+    audit_frequency: str = "annual"
+    gl_cutoff_working_days: int = 3
+
+
+class AccountingSettingsUpdate(BaseModel):
+    accounting_fye_month: int | None = Field(default=None, ge=1, le=12)
+    trial_balance_frequency: str | None = None
+    audit_frequency: str | None = None
+    gl_cutoff_working_days: int | None = Field(default=None, ge=1, le=30)
+
+
+class GlCutoffReminderResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    email: str
+    display_name: str | None = None
+    notify_7_days: bool
+    notify_3_days: bool
+    notify_1_day: bool
+    notify_on_date: bool
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class GlCutoffReminderCreate(BaseModel):
+    email: str
+    display_name: str | None = None
+    notify_7_days: bool = True
+    notify_3_days: bool = True
+    notify_1_day: bool = True
+    notify_on_date: bool = True
+    is_active: bool = True
+
+
+class GlCutoffReminderUpdate(BaseModel):
+    email: str | None = None
+    display_name: str | None = None
+    notify_7_days: bool | None = None
+    notify_3_days: bool | None = None
+    notify_1_day: bool | None = None
+    notify_on_date: bool | None = None
+    is_active: bool | None = None
 
 
 class AccountingCalendarSettings(BaseModel):
