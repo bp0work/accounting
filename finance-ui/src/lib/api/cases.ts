@@ -23,6 +23,9 @@ export type CaseItem = {
   workflow_metadata?: Record<string, unknown>;
   classification_metadata?: Record<string, unknown>;
   linked_gl_period_status?: string | null;
+  current_approval_tier?: number | null;
+  pending_approval_id?: string | null;
+  binding_escalated_to_cfo?: boolean;
 };
 
 export type TimelineEntry = {

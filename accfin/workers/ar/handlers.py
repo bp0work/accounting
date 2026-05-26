@@ -35,6 +35,8 @@ from workers.ar.extraction import (
     evaluate_extraction_path,
     has_critical_missing,
 )
+from app.services.binding_authority_service import BindingAuthorityService, apply_binding_sla
+from workers.common.binding_authority_escalation import route_binding_authority_escalation
 from workers.common.gl_period_check import ensure_gl_period_allows_posting
 from workers.common.processing_failure import route_processing_failure
 
@@ -145,20 +147,20 @@ class ARWorkerService:
             amount=amount,
             warnings=inv.warnings,
         )
-        policy_action = self._policy.combine_results(
-            [
-                self._policy.evaluate_policy(
-                    {"rules": [], "default_action": {"type": "require_approval", "tier": 2}},
-                    {"case": {"amount_value": float(amount), "type": case.type}},
-                )
-            ]
+        binding = BindingAuthorityService(self._session)
+        tier, thresholds = await binding.evaluate_tier(
+            amount=amount,
+            confidence=float(extraction.confidence_score),
+            risk_flags=risk_flags,
+            case_type=case.type,
         )
+        apply_binding_sla(case, tier, thresholds)
         mailbox_id = await self._mailbox_id_for_case(case)
         await self._executive_mail.log_policy_check(
             case=case,
             mailbox_id=mailbox_id,
-            passed=policy_action.get("type") != "block",
-            policy_action=policy_action,
+            passed=True,
+            policy_action={"type": "binding_authority", "tier": tier},
             actor_name="ar-worker",
         )
         await self._cases.add_timeline(
@@ -167,18 +169,24 @@ class ARWorkerService:
             from_status=case.status,
             to_status=case.status,
             actor="ar-worker",
-            description=f"Policy check: {policy_action.get('type', 'unknown')}",
-            metadata={"policy_action": policy_action, "policy_tier": policy_action.get("tier")},
+            description=f"Binding authority tier {tier}",
+            metadata={"policy_tier": tier},
         )
-        tier = int(policy_action.get("tier", 2))
-        stp = message.get("stp_eligible", False) and policy_action.get("type") == "auto_release"
-        final_status = evaluate_extraction_path(
-            case_type="ar_invoice",
-            confidence=float(extraction.confidence_score),
-            missing_fields=inv.missing_fields,
-            stp_eligible=stp,
-            risk_flags=risk_flags,
-        )
+        confidence_f = float(extraction.confidence_score)
+        if has_critical_missing("ar_invoice", inv.missing_fields) or confidence_f < 0.70:
+            final_status = "manual_review"
+        elif tier == 1 and confidence_f >= thresholds.stp_confidence_minimum and not risk_flags:
+            final_status = "posted"
+        elif tier >= 2:
+            final_status = "pending_approval"
+        else:
+            final_status = evaluate_extraction_path(
+                case_type="ar_invoice",
+                confidence=confidence_f,
+                missing_fields=inv.missing_fields,
+                stp_eligible=False,
+                risk_flags=risk_flags,
+            )
 
         posting_date = inv.invoice_date or date.today()
         email = await self._email_for_case(case)
@@ -278,6 +286,24 @@ class ARWorkerService:
             await self._approvals.request_approval(
                 case_id=case.id, tier=tier, amount_value=amount, amount_currency=inv.currency
             )
+            if tier >= 2:
+                extracted = {
+                    "invoice_number": inv.invoice_number,
+                    "total_amount": str(amount),
+                    "currency": inv.currency,
+                    "vendor_name": case.counterparty_name,
+                }
+                await route_binding_authority_escalation(
+                    self._session,
+                    case,
+                    email=email,
+                    tier=tier,
+                    amount=amount,
+                    currency=inv.currency or "SGD",
+                    extracted_fields=extracted,
+                    extraction_confidence=confidence_f,
+                    actor_name="ar-worker",
+                )
 
         return {"status": final_status, "case_id": str(case.id), "journal_entry_id": journal_id}
 

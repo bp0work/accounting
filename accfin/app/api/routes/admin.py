@@ -56,6 +56,10 @@ from app.schemas.client_admin import (
     GlPeriodOverridePostResponse,
     AdminUserResponse,
     AdminUserUpdate,
+    BindingAuthorityResponse,
+    BindingAuthorityUpdate,
+    BindingAuthorityDocumentResponse,
+    BindingAuthorityThresholdsBody,
     CoaAccountCreate,
     CoaAccountResponse,
     CoaAccountUpdate,
@@ -80,6 +84,7 @@ from app.schemas.client_admin import (
     TravelRequestStatusUpdate,
 )
 from app.services.gl_period_override_service import GlPeriodOverrideService
+from app.services.binding_authority_service import BindingAuthorityService, DOCUMENT_LABELS
 from app.services.gl_period_reopen_service import GlPeriodReopenService
 from app.services.regulatory_storage import (
     TRAVEL_EXPENSE_POLICY_PATH,
@@ -627,6 +632,80 @@ async def patch_mail_configuration(
         is_active=m.is_active,
         username_masked=_mask_username(m.username),
         server_host=m.server_host,
+    )
+
+
+# --- Binding authority thresholds ---
+
+_DOC_KEYS = (
+    ("ap_approval_thresholds", "ap_invoice"),
+    ("ar_approval_thresholds", "ar_invoice"),
+    ("expense_approval_thresholds", "expense_claim"),
+)
+
+
+def _thresholds_body(th) -> BindingAuthorityThresholdsBody:
+    d = th.to_dict()
+    return BindingAuthorityThresholdsBody(**d)
+
+
+@router.get("/admin/binding-authority", response_model=BindingAuthorityResponse)
+async def get_binding_authority(
+    _user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> BindingAuthorityResponse:
+    svc = BindingAuthorityService(session)
+    all_th = await svc.get_all_thresholds()
+    docs = {}
+    for policy_name, doc_key in _DOC_KEYS:
+        th = all_th[policy_name]
+        docs[doc_key] = BindingAuthorityDocumentResponse(
+            document_key=doc_key,
+            label=DOCUMENT_LABELS.get(policy_name, policy_name),
+            thresholds=_thresholds_body(th),
+        )
+    return BindingAuthorityResponse(
+        ap_invoice=docs["ap_invoice"],
+        ar_invoice=docs["ar_invoice"],
+        expense_claim=docs["expense_claim"],
+    )
+
+
+@router.patch("/admin/binding-authority", response_model=BindingAuthorityResponse)
+async def patch_binding_authority(
+    body: BindingAuthorityUpdate,
+    _user: TokenData = Depends(require_client_admin()),
+    session: AsyncSession = Depends(get_db_session),
+) -> BindingAuthorityResponse:
+    svc = BindingAuthorityService(session)
+    updates = {}
+    if body.ap_approval_thresholds is not None:
+        updates["ap_approval_thresholds"] = body.ap_approval_thresholds.model_dump(
+            exclude_unset=True
+        )
+    if body.ar_approval_thresholds is not None:
+        updates["ar_approval_thresholds"] = body.ar_approval_thresholds.model_dump(
+            exclude_unset=True
+        )
+    if body.expense_approval_thresholds is not None:
+        updates["expense_approval_thresholds"] = body.expense_approval_thresholds.model_dump(
+            exclude_unset=True
+        )
+    await svc.patch_thresholds(updates)
+    await session.commit()
+    all_th = await svc.get_all_thresholds()
+    docs = {}
+    for policy_name, doc_key in _DOC_KEYS:
+        th = all_th[policy_name]
+        docs[doc_key] = BindingAuthorityDocumentResponse(
+            document_key=doc_key,
+            label=DOCUMENT_LABELS.get(policy_name, policy_name),
+            thresholds=_thresholds_body(th),
+        )
+    return BindingAuthorityResponse(
+        ap_invoice=docs["ap_invoice"],
+        ar_invoice=docs["ar_invoice"],
+        expense_claim=docs["expense_claim"],
     )
 
 

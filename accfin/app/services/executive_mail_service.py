@@ -182,6 +182,9 @@ class ExecutiveMailService:
         extracted_fields: dict[str, str | None] | None = None,
         extraction_confidence: float | None = None,
         escalation_template: str = "manager.escalation.request",
+        target_email_override: str | None = None,
+        include_escalate: bool | None = None,
+        preserve_case_status: bool = False,
     ) -> CaseEscalation | None:
         """Step 1: manager review before any sender failure notification."""
         existing = await self._pending_escalation(case.id)
@@ -197,13 +200,19 @@ class ExecutiveMailService:
             return None
 
         executive = await self.get_mailbox_for_address(mailbox_address)
-        if executive is None or not executive.escalation_manager_email:
+        if executive is None:
+            logger.warning("No mailbox config for %s", mailbox_address)
+            return None
+
+        if target_email_override:
+            target_email = target_email_override
+        elif executive.escalation_manager_email:
+            target_email = executive.escalation_manager_email
+        else:
             logger.warning(
                 "No escalation_manager_email for mailbox %s", mailbox_address
             )
             return None
-
-        target_email = executive.escalation_manager_email
         target_mailbox = await self.get_mailbox_for_address(target_email)
 
         escalation_id = uuid4()
@@ -213,10 +222,15 @@ class ExecutiveMailService:
         )
         missing_fields_list = list(missing_fields or [])
         is_missing_fields = escalation_template == "manager.escalation.missing_fields"
+        show_escalate = (
+            include_escalate
+            if include_escalate is not None
+            else (not is_missing_fields)
+        )
         urls = self.escalation_action_urls(
             escalation_id,
             wire,
-            include_escalate=not is_missing_fields,
+            include_escalate=show_escalate,
             include_request_info=is_missing_fields,
         )
 
@@ -254,7 +268,8 @@ class ExecutiveMailService:
         )
         await self._escalations.create(row)
 
-        case.status = "on_hold"
+        if not preserve_case_status:
+            case.status = "on_hold"
         meta = dict(case.workflow_metadata or {})
         meta.update(
             {

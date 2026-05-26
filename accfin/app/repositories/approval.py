@@ -27,6 +27,8 @@ class ApprovalRepository:
         case_id: UUID | None = None,
         approver_id: UUID | None = None,
         my_pending_user_id: UUID | None = None,
+        binding_queue: str | None = None,
+        role_name: str | None = None,
         limit: int = 50,
     ) -> list[tuple[Approval, Case]]:
         q = (
@@ -49,6 +51,27 @@ class ApprovalRepository:
                 or_(
                     Approval.approver_id == my_pending_user_id,
                     Approval.approver_id.is_(None),
+                ),
+            )
+        if binding_queue == "acc" or (
+            binding_queue is None
+            and role_name in ("accounts_clerk", "finance_officer")
+        ):
+            q = q.where(
+                Approval.status == "pending",
+                Approval.tier == 2,
+                ~Case.workflow_metadata.contains({"binding_escalated_to_cfo": True}),
+            )
+        elif binding_queue == "cfo" or (
+            binding_queue is None and role_name in ("cfo", "finance_manager")
+        ):
+            from sqlalchemy import or_ as sa_or
+
+            q = q.where(
+                Approval.status == "pending",
+                sa_or(
+                    Approval.tier >= 3,
+                    Case.workflow_metadata.contains({"binding_escalated_to_cfo": True}),
                 ),
             )
         result = await self._session.execute(q)

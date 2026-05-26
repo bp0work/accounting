@@ -14,9 +14,14 @@
     type TimelineEntry,
   } from '$lib/api/cases';
   import { clientVendorColumnValue } from '$lib/case-labels';
+  import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { sessionUser } from '$lib/stores/session';
 
   let item: CaseItem | null = null;
+  let approvalNote = '';
+  let approvalReason = '';
+  let approvalBusy = false;
+  let approvalMessage = '';
   let timeline: TimelineEntry[] = [];
   let error = '';
   let retrying = false;
@@ -26,6 +31,24 @@
   let overrideSubmitting = false;
 
   const overrideRoles = new Set(['cfo', 'finance_manager']);
+  const tier2Roles = new Set(['accounts_clerk', 'finance_officer']);
+  const executiveRoles = new Set(['cfo', 'finance_manager']);
+
+  $: role = ($sessionUser?.role_name ?? '').toLowerCase();
+  $: bindingTier = item?.current_approval_tier ?? null;
+  $: bindingEscalated = Boolean(item?.binding_escalated_to_cfo);
+  $: showAccApprovalActions =
+    item?.status === 'pending_approval' &&
+    tier2Roles.has(role) &&
+    bindingTier === 2 &&
+    !bindingEscalated &&
+    !!item?.pending_approval_id;
+  $: showCfoApprovalActions =
+    item?.status === 'pending_approval' &&
+    executiveRoles.has(role) &&
+    bindingTier != null &&
+    bindingTier >= 2 &&
+    !!item?.pending_approval_id;
 
   $: periodClosedHold =
     item &&
@@ -164,6 +187,62 @@
     if (Number.isNaN(value)) return '—';
     return value.toFixed(2);
   }
+
+  async function handleApprove() {
+    if (!item?.pending_approval_id || approvalBusy) return;
+    approvalBusy = true;
+    approvalMessage = '';
+    error = '';
+    try {
+      await approve(item.pending_approval_id, approvalNote || 'Approved');
+      approvalMessage = 'Approved — journal posted.';
+      approvalNote = '';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Approve failed';
+    } finally {
+      approvalBusy = false;
+    }
+  }
+
+  async function handleReject() {
+    if (!item?.pending_approval_id || approvalBusy) return;
+    const reason = approvalReason.trim();
+    if (!reason) {
+      error = 'Rejection reason is required.';
+      return;
+    }
+    approvalBusy = true;
+    approvalMessage = '';
+    error = '';
+    try {
+      await reject(item.pending_approval_id, reason);
+      approvalMessage = 'Rejected — submitter notified.';
+      approvalReason = '';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Reject failed';
+    } finally {
+      approvalBusy = false;
+    }
+  }
+
+  async function handleEscalate() {
+    if (!item?.pending_approval_id || approvalBusy) return;
+    approvalBusy = true;
+    approvalMessage = '';
+    error = '';
+    try {
+      await escalateToCfo(item.pending_approval_id, approvalNote || undefined);
+      approvalMessage = 'Escalated to CFO.';
+      approvalNote = '';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Escalate failed';
+    } finally {
+      approvalBusy = false;
+    }
+  }
 </script>
 
 <a href="/approvals">← Cases & Approvals</a>
@@ -235,6 +314,48 @@
     {/if}
     {#if retryMessage}
       <p class="hint success">{retryMessage}</p>
+    {/if}
+    {#if approvalMessage}
+      <p class="hint success">{approvalMessage}</p>
+    {/if}
+    {#if item.status === 'pending_approval' && bindingTier != null}
+      <section class="approval-box">
+        <h2>Binding authority approval</h2>
+        <p>
+          Tier {bindingTier}
+          {#if bindingEscalated}
+            · escalated to CFO
+          {/if}
+        </p>
+        {#if showAccApprovalActions || showCfoApprovalActions}
+          <label>
+            Note (optional for approve / escalate)
+            <textarea bind:value={approvalNote} rows="2" placeholder="Approval note"></textarea>
+          </label>
+          <label>
+            Rejection reason
+            <textarea bind:value={approvalReason} rows="2" placeholder="Required to reject"></textarea>
+          </label>
+          <div class="approval-actions">
+            <button type="button" class="approve" disabled={approvalBusy} onclick={handleApprove}>
+              {approvalBusy ? 'Working…' : 'Approve'}
+            </button>
+            <button type="button" class="reject" disabled={approvalBusy} onclick={handleReject}>
+              Reject
+            </button>
+            {#if showAccApprovalActions}
+              <button type="button" class="escalate" disabled={approvalBusy} onclick={handleEscalate}>
+                Escalate to CFO
+              </button>
+            {/if}
+          </div>
+        {:else if item.pending_approval_id}
+          <p class="hint">
+            This case is awaiting approval by another role.
+            <a href={`/approvals/${item.pending_approval_id}`}>Open approval</a>
+          </p>
+        {/if}
+      </section>
     {/if}
   </div>
 
@@ -430,5 +551,54 @@
   }
   .extracted dd {
     margin: 0;
+  }
+  .approval-box {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid #93c5fd;
+    border-radius: 6px;
+    background: #eff6ff;
+  }
+  .approval-box h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+  }
+  .approval-box textarea {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.35rem;
+  }
+  .approval-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .approve {
+    padding: 0.5rem 1rem;
+    border: 1px solid #15803d;
+    border-radius: 6px;
+    background: #f0fdf4;
+    color: #166534;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .reject {
+    padding: 0.5rem 1rem;
+    border: 1px solid #b91c1c;
+    border-radius: 6px;
+    background: #fef2f2;
+    color: #991b1b;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .escalate {
+    padding: 0.5rem 1rem;
+    border: 1px solid #1d4ed8;
+    border-radius: 6px;
+    background: #fff;
+    color: #1e40af;
+    font-weight: 600;
+    cursor: pointer;
   }
 </style>

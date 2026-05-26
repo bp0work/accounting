@@ -6,15 +6,29 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { ensureValidAccessToken } from '$lib/api/client';
-  import { approve, getApproval, reject, type ApprovalItem } from '$lib/api/approvals';
+  import { approve, escalateToCfo, getApproval, reject, type ApprovalItem } from '$lib/api/approvals';
+  import { sessionUser } from '$lib/stores/session';
 
   let item: ApprovalItem | null = null;
   let note = '';
   let reason = '';
   let message = '';
   let error = '';
+  let busy = false;
+
+  const tier2Roles = new Set(['accounts_clerk', 'finance_officer']);
+  const executiveRoles = new Set(['cfo', 'finance_manager']);
 
   $: id = $page.params.id;
+  $: role = ($sessionUser?.role_name ?? '').toLowerCase();
+  $: showAccActions =
+    item?.status === 'pending' &&
+    tier2Roles.has(role) &&
+    item.tier === 2 &&
+    !item.binding_escalated_to_cfo;
+  $: showCfoActions =
+    item?.status === 'pending' && executiveRoles.has(role) && item.tier >= 2;
+  $: showActions = showAccActions || showCfoActions;
 
   onMount(load);
 
@@ -35,23 +49,47 @@
 
   async function doApprove() {
     message = '';
+    busy = true;
     try {
       await approve(id, note || 'Approved');
       message = 'Approved';
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Approve failed';
+    } finally {
+      busy = false;
     }
   }
 
   async function doReject() {
+    if (!reason.trim()) {
+      error = 'Rejection reason is required.';
+      return;
+    }
     message = '';
+    busy = true;
     try {
-      await reject(id, reason || 'Rejected');
+      await reject(id, reason);
       message = 'Rejected';
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Reject failed';
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function doEscalate() {
+    message = '';
+    busy = true;
+    try {
+      await escalateToCfo(id, note || undefined);
+      message = 'Escalated to CFO';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Escalate failed';
+    } finally {
+      busy = false;
     }
   }
 </script>
@@ -59,26 +97,73 @@
 <a href="/approvals">← Back</a>
 <h1>Approval detail</h1>
 
-{#if error}<p style="color: #b91c1c;">{error}</p>{/if}
-{#if message}<p style="color: #15803d;">{message}</p>{/if}
+{#if error}<p class="error">{error}</p>{/if}
+{#if message}<p class="ok">{message}</p>{/if}
 
 {#if item}
   <div class="card">
-    <p><strong>{item.case_number}</strong> ({item.case_type})</p>
+    <p><strong>{item.case_number}</strong> ({item.case_type}) · Tier {item.tier}</p>
     <p>{item.subject}</p>
     <p>Status: <strong>{item.status}</strong></p>
+    {#if item.amount}
+      <p>Amount: {item.amount.currency} {item.amount.value}</p>
+    {/if}
+    <p><a href={`/cases/${item.case_id}`}>View case</a></p>
   </div>
 
-  {#if item.status === 'pending'}
+  {#if showActions}
     <div class="card">
-      <h2>Approve</h2>
-      <textarea bind:value={note} placeholder="Note" rows="3" style="width: 100%;"></textarea>
-      <button on:click={doApprove} style="margin-top: 0.5rem;">Approve</button>
+      <h2>Actions</h2>
+      <label>
+        Note
+        <textarea bind:value={note} placeholder="Optional for approve / escalate" rows="2"></textarea>
+      </label>
+      <label>
+        Rejection reason
+        <textarea bind:value={reason} placeholder="Required to reject" rows="2"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" disabled={busy} on:click={doApprove}>Approve</button>
+        <button type="button" class="reject" disabled={busy} on:click={doReject}>Reject</button>
+        {#if showAccActions}
+          <button type="button" class="escalate" disabled={busy} on:click={doEscalate}>
+            Escalate to CFO
+          </button>
+        {/if}
+      </div>
     </div>
-    <div class="card">
-      <h2>Reject</h2>
-      <textarea bind:value={reason} placeholder="Reason (required)" rows="3" style="width: 100%;"></textarea>
-      <button on:click={doReject} style="margin-top: 0.5rem;">Reject</button>
-    </div>
+  {:else if item.status === 'pending'}
+    <p class="hint">You do not have permission to act on this approval tier.</p>
   {/if}
 {/if}
+
+<style>
+  .error {
+    color: #b91c1c;
+  }
+  .ok {
+    color: #15803d;
+  }
+  .hint {
+    color: #64748b;
+  }
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.35rem;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .reject {
+    border-color: #b91c1c;
+    color: #991b1b;
+  }
+  .escalate {
+    border-color: #1d4ed8;
+    color: #1e40af;
+  }
+</style>

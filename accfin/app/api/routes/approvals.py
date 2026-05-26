@@ -16,6 +16,7 @@ from app.schemas.approval import (
     ApprovalListItem,
     ApprovalListResponse,
     ApproveRequest,
+    EscalateApprovalRequest,
     MoneyAmount,
     RejectRequest,
     UserRef,
@@ -54,6 +55,7 @@ def _to_list_item(approval, case, approver) -> ApprovalListItem:
         created_at=approval.created_at,
         responded_at=approval.decided_at,
         response_note=approval.comments if approval.status != "pending" else None,
+        binding_escalated_to_cfo=bool((case.workflow_metadata or {}).get("binding_escalated_to_cfo")),
     )
 
 
@@ -63,7 +65,8 @@ async def list_approvals(
     tier: int | None = Query(default=None),
     case_id: UUID | None = Query(default=None),
     my_pending: bool = Query(default=False),
-    _user: TokenData = Depends(require_permission("approvals:read")),
+    binding_queue: str | None = Query(default=None),
+    user: TokenData = Depends(require_permission("approvals:read")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ApprovalListResponse:
     repo = ApprovalRepository(session)
@@ -71,7 +74,9 @@ async def list_approvals(
         status=status,
         tier=tier,
         case_id=case_id,
-        my_pending_user_id=_user.user_id if my_pending else None,
+        my_pending_user_id=user.user_id if my_pending else None,
+        binding_queue=binding_queue,
+        role_name=user.role_name,
         limit=50,
     )
     items = []
@@ -130,6 +135,24 @@ async def reject_approval(
     approval = await service.reject(
         approval_id, user, reason=body.reason, return_to=body.return_to
     )
+    await session.commit()
+    return ApprovalActionResponse(
+        id=approval.id,
+        status=approval.status,
+        decided_at=approval.decided_at,
+        comments=approval.comments,
+    )
+
+
+@router.post("/{approval_id}/escalate", response_model=ApprovalActionResponse)
+async def escalate_approval(
+    approval_id: UUID,
+    body: EscalateApprovalRequest,
+    user: TokenData = Depends(require_permission("approvals:approve")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ApprovalActionResponse:
+    service = ApprovalService(session)
+    approval = await service.escalate_to_cfo(approval_id, user, note=body.note)
     await session.commit()
     return ApprovalActionResponse(
         id=approval.id,

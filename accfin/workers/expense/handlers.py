@@ -25,6 +25,8 @@ from app.services.approval_service import ApprovalService
 from app.services.email_context import ensure_attachment_texts
 from app.services.executive_mail_service import ExecutiveMailService
 from app.services.expense_policy_evaluator import evaluate_expense_claim
+from app.services.binding_authority_service import BindingAuthorityService, apply_binding_sla
+from workers.common.binding_authority_escalation import route_binding_authority_escalation
 from workers.common.gl_period_check import ensure_gl_period_allows_posting
 from workers.common.policy_escalation import route_travel_request_escalation
 from workers.common.processing_failure import route_processing_failure
@@ -177,12 +179,14 @@ class ExpenseWorkerService:
             await self._session.flush()
             return period_block
 
-        entry_id = await self._create_reimbursement_journal(case, claim, posted=evaluation.stp_eligible)
+        entry_id = await self._create_reimbursement_journal(
+            case, claim, posted=claim.stp_eligible
+        )
         if entry_id is None:
             return await self._finish_manual_review(case, claim, "ACCOUNT_NOT_FOUND")
 
         claim.journal_entry_id = entry_id
-        if evaluation.stp_eligible:
+        if claim.stp_eligible:
             claim.status = "posted"
             claim.total_approved = claim.total_claimed
             case.status = "posted"
@@ -193,11 +197,29 @@ class ExpenseWorkerService:
             case.current_approval_tier = evaluation.tier
             await self._approvals.request_approval(
                 case_id=case.id,
-                tier=evaluation.tier,
+                tier=tier,
                 amount_value=claim.total_claimed,
                 amount_currency=claim.currency,
                 comments=f"Expense claim {claim.case_number}",
             )
+            if tier >= 2:
+                claim_summary = {
+                    "claimant_name": claim.claimant_name,
+                    "total_claimed": str(claim.total_claimed),
+                    "currency": claim.currency,
+                    "purpose": claim.purpose,
+                }
+                await route_binding_authority_escalation(
+                    self._session,
+                    case,
+                    email=email,
+                    tier=tier,
+                    amount=claim.total_claimed,
+                    currency=claim.currency or "SGD",
+                    extracted_fields=claim_summary,
+                    extraction_confidence=confidence,
+                    actor_name="expense-worker",
+                )
 
         await self._cases.add_timeline(
             case_id=case.id,

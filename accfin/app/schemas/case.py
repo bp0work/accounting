@@ -38,6 +38,9 @@ class CaseResponse(BaseModel):
     workflow_metadata: dict = Field(default_factory=dict)
     classification_metadata: dict = Field(default_factory=dict)
     linked_gl_period_status: str | None = None
+    current_approval_tier: int | None = None
+    pending_approval_id: UUID | None = None
+    binding_escalated_to_cfo: bool = False
 
 
 class CaseListResponse(BaseModel):

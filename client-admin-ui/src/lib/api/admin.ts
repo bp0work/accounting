@@ -151,6 +151,42 @@ async function uploadPdf(url: string, file: File) {
   return res.json();
 }
 
+export type BindingAuthorityThresholds = {
+  tier_1_ceiling: number;
+  tier_2_ceiling: number;
+  tier_3_threshold: number;
+  stp_confidence_minimum: number;
+  tier_2_sla_hours: number;
+  tier_3_sla_hours: number;
+};
+
+export type BindingAuthorityDocument = {
+  document_key: string;
+  label: string;
+  thresholds: BindingAuthorityThresholds;
+};
+
+export type BindingAuthorityConfig = {
+  ap_invoice: BindingAuthorityDocument;
+  ar_invoice: BindingAuthorityDocument;
+  expense_claim: BindingAuthorityDocument;
+};
+
+export function getBindingAuthority() {
+  return apiFetch<BindingAuthorityConfig>('/admin/binding-authority');
+}
+
+export function patchBindingAuthority(body: {
+  ap_approval_thresholds?: Partial<BindingAuthorityThresholds>;
+  ar_approval_thresholds?: Partial<BindingAuthorityThresholds>;
+  expense_approval_thresholds?: Partial<BindingAuthorityThresholds>;
+}) {
+  return apiFetch<BindingAuthorityConfig>('/admin/binding-authority', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function downloadAuthenticated(url: string, filename: string) {
   const token = localStorage.getItem('client_admin_access_token');
   const res = await fetch(url, {

@@ -17,6 +17,11 @@ from app.models.executive_mail import CaseEscalation
 from app.repositories.case import CaseRepository
 from app.repositories.executive_mail import CaseEscalationRepository
 from app.schemas.executive_mail import EscalationRespondContext, EscalationRespondResult
+from app.policies.binding_authority import BINDING_AUTHORITY_REASON_PREFIX
+from app.services.binding_authority_service import (
+    BindingAuthorityService,
+    binding_reason_code,
+)
 from app.services.executive_mail_service import ExecutiveMailService
 
 
@@ -141,22 +146,34 @@ class EscalationService:
             row.manager_comment = trimmed_comment
             case = await self._cases.get(row.case_id)
             if case:
-                ctx = row.context or {}
-                reason_code = ctx.get("reason_code") or (case.workflow_metadata or {}).get(
-                    "reason_code"
+                reason_code = row.reason_code or (case.workflow_metadata or {}).get(
+                    "reason_code", ""
                 )
-                period_closed = reason_code == "PERIOD_CLOSED"
-                await self._executive_mail.resume_after_manager_approve(
-                    case=case,
-                    escalation=row,
-                    actor_name=responder,
-                    override_po_check=reason_code != "PERIOD_CLOSED",
-                    override_gl_period=period_closed,
-                    gl_period_override_reason=trimmed_comment
-                    or "Manager approved GL period override",
-                    gl_period_posted_by=responder,
-                )
-                message = "Approved. Case requeued for processing and submitter notified."
+                if str(reason_code).startswith(BINDING_AUTHORITY_REASON_PREFIX):
+                    binding = BindingAuthorityService(self._session)
+                    await binding.complete_approval(
+                        case,
+                        actor_name=responder,
+                        manager_comment=trimmed_comment,
+                    )
+                    row.status = "approved"
+                    meta = dict(case.workflow_metadata or {})
+                    meta["escalation_pending"] = False
+                    case.workflow_metadata = meta
+                    message = "Approved. Journal entry posted and submitter notified."
+                else:
+                    period_closed = reason_code == "PERIOD_CLOSED"
+                    await self._executive_mail.resume_after_manager_approve(
+                        case=case,
+                        escalation=row,
+                        actor_name=responder,
+                        override_po_check=reason_code != "PERIOD_CLOSED",
+                        override_gl_period=period_closed,
+                        gl_period_override_reason=trimmed_comment
+                        or "Manager approved GL period override",
+                        gl_period_posted_by=responder,
+                    )
+                    message = "Approved. Case requeued for processing and submitter notified."
 
         elif action == "reject":
             row.status = "rejected"
@@ -165,40 +182,106 @@ class EscalationService:
             row.manager_comment = trimmed_comment
             case = await self._cases.get(row.case_id)
             if case:
-                case.status = "rejected"
-                meta = dict(case.workflow_metadata or {})
-                meta["manager_decision"] = "rejected"
-                meta["escalation_pending"] = False
-                if trimmed_comment:
-                    meta["manager_comment"] = trimmed_comment
-                case.workflow_metadata = meta
-
-                email = await self._resolve_email(row, case)
-                error_reason = (row.context or {}).get("error_reason") or row.summary
-                if email is not None:
-                    await self._executive_mail.queue_submitter_rejection(
-                        case=case,
-                        email=email,
-                        reason=error_reason,
-                        manager_comment=trimmed_comment,
+                reason_code = row.reason_code or ""
+                if str(reason_code).startswith(BINDING_AUTHORITY_REASON_PREFIX):
+                    binding = BindingAuthorityService(self._session)
+                    await binding.reject_case(
+                        case,
+                        actor_name=responder,
+                        reason=trimmed_comment or row.summary,
                     )
+                    message = "Rejected. Submitter has been notified."
+                else:
+                    case.status = "rejected"
+                    meta = dict(case.workflow_metadata or {})
+                    meta["manager_decision"] = "rejected"
+                    meta["escalation_pending"] = False
+                    if trimmed_comment:
+                        meta["manager_comment"] = trimmed_comment
+                    case.workflow_metadata = meta
 
-                await self._executive_mail.log_step(
-                    action="manager_rejected",
-                    summary=f"[{case.case_number}] Manager rejected escalation",
-                    actor_type="manager",
-                    actor_name=responder,
-                    mailbox_id=row.originating_mailbox_id,
-                    case_id=case.id,
-                    email_id=email.id if email else None,
-                    metadata={
-                        "escalation_id": str(row.id),
-                        "manager_comment": trimmed_comment,
-                    },
-                )
-                message = "Rejected. Submitter has been notified."
+                    email = await self._resolve_email(row, case)
+                    error_reason = (row.context or {}).get("error_reason") or row.summary
+                    if email is not None:
+                        await self._executive_mail.queue_submitter_rejection(
+                            case=case,
+                            email=email,
+                            reason=error_reason,
+                            manager_comment=trimmed_comment,
+                        )
+
+                    await self._executive_mail.log_step(
+                        action="manager_rejected",
+                        summary=f"[{case.case_number}] Manager rejected escalation",
+                        actor_type="manager",
+                        actor_name=responder,
+                        mailbox_id=row.originating_mailbox_id,
+                        case_id=case.id,
+                        email_id=email.id if email else None,
+                        metadata={
+                            "escalation_id": str(row.id),
+                            "manager_comment": trimmed_comment,
+                        },
+                    )
+                    message = "Rejected. Submitter has been notified."
 
         elif action == "escalate":
+            case = await self._cases.get(row.case_id)
+            reason_code = row.reason_code or ""
+            if case and str(reason_code).startswith(BINDING_AUTHORITY_REASON_PREFIX):
+                binding = BindingAuthorityService(self._session)
+                await binding.escalate_tier2_to_cfo(
+                    case, actor_name=responder, comment=trimmed_comment
+                )
+                row.status = "escalated"
+                row.responded_at = now
+                row.responded_by_email = responder
+                row.manager_comment = trimmed_comment
+                child_id = uuid4()
+                wire, child_token_hash, expires = issue_escalation_token(
+                    escalation_id=child_id,
+                    case_id=row.case_id,
+                )
+                target_email = binding.target_email_for_tier(3)
+                target_mailbox = await self._repo.get_mailbox_by_email(target_email)
+                child = CaseEscalation(
+                    id=child_id,
+                    case_id=row.case_id,
+                    email_id=row.email_id,
+                    originating_mailbox_id=row.originating_mailbox_id,
+                    target_mailbox_id=target_mailbox.id if target_mailbox else None,
+                    target_email=target_email,
+                    parent_escalation_id=row.id,
+                    status="pending",
+                    reason_code=binding_reason_code(3),
+                    summary=row.summary,
+                    context=dict(row.context or {}),
+                    response_token_hash=child_token_hash,
+                    token_expires_at=expires,
+                )
+                await self._repo.create(child)
+                await self._executive_mail.dispatch_child_escalation(
+                    case=case,
+                    child=child,
+                    parent=row,
+                    wire_token=wire,
+                    manager_comment=trimmed_comment,
+                    responder_email=responder,
+                )
+                message = f"Escalated to {target_email}. A new email has been sent."
+                await self._session.commit()
+                return EscalationRespondResult(
+                    escalation_id=row.id,
+                    case_id=row.case_id,
+                    action=action,
+                    status=row.status,
+                    child_escalation_id=child_id,
+                    target_email=target_email,
+                    responded_at=row.responded_at or now,
+                    manager_comment=trimmed_comment,
+                    message=message,
+                )
+
             manager_mailbox = await self._repo.get_mailbox_by_email(row.target_email)
             if manager_mailbox is None or not manager_mailbox.escalation_manager_email:
                 raise AppHTTPException(

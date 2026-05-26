@@ -6,6 +6,8 @@ import re
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 
 class ConditionEvaluator:
     """Evaluates policy conditions against a case context (pure, no I/O)."""
@@ -140,3 +142,24 @@ class PolicyEngine:
         combined = dict(most_restrictive["action"])
         combined["risk_flags"] = sorted(all_flags)
         return combined
+
+    @staticmethod
+    async def evaluate_approval_tier(
+        session: AsyncSession,
+        *,
+        amount: Decimal | float,
+        confidence: float,
+        risk_flags: list[str] | None,
+        case_type: str,
+    ) -> int:
+        """Binding authority tier (1=STP, 2=Accounts Manager, 3=CFO) — `10` §7."""
+        from app.services.binding_authority_service import BindingAuthorityService
+
+        svc = BindingAuthorityService(session)
+        tier, _ = await svc.evaluate_tier(
+            amount=amount,
+            confidence=confidence,
+            risk_flags=risk_flags,
+            case_type=case_type,
+        )
+        return tier

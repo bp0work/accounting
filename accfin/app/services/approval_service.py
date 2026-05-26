@@ -15,11 +15,15 @@ from app.models.policy import Approval
 from app.repositories.approval import ApprovalRepository
 from app.repositories.case import CaseRepository
 from app.schemas.auth import TokenData
-from app.services.case_service import CaseService
 from app.services.audit_service import AuditService
+from app.services.binding_authority_service import BindingAuthorityService
+from app.services.case_service import CaseService
 from app.services.notification_dispatcher import NotificationDispatcher
 from app.services.event_bus import publish_user_event
 from fastapi import status
+
+TIER2_ROLES = frozenset({"accounts_clerk", "finance_officer"})
+EXECUTIVE_ROLES = frozenset({"cfo", "finance_manager"})
 
 
 class ApprovalService:
@@ -83,22 +87,37 @@ class ApprovalService:
         journal_entry_id: UUID | None = None,
     ) -> Approval:
         approval, case = await self._load_approval_case(approval_id)
-        self._ensure_can_act(approval, user)
+        self._ensure_can_act(approval, case, user)
         if approval.status != "pending":
             raise AppHTTPException(status.HTTP_409_CONFLICT, "ALREADY_RESPONDED", "Approval already responded")
 
-        approval.status = "approved"
-        approval.decided_at = datetime.now(UTC)
-        approval.comments = note or approval.comments
-        approval.approver_id = user.user_id
-        if journal_entry_id:
-            approval.journal_entry_id = journal_entry_id
+        meta = case.workflow_metadata or {}
+        if meta.get("binding_authority_pending") and case.status == "pending_approval":
+            binding = BindingAuthorityService(self._session)
+            jid = await binding.complete_approval(
+                case,
+                actor_name=user.username or str(user.user_id),
+                manager_comment=note,
+            )
+            approval.status = "approved"
+            approval.decided_at = datetime.now(UTC)
+            approval.comments = note or approval.comments
+            approval.approver_id = user.user_id
+            if jid:
+                approval.journal_entry_id = UUID(jid)
+        else:
+            approval.status = "approved"
+            approval.decided_at = datetime.now(UTC)
+            approval.comments = note or approval.comments
+            approval.approver_id = user.user_id
+            if journal_entry_id:
+                approval.journal_entry_id = journal_entry_id
 
-        await self._cases_service.transition_case(
-            case.id, "approved", user=user, context={"user": user, "policy_pass": True}
-        )
+            await self._cases_service.transition_case(
+                case.id, "approved", user=user, context={"user": user, "policy_pass": True}
+            )
+            await self._post_draft_journal(case.id, user.user_id)
 
-        await self._post_draft_journal(case.id, user.user_id)
         await self._session.flush()
 
         await publish_user_event(
@@ -132,19 +151,32 @@ class ApprovalService:
         return_to: str | None = "manual_review",
     ) -> Approval:
         approval, case = await self._load_approval_case(approval_id)
-        self._ensure_can_act(approval, user)
+        self._ensure_can_act(approval, case, user)
         if approval.status != "pending":
             raise AppHTTPException(status.HTTP_409_CONFLICT, "ALREADY_RESPONDED", "Approval already responded")
 
-        approval.status = "rejected"
-        approval.decided_at = datetime.now(UTC)
-        approval.comments = reason
+        meta = case.workflow_metadata or {}
+        if meta.get("binding_authority_pending") and case.status == "pending_approval":
+            binding = BindingAuthorityService(self._session)
+            await binding.reject_case(
+                case,
+                actor_name=user.username or str(user.user_id),
+                reason=reason,
+            )
+            approval.status = "rejected"
+            approval.decided_at = datetime.now(UTC)
+            approval.comments = reason
+            approval.approver_id = user.user_id
+        else:
+            approval.status = "rejected"
+            approval.decided_at = datetime.now(UTC)
+            approval.comments = reason
 
-        await self._cases_service.transition_case(
-            case.id, "rejected", user=user, context={"user": user, "policy_pass": True}
-        )
-        if return_to == "manual_review" and case.status == "rejected":
-            case.status = "manual_review"
+            await self._cases_service.transition_case(
+                case.id, "rejected", user=user, context={"user": user, "policy_pass": True}
+            )
+            if return_to == "manual_review" and case.status == "rejected":
+                case.status = "manual_review"
         await self._session.flush()
 
         await publish_user_event(
@@ -179,7 +211,63 @@ class ApprovalService:
             raise AppHTTPException(status.HTTP_404_NOT_FOUND, "CASE_NOT_FOUND", "Case not found")
         return approval, case
 
-    def _ensure_can_act(self, approval: Approval, user: TokenData) -> None:
+    async def escalate_to_cfo(
+        self,
+        approval_id: UUID,
+        user: TokenData,
+        *,
+        note: str | None = None,
+    ) -> Approval:
+        approval, case = await self._load_approval_case(approval_id)
+        self._ensure_can_act(approval, case, user, allow_escalate=True)
+        if approval.status != "pending":
+            raise AppHTTPException(status.HTTP_409_CONFLICT, "ALREADY_RESPONDED", "Approval already responded")
+        if approval.tier != 2:
+            raise AppHTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "INVALID_TIER",
+                "Only Tier 2 approvals can be escalated to CFO",
+            )
+
+        binding = BindingAuthorityService(self._session)
+        await binding.escalate_tier2_to_cfo(
+            case,
+            actor_name=user.username or str(user.user_id),
+            comment=note,
+        )
+        approval.tier = 3
+        approval.status = "pending"
+        approval.comments = note or approval.comments
+        await self._session.flush()
+
+        from workers.common.binding_authority_escalation import route_binding_authority_escalation
+
+        email = await self._cases.get_email(case.email_id) if case.email_id else None
+        extracted = (case.workflow_metadata or {}).get("extracted_fields") or {}
+        await route_binding_authority_escalation(
+            self._session,
+            case,
+            email=email,
+            tier=3,
+            amount=case.amount_value or Decimal("0"),
+            currency=case.amount_currency or "SGD",
+            extracted_fields=extracted if isinstance(extracted, dict) else None,
+            extraction_confidence=float(
+                (case.workflow_metadata or {}).get("extraction_confidence") or 0
+            ),
+            actor_name=user.username or "finance-ui",
+        )
+        await self._session.flush()
+        return approval
+
+    def _ensure_can_act(
+        self,
+        approval: Approval,
+        case,
+        user: TokenData,
+        *,
+        allow_escalate: bool = False,
+    ) -> None:
         if "approvals:approve" not in user.permissions and "approvals:admin" not in user.permissions:
             raise AppHTTPException(
                 status.HTTP_403_FORBIDDEN,
@@ -193,6 +281,30 @@ class ApprovalService:
                     "UNAUTHORIZED_APPROVER",
                     "You are not the designated approver",
                 )
+
+        role = (user.role_name or "").lower()
+        meta = case.workflow_metadata or {}
+        escalated = bool(meta.get("binding_escalated_to_cfo"))
+        tier = approval.tier
+
+        if allow_escalate:
+            if role not in TIER2_ROLES and "approvals:admin" not in user.permissions:
+                raise AppHTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    "FORBIDDEN",
+                    "Only Accounts Manager may escalate to CFO",
+                )
+            return
+
+        if role in EXECUTIVE_ROLES or "approvals:admin" in user.permissions:
+            return
+        if role in TIER2_ROLES and tier == 2 and not escalated:
+            return
+        raise AppHTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Your role cannot act on this approval tier",
+        )
 
     async def _post_draft_journal(self, case_id: UUID, user_id: UUID) -> None:
         result = await self._session.execute(

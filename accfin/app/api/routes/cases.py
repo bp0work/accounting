@@ -17,6 +17,7 @@ from app.core.exceptions import AppHTTPException
 from app.core.redis_client import get_redis
 from app.models.accounting_period import AccountingPeriod
 from app.models.mail import Email
+from app.models.policy import Approval
 from app.repositories.case import CaseRepository
 from app.repositories.policy import PolicyRepository
 from app.schemas.auth import TokenData
@@ -83,17 +84,29 @@ async def _linked_gl_period_status(session: AsyncSession, case) -> str | None:
     return period.status if period else None
 
 
+async def _pending_approval_id(session: AsyncSession, case_id: UUID) -> UUID | None:
+    result = await session.execute(
+        select(Approval.id)
+        .where(Approval.case_id == case_id, Approval.status == "pending")
+        .order_by(Approval.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 def _case_response(
     case,
     *,
     from_address: str | None = None,
     linked_gl_period_status: str | None = None,
+    pending_approval_id: UUID | None = None,
 ) -> CaseResponse:
     base = CaseResponse.model_validate(case)
     if from_address is None:
         meta = case.classification_metadata or {}
         fallback = meta.get("from_address")
         from_address = str(fallback) if fallback else None
+    wf = case.workflow_metadata or {}
     return base.model_copy(
         update={
             "from_address": from_address,
@@ -106,9 +119,12 @@ def _case_response(
             "error_reason": error_reason(case),
             "status_reason": status_reason(case),
             "last_activity_at": last_activity_at(case),
-            "workflow_metadata": case.workflow_metadata or {},
+            "workflow_metadata": wf,
             "classification_metadata": case.classification_metadata or {},
             "linked_gl_period_status": linked_gl_period_status,
+            "current_approval_tier": case.current_approval_tier,
+            "pending_approval_id": pending_approval_id,
+            "binding_escalated_to_cfo": bool(wf.get("binding_escalated_to_cfo")),
         }
     )
 
@@ -196,9 +212,13 @@ async def get_case(
     service = CaseService(session)
     case = await service.get_case(case_id)
     from_address = await _load_from_address(session, case)
+    pending_id = await _pending_approval_id(session, case_id)
     linked_gl = await _linked_gl_period_status(session, case)
     return _case_response(
-        case, from_address=from_address, linked_gl_period_status=linked_gl
+        case,
+        from_address=from_address,
+        linked_gl_period_status=linked_gl,
+        pending_approval_id=pending_id,
     )
 
 

@@ -40,6 +40,8 @@ from workers.common.policy_escalation import (
     route_po_mismatch_escalation,
     route_po_not_found_escalation,
 )
+from app.services.binding_authority_service import BindingAuthorityService, apply_binding_sla
+from workers.common.binding_authority_escalation import route_binding_authority_escalation
 from workers.common.gl_period_check import ensure_gl_period_allows_posting
 from workers.common.processing_failure import route_processing_failure
 
@@ -212,23 +214,29 @@ class APWorkerService:
             po_mismatch=match_status == "partial",
             warnings=inv.warnings,
         )
-        policy_action = self._policy.combine_results(
-            [
-                self._policy.evaluate_policy(
-                    {"rules": [], "default_action": {"type": "require_approval", "tier": 2}},
-                    {"case": {"amount_value": float(amount), "type": case.type}},
-                )
-            ]
-        )
-        tier = int(policy_action.get("tier", 2))
-        stp = message.get("stp_eligible", False) and policy_action.get("type") == "auto_release"
-        final_status = evaluate_extraction_path(
-            case_type="ap_invoice",
+        binding = BindingAuthorityService(self._session)
+        tier, thresholds = await binding.evaluate_tier(
+            amount=amount,
             confidence=float(extraction.confidence_score),
-            missing_fields=inv.missing_fields,
-            stp_eligible=stp,
             risk_flags=risk_flags,
+            case_type=case.type,
         )
+        apply_binding_sla(case, tier, thresholds)
+        confidence_f = float(extraction.confidence_score)
+        if has_critical_missing("ap_invoice", inv.missing_fields) or confidence_f < 0.70:
+            final_status = "manual_review"
+        elif tier == 1 and confidence_f >= thresholds.stp_confidence_minimum and not risk_flags:
+            final_status = "posted"
+        elif tier >= 2:
+            final_status = "pending_approval"
+        else:
+            final_status = evaluate_extraction_path(
+                case_type="ap_invoice",
+                confidence=confidence_f,
+                missing_fields=inv.missing_fields,
+                stp_eligible=False,
+                risk_flags=risk_flags,
+            )
 
         expense_code = resolve_expense_account_code(po.line_items if po else None)
 
@@ -303,6 +311,18 @@ class APWorkerService:
             await self._approvals.request_approval(
                 case_id=case.id, tier=tier, amount_value=amount, amount_currency=inv.currency
             )
+            if tier >= 2:
+                await route_binding_authority_escalation(
+                    self._session,
+                    case,
+                    email=email,
+                    tier=tier,
+                    amount=amount,
+                    currency=inv.currency or "SGD",
+                    extracted_fields=extracted,
+                    extraction_confidence=confidence_f,
+                    actor_name="ap-worker",
+                )
 
         if final_status == "manual_review":
             email = await self._email_for_case(case)

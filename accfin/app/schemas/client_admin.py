@@ -104,6 +104,33 @@ class AdminUserUpdate(BaseModel):
     display_name: str | None = None
 
 
+class BindingAuthorityThresholdsBody(BaseModel):
+    tier_1_ceiling: float | None = None
+    tier_2_ceiling: float | None = None
+    tier_3_threshold: float | None = None
+    stp_confidence_minimum: float | None = None
+    tier_2_sla_hours: int | None = None
+    tier_3_sla_hours: int | None = None
+
+
+class BindingAuthorityDocumentResponse(BaseModel):
+    document_key: str
+    label: str
+    thresholds: BindingAuthorityThresholdsBody
+
+
+class BindingAuthorityResponse(BaseModel):
+    ap_invoice: BindingAuthorityDocumentResponse
+    ar_invoice: BindingAuthorityDocumentResponse
+    expense_claim: BindingAuthorityDocumentResponse
+
+
+class BindingAuthorityUpdate(BaseModel):
+    ap_approval_thresholds: BindingAuthorityThresholdsBody | None = None
+    ar_approval_thresholds: BindingAuthorityThresholdsBody | None = None
+    expense_approval_thresholds: BindingAuthorityThresholdsBody | None = None
+
+
 class ExpensePolicyLimitsResponse(BaseModel):
     meal_limit_per_day: Decimal | None = None
     transport_limit_per_trip: Decimal | None = None

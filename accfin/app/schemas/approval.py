@@ -35,6 +35,7 @@ class ApprovalListItem(BaseModel):
     created_at: datetime
     responded_at: datetime | None = None
     response_note: str | None = None
+    binding_escalated_to_cfo: bool = False
 
 
 class ApprovalListResponse(BaseModel):
@@ -54,6 +55,10 @@ class RejectRequest(BaseModel):
     reason: str
     rejection_category: str | None = None
     return_to: str | None = "manual_review"
+
+
+class EscalateApprovalRequest(BaseModel):
+    note: str | None = None
 
 
 class ApprovalActionResponse(BaseModel):

@@ -39,7 +39,8 @@
         <a href="/chart-of-accounts">Chart of Accounts</a>
         <a href="/mailboxes">Mailboxes</a>
         <a href="/users">Users</a>
-        <a href="/policies">Travel &amp; Entertainment</a>
+        <a href="/policies">Policies</a>
+        <a href="/binding-authority">Binding Authority</a>
         <button type="button" class="link-btn" on:click={logout}>Logout</button>
       </nav>
     {/if}

@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.8-counterparty-accounts"
+        return "0.14.9-binding-authority"
 
     @property
     def edge_public_base_url(self) -> str:
