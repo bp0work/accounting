@@ -80,6 +80,7 @@ class ExtractedInvoice(BaseModel):
     subtotal: str | None = None
     total_amount: str | None = None
     tax_amount: str | None = None
+    tax_code: str | None = None
     currency: str = "SGD"
     payment_terms: str | None = None
     line_items: list[InvoiceLineItem] = Field(default_factory=list)

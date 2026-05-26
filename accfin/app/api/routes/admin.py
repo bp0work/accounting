@@ -8,7 +8,7 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
@@ -21,6 +21,7 @@ from app.core.exceptions import AppHTTPException
 from app.models.accounting_period import AccountingPeriod
 from app.models.gl_cutoff_reminder import GlCutoffReminder
 from app.models.agreements import DirectorExpenseAgreement, RentalAgreement
+from app.models.counterparty_master import PaymentTerm, TenantTaxCode
 from app.models.expense import ExpensePolicy
 from app.models.ledger import CoaAccount
 from app.models.mail import MailGatewayConfig
@@ -212,6 +213,14 @@ async def admin_dashboard(
         .where(GlCutoffReminder.tenant_id == tid, GlCutoffReminder.is_active.is_(True))
     )
     reminders_ok = (reminder_count or 0) > 0
+    terms_count = await session.scalar(
+        select(func.count()).select_from(PaymentTerm).where(PaymentTerm.is_active.is_(True))
+    )
+    tax_count = await session.scalar(
+        select(func.count()).select_from(TenantTaxCode).where(TenantTaxCode.is_active.is_(True))
+    )
+    terms_ok = (terms_count or 0) > 0
+    tax_ok = (tax_count or 0) > 0
 
     checks = [
         DashboardCheckItem(
@@ -234,6 +243,20 @@ async def admin_dashboard(
             complete=coa_n > 0,
             href="/chart-of-accounts",
             detail=f"{coa_n} active account(s)" if coa_n else "No accounts — import CSV",
+        ),
+        DashboardCheckItem(
+            section="payment_terms",
+            label="Payment terms",
+            complete=terms_ok,
+            href="/counterparty-accounts",
+            detail=f"{terms_count or 0} active term(s)" if terms_ok else "Configure payment terms catalog",
+        ),
+        DashboardCheckItem(
+            section="tax_codes",
+            label="GST / tax codes",
+            complete=tax_ok,
+            href="/counterparty-accounts",
+            detail=f"{tax_count or 0} active tax code(s)" if tax_ok else "Map tax codes to GL accounts",
         ),
         DashboardCheckItem(
             section="mailboxes",
@@ -1114,21 +1137,19 @@ async def patch_gl_cutoff_reminder(
     return GlCutoffReminderResponse.model_validate(row)
 
 
-@router.delete("/admin/gl-cutoff-reminders/{reminder_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/admin/gl-cutoff-reminders/{reminder_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_gl_cutoff_reminder(
     reminder_id: UUID,
     user: TokenData = Depends(require_client_admin()),
     session: AsyncSession = Depends(get_db_session),
-) -> None:
+) -> Response:
     tid = await _tenant_id(user, session)
     row = await session.get(GlCutoffReminder, reminder_id)
     if row is None or row.tenant_id != tid:
         raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Reminder not found")
     await session.delete(row)
     await session.commit()
-
-
-# --- Accounting periods ---
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/accounting-periods", response_model=list[AccountingPeriodResponse])

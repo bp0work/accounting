@@ -37,6 +37,7 @@
         <a href="/dashboard">Dashboard</a>
         <a href="/company">Company</a>
         <a href="/chart-of-accounts">Chart of Accounts</a>
+        <a href="/counterparty-accounts">Counterparty accounts</a>
         <a href="/mailboxes">Mailboxes</a>
         <a href="/users">Users</a>
         <a href="/policies">Travel &amp; Expense Policy</a>

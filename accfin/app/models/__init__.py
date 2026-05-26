@@ -3,6 +3,7 @@ from app.models.executive_mail import CaseEscalation, FinanceActivityLog, Pendin
 from app.models.expense import ExpenseClaim, ExpenseLineItem, ExpensePolicy
 from app.models.base import Base, TimestampMixin
 from app.models.case import Case, CaseAttachment, CaseNote, CaseTimeline, Counterparty
+from app.models.counterparty_master import CounterpartyAccount, PaymentTerm, TenantTaxCode
 from app.models.ledger import CoaAccount, JournalEntry, JournalEntryLine
 from app.models.purchase_order import PurchaseOrder
 from app.models.notification import Notification, NotificationTemplate, UserNotificationPreferences
@@ -33,6 +34,9 @@ __all__ = [
     "EmailAttachment",
     "MailGatewayConfig",
     "Counterparty",
+    "CounterpartyAccount",
+    "PaymentTerm",
+    "TenantTaxCode",
     "Case",
     "CaseTimeline",
     "CaseNote",

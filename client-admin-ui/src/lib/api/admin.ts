@@ -258,3 +258,47 @@ export function closeGlPeriod(
 export function reopenGlPeriod(periodId: string) {
   return apiFetch(`/accounting-periods/${periodId}/reopen`, { method: 'POST' });
 }
+
+export function listCounterparties(type?: string, q?: string) {
+  const params = new URLSearchParams();
+  if (type) params.set('type', type);
+  if (q) params.set('q', q);
+  const qs = params.toString();
+  return apiFetch<Array<Record<string, unknown>>>(`/counterparties${qs ? `?${qs}` : ''}`);
+}
+
+export function createCounterparty(body: Record<string, unknown>) {
+  return apiFetch('/counterparties', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function listCounterpartyAccounts(counterpartyId?: string, q?: string) {
+  const params = new URLSearchParams();
+  if (counterpartyId) params.set('counterparty_id', counterpartyId);
+  if (q) params.set('q', q);
+  const qs = params.toString();
+  return apiFetch<Array<Record<string, unknown>>>(`/counterparty-accounts${qs ? `?${qs}` : ''}`);
+}
+
+export function createCounterpartyAccount(body: Record<string, unknown>) {
+  return apiFetch('/counterparty-accounts', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function patchCounterpartyAccount(id: string, body: Record<string, unknown>) {
+  return apiFetch(`/counterparty-accounts/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function listPaymentTerms() {
+  return apiFetch<Array<Record<string, unknown>>>('/payment-terms');
+}
+
+export function createPaymentTerm(body: Record<string, unknown>) {
+  return apiFetch('/payment-terms', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function listTaxCodes() {
+  return apiFetch<Array<Record<string, unknown>>>('/tenant/tax-codes');
+}
+
+export function createTaxCode(body: Record<string, unknown>) {
+  return apiFetch('/tenant/tax-codes', { method: 'POST', body: JSON.stringify(body) });
+}

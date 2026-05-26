@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.6-email-signature"
+        return "0.14.8-counterparty-accounts"
 
     @property
     def edge_public_base_url(self) -> str:

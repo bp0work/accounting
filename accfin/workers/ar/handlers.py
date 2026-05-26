@@ -27,6 +27,7 @@ from app.schemas.hermes import (
 )
 from app.services.approval_service import ApprovalService
 from app.services.email_context import build_extraction_context
+from app.services.counterparty_intake import apply_intake_to_case
 from app.services.executive_mail_service import ExecutiveMailService
 from workers.ar.extraction import (
     compute_invoice_risk_flags,
@@ -121,6 +122,17 @@ class ARWorkerService:
         if inv is None:
             return await self._route_manual(case, "Empty extraction")
 
+        resolution = await apply_intake_to_case(
+            self._session,
+            case=case,
+            inv=inv,
+            tax_direction="output",
+            confidence=float(extraction.confidence_score),
+            document_type="ar_invoice",
+        )
+        if resolution.warnings:
+            inv.warnings = list(inv.warnings or []) + resolution.warnings
+
         recent = await self._recent_invoices(case.counterparty_id)
         dup = await self._hermes.check_duplicate(
             CheckDuplicateRequest(case_id=case.id, extracted_invoice=inv, recent_cases=recent)
@@ -187,11 +199,15 @@ class ARWorkerService:
         await self._start_processing(case)
         journal_id = None
         if final_status == "posted":
-            journal_id = await self._post_ar_invoice_journal(case, inv, amount, posted=True)
+            journal_id = await self._post_ar_invoice_journal(
+                case, inv, amount, posted=True, tax_gl_code=resolution.tax_gl_account_code
+            )
             case.status = "posted"
             case.completed_at = datetime.now(UTC)
         elif final_status == "pending_approval":
-            journal_id = await self._post_ar_invoice_journal(case, inv, amount, posted=False)
+            journal_id = await self._post_ar_invoice_journal(
+                case, inv, amount, posted=False, tax_gl_code=resolution.tax_gl_account_code
+            )
             case.status = "pending_approval"
         else:
             case.status = "manual_review"
@@ -410,11 +426,12 @@ class ARWorkerService:
         return rows
 
     async def _post_ar_invoice_journal(
-        self, case: Case, inv, amount: Decimal, *, posted: bool
+        self, case: Case, inv, amount: Decimal, *, posted: bool, tax_gl_code: str | None = None
     ) -> str:
         ar = await self._ledger.get_account_by_code("1300")
         rev = await self._ledger.get_account_by_code("4100")
-        gst = await self._ledger.get_account_by_code("2100")
+        gst_code = tax_gl_code or "2100"
+        gst = await self._ledger.get_account_by_code(gst_code)
         if not ar or not rev:
             case.status = "manual_review"
             case.workflow_metadata = {**(case.workflow_metadata or {}), "error_type": "ACCOUNT_NOT_FOUND"}

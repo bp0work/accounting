@@ -112,6 +112,19 @@ class APWorkerService:
         if inv is None:
             return await self._route_manual(case, "Empty extraction")
 
+        from app.services.counterparty_intake import apply_intake_to_case
+
+        resolution = await apply_intake_to_case(
+            self._session,
+            case=case,
+            inv=inv,
+            tax_direction="input",
+            confidence=float(extraction.confidence_score),
+            document_type="ap_invoice",
+        )
+        if resolution.warnings:
+            inv.warnings = list(inv.warnings or []) + resolution.warnings
+
         override_po = bool(
             message.get("override_po_check")
             or (case.workflow_metadata or {}).get("override_po_check")
@@ -241,13 +254,23 @@ class APWorkerService:
         journal_id = None
         if final_status == "posted":
             journal_id = await self._post_ap_invoice_journal(
-                case, inv, amount, expense_code=expense_code, posted=True
+                case,
+                inv,
+                amount,
+                expense_code=expense_code,
+                posted=True,
+                tax_gl_code=resolution.tax_gl_account_code,
             )
             case.status = "posted"
             case.completed_at = datetime.now(UTC)
         elif final_status == "pending_approval":
             journal_id = await self._post_ap_invoice_journal(
-                case, inv, amount, expense_code=expense_code, posted=False
+                case,
+                inv,
+                amount,
+                expense_code=expense_code,
+                posted=False,
+                tax_gl_code=resolution.tax_gl_account_code,
             )
             case.status = "pending_approval"
         else:
@@ -464,9 +487,11 @@ class APWorkerService:
         *,
         expense_code: str,
         posted: bool,
+        tax_gl_code: str | None = None,
     ) -> str | None:
         expense = await self._ledger.get_account_by_code(expense_code)
-        gst_in = await self._ledger.get_account_by_code("1190")
+        gst_code = tax_gl_code or "1190"
+        gst_in = await self._ledger.get_account_by_code(gst_code)
         creditors = await self._ledger.get_account_by_code("2000")
         if not expense or not creditors:
             case.status = "manual_review"

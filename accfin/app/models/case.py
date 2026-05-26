@@ -98,6 +98,9 @@ class Case(Base, TimestampMixin):
     counterparty_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("counterparty.id"), nullable=True
     )
+    counterparty_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("counterparty_accounts.id"), nullable=True
+    )
     counterparty_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     amount_value: Mapped[Decimal | None] = mapped_column(Numeric(19, 4), nullable=True)
     amount_currency: Mapped[str] = mapped_column(CHAR(3), server_default="SGD")

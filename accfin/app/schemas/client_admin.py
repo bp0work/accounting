@@ -320,3 +320,148 @@ class GlPeriodOverridePostResponse(BaseModel):
     period_id: str
     message_id: str
     status: str
+
+
+class CounterpartyResponse(BaseModel):
+    id: UUID
+    name: str
+    code: str | None = None
+    type: str
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    address: str | None = None
+    is_recurring: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class CounterpartyCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    code: str | None = Field(default=None, max_length=50)
+    type: str = Field(pattern="^(customer|supplier|employee|bank|other)$")
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    address: str | None = None
+    is_recurring: bool = False
+
+
+class CounterpartyUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    code: str | None = Field(default=None, max_length=50)
+    type: str | None = Field(default=None, pattern="^(customer|supplier|employee|bank|other)$")
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    address: str | None = None
+    is_recurring: bool | None = None
+
+
+class PaymentTermResponse(BaseModel):
+    id: UUID
+    code: str
+    label: str
+    due_days: int
+    discount_percent: Decimal | None = None
+    discount_if_paid_within_days: int | None = None
+    minimum_invoice_amount: Decimal | None = None
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PaymentTermCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=30)
+    label: str = Field(min_length=1, max_length=100)
+    due_days: int = Field(ge=0)
+    discount_percent: Decimal | None = None
+    discount_if_paid_within_days: int | None = Field(default=None, ge=0)
+    minimum_invoice_amount: Decimal | None = None
+
+
+class PaymentTermUpdate(BaseModel):
+    label: str | None = Field(default=None, max_length=100)
+    due_days: int | None = Field(default=None, ge=0)
+    discount_percent: Decimal | None = None
+    discount_if_paid_within_days: int | None = Field(default=None, ge=0)
+    minimum_invoice_amount: Decimal | None = None
+    is_active: bool | None = None
+
+
+class CounterpartyAccountResponse(BaseModel):
+    id: UUID
+    counterparty_id: UUID
+    counterparty_name: str | None = None
+    account_code: str
+    display_name: str
+    role: str
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    address: str | None = None
+    payment_term_id: UUID | None = None
+    payment_term_code: str | None = None
+    credit_limit_amount: Decimal | None = None
+    credit_limit_currency: str | None = None
+    counterparty_gst_reg: str | None = None
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CounterpartyAccountCreate(BaseModel):
+    counterparty_id: UUID
+    account_code: str = Field(min_length=1, max_length=50)
+    display_name: str = Field(min_length=1, max_length=255)
+    role: str = Field(default="bill_to", max_length=30)
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    address: str | None = None
+    payment_term_id: UUID | None = None
+    credit_limit_amount: Decimal | None = None
+    credit_limit_currency: str | None = Field(default="SGD", max_length=3)
+    counterparty_gst_reg: str | None = Field(default=None, max_length=20)
+
+
+class CounterpartyAccountUpdate(BaseModel):
+    display_name: str | None = Field(default=None, max_length=255)
+    role: str | None = Field(default=None, max_length=30)
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    address: str | None = None
+    payment_term_id: UUID | None = None
+    credit_limit_amount: Decimal | None = None
+    credit_limit_currency: str | None = Field(default=None, max_length=3)
+    counterparty_gst_reg: str | None = Field(default=None, max_length=20)
+    is_active: bool | None = None
+
+
+class TenantTaxCodeResponse(BaseModel):
+    id: UUID
+    code: str
+    description: str
+    rate: Decimal
+    direction: str
+    output_gl_account_code: str | None = None
+    input_gl_account_code: str | None = None
+    is_active: bool
+    effective_from: date | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class TenantTaxCodeCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=20)
+    description: str = Field(min_length=1, max_length=200)
+    rate: Decimal = Field(ge=0, le=1)
+    direction: str = Field(pattern="^(output|input|both)$")
+    output_gl_account_code: str | None = Field(default=None, max_length=20)
+    input_gl_account_code: str | None = Field(default=None, max_length=20)
+    effective_from: date | None = None
+
+
+class TenantTaxCodeUpdate(BaseModel):
+    description: str | None = Field(default=None, max_length=200)
+    rate: Decimal | None = Field(default=None, ge=0, le=1)
+    direction: str | None = Field(default=None, pattern="^(output|input|both)$")
+    output_gl_account_code: str | None = Field(default=None, max_length=20)
+    input_gl_account_code: str | None = Field(default=None, max_length=20)
+    is_active: bool | None = None
+    effective_from: date | None = None
