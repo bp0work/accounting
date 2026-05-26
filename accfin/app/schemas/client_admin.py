@@ -61,6 +61,13 @@ class CoaAccountUpdate(BaseModel):
     description: str | None = None
 
 
+class CoaImportResponse(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    active_count: int
+
+
 class MailConfigurationResponse(BaseModel):
     id: UUID
     email_address: str

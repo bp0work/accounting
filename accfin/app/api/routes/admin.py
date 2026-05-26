@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.core.dependencies import (
@@ -54,6 +54,7 @@ from app.schemas.client_admin import (
     CoaAccountCreate,
     CoaAccountResponse,
     CoaAccountUpdate,
+    CoaImportResponse,
     CoaStatusResponse,
     DashboardCheckItem,
     DashboardResponse,
@@ -415,43 +416,89 @@ async def patch_coa(
     return CoaAccountResponse.model_validate(row)
 
 
-@router.post("/coa/import")
+_VALID_COA_TYPES = frozenset({"asset", "liability", "equity", "revenue", "expense"})
+
+
+async def _resolve_parent_id(session: AsyncSession, parent_code: str) -> UUID | None:
+    if not parent_code:
+        return None
+    pres = await session.execute(select(CoaAccount).where(CoaAccount.account_code == parent_code))
+    parent = pres.scalar_one_or_none()
+    return parent.id if parent else None
+
+
+@router.post("/coa/import", response_model=CoaImportResponse)
 async def import_coa_csv(
     file: UploadFile = File(...),
+    replace_all: bool = Query(
+        False,
+        description="Deactivate all existing accounts, then load CSV (tenant chart replaces demo seed)",
+    ),
     _user: TokenData = Depends(require_client_admin()),
     session: AsyncSession = Depends(get_db_session),
-) -> dict:
+) -> CoaImportResponse:
     content = (await file.read()).decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(content))
     required = {"account_code", "account_name", "account_type"}
-    if not required.issubset({h.strip() for h in (reader.fieldnames or [])}):
+    if not required.issubset({(h or "").strip() for h in (reader.fieldnames or [])}):
         raise AppHTTPException(status.HTTP_400_BAD_REQUEST, "INVALID_CSV", f"CSV must include {required}")
-    created = 0
-    for row in reader:
+
+    if replace_all:
+        await session.execute(update(CoaAccount).values(is_active=False))
+
+    created = updated = skipped = 0
+    rows = list(reader)
+    if not rows:
+        raise AppHTTPException(status.HTTP_400_BAD_REQUEST, "INVALID_CSV", "CSV has no data rows")
+
+    for row in rows:
         code = (row.get("account_code") or "").strip()
         if not code:
+            skipped += 1
             continue
-        existing = await session.execute(select(CoaAccount).where(CoaAccount.account_code == code))
-        if existing.scalar_one_or_none():
+        name = (row.get("account_name") or "").strip()
+        if not name:
+            skipped += 1
             continue
-        parent_id = None
-        pc = (row.get("parent_code") or "").strip()
-        if pc:
-            pres = await session.execute(select(CoaAccount).where(CoaAccount.account_code == pc))
-            p = pres.scalar_one_or_none()
-            if p:
-                parent_id = p.id
-        session.add(
-            CoaAccount(
-                account_code=code,
-                account_name=(row.get("account_name") or "").strip(),
-                account_type=(row.get("account_type") or "expense").strip(),
-                parent_id=parent_id,
+        acct_type = (row.get("account_type") or "expense").strip().lower()
+        if acct_type not in _VALID_COA_TYPES:
+            skipped += 1
+            continue
+
+        parent_id = await _resolve_parent_id(session, (row.get("parent_code") or "").strip())
+        existing = (
+            await session.execute(select(CoaAccount).where(CoaAccount.account_code == code))
+        ).scalar_one_or_none()
+
+        if existing:
+            existing.account_name = name
+            existing.account_type = acct_type
+            existing.parent_id = parent_id
+            existing.is_active = True
+            updated += 1
+        else:
+            session.add(
+                CoaAccount(
+                    account_code=code,
+                    account_name=name,
+                    account_type=acct_type,
+                    parent_id=parent_id,
+                    is_active=True,
+                )
             )
-        )
-        created += 1
+            created += 1
+
     await session.commit()
-    return {"imported": created}
+
+    active_count = await session.scalar(
+        select(func.count()).select_from(CoaAccount).where(CoaAccount.is_active.is_(True))
+    )
+    return CoaImportResponse(
+        created=created,
+        updated=updated,
+        skipped=skipped,
+        active_count=active_count or 0,
+    )
 
 
 # --- Mail configuration ---

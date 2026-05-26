@@ -43,17 +43,30 @@ export function patchCoa(id: string, body: Record<string, unknown>) {
   return apiFetch(`/coa/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
-export async function importCoaCsv(file: File) {
+export async function importCoaCsv(file: File, replaceAll = false) {
   const token = localStorage.getItem('client_admin_access_token');
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch('/api/coa/import', {
+  const q = replaceAll ? '?replace_all=true' : '';
+  const res = await fetch(`/api/coa/import${q}`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
   });
-  if (!res.ok) throw new Error('Import failed');
-  return res.json();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg =
+      typeof body?.error?.message === 'string'
+        ? body.error.message
+        : `Import failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<{
+    created: number;
+    updated: number;
+    skipped: number;
+    active_count: number;
+  }>;
 }
 
 export function listMailboxes() {

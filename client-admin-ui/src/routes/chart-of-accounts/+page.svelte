@@ -10,6 +10,8 @@
   let empty = true;
   let q = '';
   let error = '';
+  let msg = '';
+  let replaceAllOnImport = true;
   let code = '';
   let name = '';
   let type = 'expense';
@@ -17,7 +19,7 @@
     const status = await fetchCoaStatus();
     accountCount = status.account_count;
     empty = status.empty;
-    items = empty && !q ? [] : await listCoa(q || undefined);
+    items = await listCoa(q || undefined);
   }
   onMount(async () => {
     if (!(await ensureValidAccessToken())) return;
@@ -36,8 +38,17 @@
   async function onCsv(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
-    await importCoaCsv(f);
-    await load();
+    error = '';
+    msg = '';
+    try {
+      const result = await importCoaCsv(f, replaceAllOnImport);
+      msg = `Import complete: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped. ${result.active_count} active account(s).`;
+      await load();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Import failed';
+    } finally {
+      (e.target as HTMLInputElement).value = '';
+    }
   }
   async function deactivate(id: string) {
     await patchCoa(id, { is_active: false });
@@ -49,11 +60,16 @@
 </script>
 <h1>Chart of accounts</h1>
 {#if error}<p class="err">{error}</p>{/if}
+{#if msg}<p class="ok">{msg}</p>{/if}
 
 {#if empty}
   <div class="banner">
     <strong>Chart of accounts is not configured.</strong>
     <p>Import your COA via CSV to enable posting and approvals. Required columns: <code>account_code</code>, <code>account_name</code>, <code>account_type</code> (optional <code>parent_code</code>).</p>
+    <label class="replace">
+      <input type="checkbox" bind:checked={replaceAllOnImport} />
+      Replace entire chart (recommended — removes any demo accounts and loads only this file)
+    </label>
     <label class="upload-btn">
       Upload CSV
       <input type="file" accept=".csv" on:change={onCsv} hidden />
@@ -64,7 +80,11 @@
   <div class="card">
     <label>Search <input bind:value={q} on:keydown={(e) => e.key === 'Enter' && search()} placeholder="Code or name" /></label>
     <button type="button" on:click={search}>Search</button>
-    <label class="csv-label">Import more (CSV) <input type="file" accept=".csv" on:change={onCsv} /></label>
+    <label class="replace">
+      <input type="checkbox" bind:checked={replaceAllOnImport} />
+      Replace entire chart on import
+    </label>
+    <label class="csv-label">Import (CSV) <input type="file" accept=".csv" on:change={onCsv} /></label>
   </div>
 {/if}
 
@@ -82,7 +102,7 @@
   <button type="button" on:click={add}>Add</button>
 </div>
 
-{#if !empty || items.length > 0}
+{#if items.length > 0}
   <table>
     <thead><tr><th>Code</th><th>Name</th><th>Type</th><th></th></tr></thead>
     <tbody>
@@ -105,4 +125,6 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e2e8f0; }
   .err { color: #b91c1c; }
+  .ok { color: #15803d; margin-bottom: 0.5rem; }
+  .replace { display: block; margin: 0.5rem 0; font-size: 0.875rem; }
 </style>
