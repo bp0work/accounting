@@ -35,6 +35,8 @@
   let saCode = $state('');
   let saName = $state('');
   let saTermId = $state('');
+  let saCreditLimit = $state('');
+  let saCreditCurrency = $state('SGD');
 
   let termCode = $state('');
   let termLabel = $state('');
@@ -84,18 +86,30 @@
     }
   }
 
+  function formatCredit(row: Record<string, unknown>) {
+    const amt = row.credit_limit_amount;
+    if (amt == null || amt === '') return '—';
+    const cur = String(row.credit_limit_currency ?? 'SGD');
+    const n = Number(amt);
+    return Number.isFinite(n) ? `${n.toLocaleString()} ${cur}` : `${amt} ${cur}`;
+  }
+
   async function addSubaccount() {
     error = '';
     msg = '';
     try {
+      const creditTrim = saCreditLimit.trim();
       await createCounterpartyAccount({
         counterparty_id: saCounterpartyId,
         account_code: saCode,
         display_name: saName,
         payment_term_id: saTermId || null,
+        credit_limit_amount: creditTrim ? creditTrim : null,
+        credit_limit_currency: creditTrim ? saCreditCurrency || 'SGD' : null,
       });
       saCode = '';
       saName = '';
+      saCreditLimit = '';
       msg = 'Subaccount created';
       await loadAll();
     } catch (e) {
@@ -152,7 +166,10 @@
 </script>
 
 <h1>Counterparty accounts</h1>
-<p class="hint">Subaccounts, payment terms, and GST mapping (`0.14.8`). Subaccount codes are not COA accounts.</p>
+<p class="hint">
+  Subaccounts, payment terms (due days), and GST mapping (`0.14.8`). Subaccount codes are not COA accounts.
+  <strong>Credit limits</strong> are set per customer/supplier subaccount (Subaccounts tab), not on the payment-terms catalog.
+</p>
 
 {#if error}<p class="error">{error}</p>{/if}
 {#if msg}<p class="msg">{msg}</p>{/if}
@@ -184,6 +201,7 @@
 
   <section>
     <h2>Subaccounts</h2>
+    <p class="hint">Due days come from the payment-terms catalog; maximum credit exposure is set here per subaccount.</p>
     <div class="row">
       <select bind:value={saCounterpartyId}>
         {#each counterparties as cp}
@@ -192,17 +210,29 @@
       </select>
       <input bind:value={saCode} placeholder="Account code" maxlength="50" />
       <input bind:value={saName} placeholder="Display name" />
-      <select bind:value={saTermId}>
-        <option value="">Default terms</option>
+      <select bind:value={saTermId} title="Due days (NET30, etc.)">
+        <option value="">Payment terms</option>
         {#each terms as t}
-          <option value={String(t.id)}>{t.code} ({t.due_days}d)</option>
+          <option value={String(t.id)}>{t.code} ({t.due_days} days)</option>
         {/each}
+      </select>
+      <input
+        bind:value={saCreditLimit}
+        placeholder="Credit limit amount"
+        inputmode="decimal"
+        title="Maximum outstanding amount allowed for this customer/supplier"
+      />
+      <select bind:value={saCreditCurrency} title="Credit limit currency">
+        <option value="SGD">SGD</option>
+        <option value="USD">USD</option>
+        <option value="EUR">EUR</option>
+        <option value="MYR">MYR</option>
       </select>
       <button type="button" onclick={addSubaccount}>Add subaccount</button>
     </div>
     <table>
       <thead>
-        <tr><th>Code</th><th>Name</th><th>Parent</th><th>Terms</th><th>Active</th><th></th></tr>
+        <tr><th>Code</th><th>Name</th><th>Parent</th><th>Terms</th><th>Credit limit</th><th>Active</th><th></th></tr>
       </thead>
       <tbody>
         {#each subaccounts as row}
@@ -211,6 +241,7 @@
             <td>{row.display_name}</td>
             <td>{row.counterparty_name}</td>
             <td>{row.payment_term_code ?? '—'}</td>
+            <td>{formatCredit(row)}</td>
             <td>{row.is_active ? 'Yes' : 'No'}</td>
             <td>
               {#if row.is_active}
@@ -225,6 +256,10 @@
 {:else if tab === 'terms'}
   <section>
     <h2>Payment terms catalog</h2>
+    <p class="hint">
+      Defines <strong>due days</strong> (and optional discounts) for invoices. To set how much credit a
+      <strong>customer</strong> may run up to, use the Subaccounts tab — credit limit is per subaccount, not per term code.
+    </p>
     <div class="row">
       <input bind:value={termCode} placeholder="Code e.g. NET45" />
       <input bind:value={termLabel} placeholder="Label" />
