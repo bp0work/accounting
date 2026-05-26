@@ -12,6 +12,7 @@ COPY workers ./workers
 COPY gateway ./gateway
 COPY migrations ./migrations
 COPY alembic.ini ./
+COPY tests ./tests
 
 RUN pip install --no-cache-dir -e ".[dev]"
 
