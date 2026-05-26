@@ -164,6 +164,7 @@ async def test_uat_013_due_date_from_payment_terms(db_session) -> None:
 @pytest.mark.integration
 async def test_uat_014_gst_uses_tenant_tax_codes(db_session) -> None:
     """UAT-014: journal path resolves GL from tenant_tax_codes."""
+    tax_code = f"GST9UAT{uuid4().hex[:6].upper()}"
     out_code = f"GSTOUT-{uuid4().hex[:4]}"
     in_code = f"GSTIN-{uuid4().hex[:4]}"
     db_session.add(
@@ -174,7 +175,7 @@ async def test_uat_014_gst_uses_tenant_tax_codes(db_session) -> None:
     )
     db_session.add(
         TenantTaxCode(
-            code="GST9",
+            code=tax_code,
             description="Standard 9%",
             rate=Decimal("0.09"),
             direction="both",
@@ -189,40 +190,44 @@ async def test_uat_014_gst_uses_tenant_tax_codes(db_session) -> None:
     code, source, gl = await resolve_tax_gl(
         db_session,
         direction="output",
-        tax_code_hint="GST9",
+        tax_code_hint=tax_code,
         tax_amount=Decimal("9.00"),
     )
-    assert code == "GST9"
+    assert code == tax_code
     assert source == "extracted"
     assert gl == out_code
 
 
-class _UAT15Hermes:
-    async def extract_invoice(self, request: ExtractInvoiceRequest) -> ExtractInvoiceResponse:
-        return ExtractInvoiceResponse(
-            confidence_score=0.95,
-            output=ExtractedInvoice(
-                invoice_number="INV-E2E",
-                invoice_date=date(2026, 5, 10),
-                due_date=None,
-                payment_terms="NET30",
-                total_amount="1090.00",
-                tax_amount="90.00",
-                tax_code="GST9",
-                currency="SGD",
-                customer_name=request.customer_hint,
-            ),
-        )
+def _uat15_hermes(tax_code: str):
+    class _UAT15Hermes:
+        async def extract_invoice(self, request: ExtractInvoiceRequest) -> ExtractInvoiceResponse:
+            return ExtractInvoiceResponse(
+                confidence_score=0.95,
+                output=ExtractedInvoice(
+                    invoice_number="INV-E2E",
+                    invoice_date=date(2026, 5, 10),
+                    due_date=None,
+                    payment_terms="NET30",
+                    total_amount="1090.00",
+                    tax_amount="90.00",
+                    tax_code=tax_code,
+                    currency="SGD",
+                    customer_name=request.customer_hint,
+                ),
+            )
 
-    async def check_duplicate(self, request: CheckDuplicateRequest) -> CheckDuplicateResponse:
-        from agents.hermes.extract import check_duplicate_stub
+        async def check_duplicate(self, request: CheckDuplicateRequest) -> CheckDuplicateResponse:
+            from agents.hermes.extract import check_duplicate_stub
 
-        return check_duplicate_stub(request)
+            return check_duplicate_stub(request)
+
+    return _UAT15Hermes()
 
 
 @pytest.mark.integration
 async def test_uat_015_e2e_ar_intake_with_subaccount_and_tax(db_session) -> None:
     """UAT-015: subaccount + terms + tax_resolution on AR invoice path."""
+    tax_code = f"GST9UAT{uuid4().hex[:6].upper()}"
     out_gl = f"2100UAT-{uuid4().hex[:3]}"
     db_session.add(
         CoaAccount(account_code=out_gl, account_name="GST Payable", account_type="liability")
@@ -231,7 +236,7 @@ async def test_uat_015_e2e_ar_intake_with_subaccount_and_tax(db_session) -> None
     db_session.add(CoaAccount(account_code="4100", account_name="Revenue", account_type="revenue"))
     db_session.add(
         TenantTaxCode(
-            code="GST9",
+            code=tax_code,
             description="9%",
             rate=Decimal("0.09"),
             direction="output",
@@ -279,7 +284,7 @@ async def test_uat_015_e2e_ar_intake_with_subaccount_and_tax(db_session) -> None
     )
     await db_session.commit()
 
-    worker = ARWorkerService(db_session, hermes=_UAT15Hermes())
+    worker = ARWorkerService(db_session, hermes=_uat15_hermes(tax_code))
     result = await worker.handle_ar_invoice(
         {"case_id": str(case.id), "case_type": "ar_invoice", "stp_eligible": True}
     )
