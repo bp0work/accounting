@@ -604,7 +604,7 @@ Finance UI case detail shows resolved subaccount, term, tax code, and `tax_amoun
 
 **Navigation (header, `0.14.11`):** Dashboard | Company | Chart of Accounts | Users | Policies | **Binding Authority** | Logout
 
-> **Mailboxes removed from header nav (`0.14.11-admin-ui-cleanup`, planned).** The `/mailboxes` route page (§8.14) and the underlying `/mail/configuration` APIs (`05` §8.6 / §8.8) are preserved for ad-hoc access; only the top-nav entry and the corresponding dashboard tile are removed. Mailbox identity, IMAP/SMTP credential rotation, and Approve-outbound-to-client toggles remain a Client Admin responsibility — they are simply no longer in the day-to-day nav surface.
+> **Mailboxes removed from header nav (`0.14.12-admin-ui-cleanup`, planned).** The `/mailboxes` route page (§8.14) and the underlying `/mail/configuration` APIs (`05` §8.6 / §8.8) are preserved for ad-hoc access; only the top-nav entry and the corresponding dashboard tile are removed. Mailbox identity, IMAP/SMTP credential rotation, and Approve-outbound-to-client toggles remain a Client Admin responsibility — they are simply no longer in the day-to-day nav surface.
 
 | Route | Section |
 | ----- | ------- |
@@ -617,7 +617,7 @@ Finance UI case detail shows resolved subaccount, term, tax code, and `tax_amoun
 
 **Removed from Client Admin (`e73c869`):** `/counterparty-accounts`, `/agreements`, `/accounting-calendar`, `/travel-info`, `/travel-requests` — see finance-ui §8.22–§8.24.
 
-**Removed from Client Admin nav & dashboard (`0.14.11-admin-ui-cleanup`, planned):** `/mailboxes` tab entry. Dashboard tiles deleted: `payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders`. The `users` tile is relabelled **"Key Roles Email (Uses)"**.
+**Removed from Client Admin nav & dashboard (`0.14.12-admin-ui-cleanup`, planned):** `/mailboxes` tab entry. Dashboard tiles deleted: `payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders`. The `users` tile is relabelled **"Key Roles Email (Uses)"**.
 
 **Post-MVP UI:** `/branding` (logo upload screen).
 
@@ -630,7 +630,7 @@ Client Admin **cannot** edit their own login email here — that is Platform Adm
 
 ### 8.14 Mailboxes (Client Admin UI — `/mailboxes`)
 
-> **Nav surface (`0.14.11-admin-ui-cleanup`, planned):** No longer a top-nav entry in `client-admin-ui`. The route page and `/mail/configuration` APIs are preserved and remain reachable via direct URL `https://admin.mmlogistix.bp0.work/mailboxes`. Mailbox display-name and Approve-outbound-to-client maintenance is occasional rather than daily, so it is removed from the day-to-day nav surface but not the application.
+> **Nav surface (`0.14.12-admin-ui-cleanup`, planned):** No longer a top-nav entry in `client-admin-ui`. The route page and `/mail/configuration` APIs are preserved and remain reachable via direct URL `https://admin.mmlogistix.bp0.work/mailboxes`. Mailbox display-name and Approve-outbound-to-client maintenance is occasional rather than daily, so it is removed from the day-to-day nav surface but not the application.
 
 **Purpose:** Configure operational mailboxes per `01` §3.2 and §6.8 and `17` §10. Executives use automated listeners; **manager** mailboxes (`acc`, `fin`, `cfo`, `ceo`) are human-monitored only.
 
@@ -1702,7 +1702,7 @@ Future revisions may add embedded analytics, mobile push, or richer notification
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 2.32 | 2026-05-27 | **`0.14.11-admin-ui-cleanup` (planned).** §8.13 Client Admin nav trimmed: Mailboxes removed from header. Dashboard tiles deleted: `payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders` — these belong to finance-ui (§8.22–§8.24). `users` tile relabelled "Key Roles Email (Uses)". §8.14 Mailboxes screen still documented (route preserved; direct URL only). |
+| 2.32 | 2026-05-27 | **`0.14.12-admin-ui-cleanup` (planned).** §8.13 Client Admin nav trimmed: Mailboxes removed from header. Dashboard tiles deleted: `payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders` — these belong to finance-ui (§8.22–§8.24). `users` tile relabelled "Key Roles Email (Uses)". §8.14 Mailboxes screen still documented (route preserved; direct URL only). |
 | 2.31 | 2026-05-26 | **`0.14.9-binding-authority`.** §8.25 Client Admin `/binding-authority`; §8.13 nav + Policies label; §8.21 binding approval panel; §2.1a approvals tabs (queue/history/cases). `05` §4.16d.14. |
 | 2.30 | 2026-05-20 | **Finance UI setup screens (`e73c869`).** §8.22–§8.24 on finance.mmlogistix; §8.23 agreements; §8.13 Client Admin nav trimmed (no travel, no counterparty/calendar). §3.1 routes + header nav. |
 | 2.29 | 2026-05-20 | **§8.22 subaccount inline edit.** Active rows: Edit/Save/Cancel for `payment_term_id` + credit limit via `PATCH /api/counterparty-accounts/{id}` (`9b0662e`). |
