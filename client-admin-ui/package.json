@@ -1,6 +1,6 @@
 {
   "name": "client-admin-ui",
-  "version": "0.14.8-counterparty-accounts",
+  "version": "0.14.12-mailboxes-table",
   "private": true,
   "type": "module",
   "scripts": {
