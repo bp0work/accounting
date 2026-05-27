@@ -40,7 +40,6 @@ from workers.ap.extraction import (
     compute_ap_invoice_risk_flags,
     evaluate_extraction_path,
     has_critical_missing,
-    invoice_extracted_fields_from_inv,
     resolve_expense_account_code,
 )
 from workers.common.ap_validation import (
