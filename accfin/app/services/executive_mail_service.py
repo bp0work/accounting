@@ -833,6 +833,7 @@ class ExecutiveMailService:
         override_gl_period: bool = False,
         gl_period_override_reason: str | None = None,
         gl_period_posted_by: str | None = None,
+        ap_step_override_key: str | None = None,
     ) -> str | None:
         """Step 3: re-enqueue for reprocessing after manager approval."""
         meta = dict(case.workflow_metadata or {})
@@ -848,6 +849,10 @@ class ExecutiveMailService:
             meta["manager_comment"] = escalation.manager_comment
         if override_po_check:
             meta["override_po_check"] = True
+        if ap_step_override_key:
+            overrides = dict(meta.get("ap_step_overrides") or {})
+            overrides[ap_step_override_key] = True
+            meta["ap_step_overrides"] = overrides
         if override_gl_period:
             meta["gl_period_override"] = True
             meta["gl_period_override_reason"] = gl_period_override_reason or escalation.manager_comment or "Manager approved GL period override"
@@ -855,7 +860,7 @@ class ExecutiveMailService:
             meta.pop("error_type", None)
             meta.pop("reason_code", None)
         case.workflow_metadata = meta
-        case.status = "classified"
+        case.status = "validation" if ap_step_override_key else "classified"
 
         email = None
         if case.email_id:

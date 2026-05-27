@@ -58,3 +58,31 @@ async def flush_outbound_mail(
     sent = await OutboundMailService(session).flush_approved()
     await session.commit()
     return {"sent": sent}
+
+
+@router.post("/gl-batch-post")
+async def gl_batch_post(
+    _: None = Depends(_verify_cron_token),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Post approved draft journal entries to GL; close completed AP cases.
+
+    Runs at UTC 04:00 and 10:00 (SGT 12:00 and 18:00).
+    """
+    from app.services.gl_batch_post_service import GlBatchPostService
+
+    return await GlBatchPostService(session).run()
+
+
+@router.post("/manual-review-sla")
+async def manual_review_sla(
+    _: None = Depends(_verify_cron_token),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Escalate manual_review cases that have exceeded the 24-hour SLA.
+
+    Runs at UTC 00:00 (SGT 08:00).
+    """
+    from app.services.manual_review_sla_service import ManualReviewSlaService
+
+    return await ManualReviewSlaService(session).run()

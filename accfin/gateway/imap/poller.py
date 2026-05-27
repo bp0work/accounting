@@ -11,11 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.crypto import decrypt_field
 from app.core.database import get_session_factory
+from app.models.executive_mail import PendingOutboundEmail
 from app.models.mail import Email, MailGatewayConfig
+from app.repositories.case import CaseRepository
 from app.repositories.mail import MailRepository
+from app.services.executive_mail_service import ExecutiveMailService
 from app.services.mail.ingest import MailIngestService
 from app.services.mail.intake_queue import enqueue_intake
 from app.services.mail.parser import parse_rfc822
+from app.services.outbound_mail_service import OutboundMailService
+from app.services.queue_router import enqueue_accounts
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +67,84 @@ def _fetch_unseen(settings: MailboxImapSettings) -> list[bytes]:
             messages.append(fetched[0][1])
     client.logout()
     return messages
+
+
+async def _handle_resubmission(
+    session: AsyncSession,
+    email: Email,
+    mailbox: MailGatewayConfig,
+) -> None:
+    """Re-enqueue the linked case and ack the sender for a resubmission email."""
+    cases_repo = CaseRepository(session)
+    case = await cases_repo.get(email.linked_case_id)
+    if case is None:
+        email.linked_case_id = None
+        await session.flush()
+        return
+
+    await enqueue_accounts(
+        case_id=case.id,
+        case_type=case.type,
+        case_number=case.case_number,
+        email_id=email.id,
+        priority=case.priority or "medium",
+        stp_eligible=bool(case.stp_eligible),
+        confidence_score=float(case.confidence_score or 0),
+        source="resubmission",
+    )
+
+    await cases_repo.add_timeline(
+        case_id=case.id,
+        event_type="resubmission_received",
+        from_status=case.status,
+        to_status=case.status,
+        actor="mail-gateway",
+        description=f"Resubmission from {email.from_address} — email_id {email.id}",
+        metadata={"email_id": str(email.id), "from_address": email.from_address},
+    )
+
+    exec_svc = ExecutiveMailService(session)
+    mailbox_cfg = await exec_svc.get_mailbox_for_address(mailbox.email_address)
+    if mailbox_cfg and ExecutiveMailService.is_external_sender(email.from_address):
+        subject = f"[{case.case_number}] We received your resubmission"
+        body = (
+            f"Thank you for your resubmission. We have received your updated document "
+            f"and re-queued it for review under existing reference {case.case_number}.\n\n"
+            f"Original subject: {email.subject or '(no subject)'}"
+        )
+        outbound = PendingOutboundEmail(
+            case_id=case.id,
+            email_id=email.id,
+            mailbox_id=mailbox_cfg.id,
+            to_addresses=[email.from_address],
+            cc_addresses=[],
+            subject=subject,
+            body_plain=body,
+            message_type="other",
+            status="approved",
+            metadata_={
+                "template": "mail.resubmission.acknowledged",
+                "case_number": case.case_number,
+            },
+        )
+        session.add(outbound)
+        await session.flush()
+        outbound_svc = OutboundMailService(session)
+        await outbound_svc.try_send_pending(outbound, source_email=email)
+
+    email.status = "processed"
+    email.processed_at = datetime.now(UTC)
+
+    await exec_svc.log_step(
+        action="resubmission_received",
+        summary=f"[{case.case_number}] Resubmission received from {email.from_address}",
+        actor_type="system",
+        actor_name="mail-gateway",
+        case_id=case.id,
+        email_id=email.id,
+        metadata={"from_address": email.from_address},
+    )
+    await session.flush()
 
 
 async def _enqueue_intake_for_email(
@@ -115,7 +198,10 @@ async def _poll_mailbox_in_session(
     for raw in raw_messages:
         parsed = parse_rfc822(raw, mailbox_address=mailbox.email_address)
         email = await ingest.ingest(mailbox=mailbox, parsed=parsed)
-        await _enqueue_intake_for_email(session, email, mailbox.email_address)
+        if email.linked_case_id is not None:
+            await _handle_resubmission(session, email, mailbox)
+        else:
+            await _enqueue_intake_for_email(session, email, mailbox.email_address)
         processed += 1
 
     mailbox.last_poll_at = datetime.now(UTC)

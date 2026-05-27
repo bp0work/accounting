@@ -85,6 +85,9 @@ class Email(Base):
     attachment_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     case_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     case_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    linked_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="SET NULL"), nullable=True
+    )
     processing_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

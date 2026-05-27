@@ -1,17 +1,42 @@
 """Fetch → normalize → dedupe → persist → enqueue — Phase 3 pipeline."""
 
+import re
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.case import Case
 from app.models.mail import Email, EmailAttachment, MailGatewayConfig
 from app.services.attachment_text import extract_attachment_text_sync, sanitize_extracted_text
+from app.services.case_metrics import TERMINAL_STATUSES
 from app.services.executive_mail_service import ExecutiveMailService
 from app.services.mail.dedup import EmailDedupService
 from app.services.mail.parser import ParsedEmail
 from app.services.mail.storage import save_attachment
 from app.services.mail.text_sanitize import sanitize_text as _sanitize_text
+
+_CASE_ID_RE = re.compile(r"\bCAS-\d{8}-\d{4}\b")
+
+
+async def _find_linked_case(
+    session: AsyncSession,
+    subject: str | None,
+    body: str | None,
+) -> Case | None:
+    """Return the live case referenced in subject/body, or None."""
+    combined = " ".join(filter(None, [subject or "", body or ""]))
+    m = _CASE_ID_RE.search(combined)
+    if not m:
+        return None
+    result = await session.execute(
+        select(Case).where(Case.case_number == m.group())
+    )
+    case = result.scalar_one_or_none()
+    if case is None or case.status in TERMINAL_STATUSES:
+        return None
+    return case
 
 
 def _sanitize_parsed(parsed: ParsedEmail) -> ParsedEmail:
@@ -126,6 +151,13 @@ class MailIngestService:
 
         email.attachment_count = count
         await self._session.flush()
+
+        linked = await _find_linked_case(
+            self._session, parsed.subject, parsed.body_text
+        )
+        if linked is not None:
+            email.linked_case_id = linked.id
+            await self._session.flush()
 
         await self._executive_mail.log_step(
             action="email_received",

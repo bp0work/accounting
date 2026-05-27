@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 
 from app.models.case import Case
 
-TERMINAL_STATUSES = frozenset({"posted", "completed", "rejected"})
+TERMINAL_STATUSES = frozenset({"posted", "completed", "rejected", "case_closed", "case_rejected"})
 
 
 def processing_time_minutes(case: Case, *, now: datetime | None = None) -> int | None:
