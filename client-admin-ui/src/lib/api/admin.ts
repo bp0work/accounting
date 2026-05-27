@@ -71,12 +71,32 @@ export async function importCoaCsv(file: File, replaceAll = false) {
   }>;
 }
 
-export function listMailboxes() {
-  return apiFetch<Array<Record<string, unknown>>>('/mail/configuration');
+export type MailboxConfig = {
+  id: string;
+  email_address: string;
+  display_name: string | null;
+  role: string | null;
+  mailbox_mode: string;
+  escalation_manager_email: string | null;
+  is_active: boolean;
+  username_masked?: string | null;
+  server_host?: string | null;
+};
+
+export type MailboxConfigUpdate = {
+  display_name?: string | null;
+  escalation_manager_email?: string | null;
+};
+
+export function listMailboxes(): Promise<MailboxConfig[]> {
+  return apiFetch<MailboxConfig[]>('/mail/configuration');
 }
 
-export function patchMailbox(id: string, body: Record<string, unknown>) {
-  return apiFetch(`/mail/configuration/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+export function patchMailbox(id: string, body: MailboxConfigUpdate): Promise<MailboxConfig> {
+  return apiFetch<MailboxConfig>(`/mail/configuration/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
 }
 
 export function listRoleUsers() {

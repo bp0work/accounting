@@ -4,46 +4,59 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ensureValidAccessToken } from '$lib/api/client';
-  import { listMailboxes, patchMailbox } from '$lib/api/admin';
+  import {
+    listMailboxes,
+    patchMailbox,
+    type MailboxConfig,
+    type MailboxConfigUpdate,
+  } from '$lib/api/admin';
 
-  type Mailbox = {
-    id: string;
-    email_address: string;
-    display_name: string | null;
-    role: string | null;
-    mailbox_mode: string;
-    escalation_manager_email: string | null;
-    is_active: boolean;
-    username_masked?: string;
-    server_host?: string;
+  type Row = MailboxConfig & {
+    display_name_input: string;
+    escalation_input: string;
+    saving: boolean;
   };
 
-  let items: Mailbox[] = [];
+  let rows: Row[] = [];
   let error = '';
   let msg = '';
-  let savingId = '';
+  let loading = true;
 
-  const dirty: Record<string, { display_name?: string; escalation_manager_email?: string }> = {};
-
-  $: executives = items.filter((m) => m.mailbox_mode === 'executive_agent');
-  $: managers = items.filter((m) => m.mailbox_mode === 'manager_human');
+  $: executives = rows.filter((m) => m.mailbox_mode === 'executive_agent');
+  $: managers = rows.filter((m) => m.mailbox_mode === 'manager_human');
 
   onMount(async () => {
-    if (!(await ensureValidAccessToken())) return;
-    try {
-      const rows = await listMailboxes();
-      items = (rows as Mailbox[]).slice().sort(sortMailboxes);
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Load failed';
+    if (!(await ensureValidAccessToken())) {
+      error = 'Not signed in';
+      loading = false;
+      return;
     }
+    await reload();
   });
 
-  function sortMailboxes(a: Mailbox, b: Mailbox): number {
-    const order = (m: Mailbox) => {
-      if (m.mailbox_mode === 'executive_agent') return 0;
-      if (m.mailbox_mode === 'manager_human') return 1;
-      return 2;
-    };
+  async function reload() {
+    error = '';
+    loading = true;
+    try {
+      const items = await listMailboxes();
+      rows = items
+        .slice()
+        .sort(sortMailboxes)
+        .map((m) => ({
+          ...m,
+          display_name_input: m.display_name ?? '',
+          escalation_input: m.escalation_manager_email ?? '',
+          saving: false,
+        }));
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Load failed';
+    } finally {
+      loading = false;
+    }
+  }
+
+  function sortMailboxes(a: MailboxConfig, b: MailboxConfig): number {
+    const order = (m: MailboxConfig) => (m.mailbox_mode === 'executive_agent' ? 0 : 1);
     const cmp = order(a) - order(b);
     if (cmp !== 0) return cmp;
     return a.email_address.localeCompare(b.email_address);
@@ -55,40 +68,43 @@
     return mode;
   }
 
-  function onDisplayNameInput(m: Mailbox, value: string) {
-    m.display_name = value;
-    dirty[m.id] = { ...(dirty[m.id] ?? {}), display_name: value };
+  function rowIsDirty(row: Row): boolean {
+    const dn = row.display_name_input.trim();
+    const es = row.escalation_input.trim();
+    const currentDn = (row.display_name ?? '').trim();
+    const currentEs = (row.escalation_manager_email ?? '').trim();
+    return dn !== currentDn || es !== currentEs;
   }
 
-  function onEscalationInput(m: Mailbox, value: string) {
-    const normalised = value.trim();
-    m.escalation_manager_email = normalised || null;
-    dirty[m.id] = { ...(dirty[m.id] ?? {}), escalation_manager_email: normalised };
-  }
-
-  async function save(m: Mailbox) {
-    const changes = dirty[m.id];
-    if (!changes || Object.keys(changes).length === 0) {
-      msg = 'No changes for ' + m.email_address;
+  async function save(row: Row) {
+    if (!rowIsDirty(row)) {
+      msg = 'No changes for ' + row.email_address;
       return;
     }
-    savingId = m.id;
-    msg = '';
     error = '';
+    msg = '';
+    row.saving = true;
+    rows = rows;
+    const body: MailboxConfigUpdate = {};
+    const dn = row.display_name_input.trim();
+    const es = row.escalation_input.trim();
+    if (dn !== (row.display_name ?? '').trim()) body.display_name = dn;
+    if (es !== (row.escalation_manager_email ?? '').trim()) {
+      body.escalation_manager_email = es || null;
+    }
     try {
-      await patchMailbox(m.id, changes);
-      delete dirty[m.id];
-      msg = 'Saved ' + m.email_address;
+      const updated = await patchMailbox(row.id, body);
+      row.display_name = updated.display_name;
+      row.escalation_manager_email = updated.escalation_manager_email;
+      row.display_name_input = updated.display_name ?? '';
+      row.escalation_input = updated.escalation_manager_email ?? '';
+      msg = 'Saved ' + row.email_address;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Save failed';
     } finally {
-      savingId = '';
+      row.saving = false;
+      rows = rows;
     }
-  }
-
-  function isDirty(id: string): boolean {
-    const d = dirty[id];
-    return !!d && Object.keys(d).length > 0;
   }
 </script>
 
@@ -103,107 +119,119 @@
 {#if error}<p class="err">{error}</p>{/if}
 {#if msg}<p class="ok">{msg}</p>{/if}
 
-<section>
-  <h2>Executive Agent Mailboxes</h2>
-  {#if executives.length === 0}
-    <p class="empty">No executive agent mailboxes configured.</p>
-  {:else}
-    <table>
-      <thead>
-        <tr>
-          <th>Mailbox address</th>
-          <th>Type</th>
-          <th>Display name</th>
-          <th>Escalation email</th>
-          <th>Active</th>
-          <th class="actions-col">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each executives as m (m.id)}
+{#if loading}
+  <p class="empty">Loading mailboxes…</p>
+{:else}
+  <section>
+    <h2>Executive Agent Mailboxes</h2>
+    {#if executives.length === 0}
+      <p class="empty">No executive agent mailboxes configured.</p>
+    {:else}
+      <table>
+        <thead>
           <tr>
-            <td class="addr"><code>{m.email_address}</code>{#if m.role}<div class="role">{m.role}</div>{/if}</td>
-            <td><span class="badge type">{typeLabel(m.mailbox_mode)}</span></td>
-            <td>
-              <input
-                type="text"
-                value={m.display_name ?? ''}
-                on:input={(e) => onDisplayNameInput(m, (e.currentTarget as HTMLInputElement).value)}
-              />
-            </td>
-            <td>
-              <input
-                type="email"
-                value={m.escalation_manager_email ?? ''}
-                placeholder="manager@bp0.work"
-                on:input={(e) => onEscalationInput(m, (e.currentTarget as HTMLInputElement).value)}
-              />
-            </td>
-            <td><span class="badge {m.is_active ? 'active' : 'inactive'}">{m.is_active ? 'Active' : 'Inactive'}</span></td>
-            <td class="actions-col">
-              <button
-                type="button"
-                on:click={() => save(m)}
-                disabled={!isDirty(m.id) || savingId === m.id}
-              >{savingId === m.id ? 'Saving…' : 'Save'}</button>
-            </td>
+            <th>Mailbox address</th>
+            <th>Type</th>
+            <th>Display name</th>
+            <th>Escalation email</th>
+            <th>Active</th>
+            <th class="actions-col">Actions</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-</section>
+        </thead>
+        <tbody>
+          {#each executives as row, i (row.id)}
+            {@const idx = rows.indexOf(row)}
+            <tr>
+              <td class="addr">
+                <code>{row.email_address}</code>
+                {#if row.role}<div class="role">{row.role}</div>{/if}
+              </td>
+              <td><span class="badge type">{typeLabel(row.mailbox_mode)}</span></td>
+              <td>
+                <input type="text" bind:value={rows[idx].display_name_input} />
+              </td>
+              <td>
+                <input
+                  type="email"
+                  placeholder="manager@bp0.work"
+                  bind:value={rows[idx].escalation_input}
+                />
+              </td>
+              <td>
+                <span class="badge {row.is_active ? 'active' : 'inactive'}"
+                  >{row.is_active ? 'Active' : 'Inactive'}</span
+                >
+              </td>
+              <td class="actions-col">
+                <button
+                  type="button"
+                  on:click={() => save(row)}
+                  disabled={row.saving || !rowIsDirty(row)}
+                  >{row.saving ? 'Saving…' : 'Save'}</button
+                >
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  </section>
 
-<section>
-  <h2>Manager Mailboxes</h2>
-  {#if managers.length === 0}
-    <p class="empty">No manager mailboxes configured.</p>
-  {:else}
-    <table>
-      <thead>
-        <tr>
-          <th>Mailbox address</th>
-          <th>Type</th>
-          <th>Display name</th>
-          <th>Escalation email</th>
-          <th>Active</th>
-          <th class="actions-col">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each managers as m (m.id)}
+  <section>
+    <h2>Manager Mailboxes</h2>
+    {#if managers.length === 0}
+      <p class="empty">No manager mailboxes configured.</p>
+    {:else}
+      <table>
+        <thead>
           <tr>
-            <td class="addr"><code>{m.email_address}</code>{#if m.role}<div class="role">{m.role}</div>{/if}</td>
-            <td><span class="badge type">{typeLabel(m.mailbox_mode)}</span></td>
-            <td>
-              <input
-                type="text"
-                value={m.display_name ?? ''}
-                on:input={(e) => onDisplayNameInput(m, (e.currentTarget as HTMLInputElement).value)}
-              />
-            </td>
-            <td>
-              <input
-                type="email"
-                value={m.escalation_manager_email ?? ''}
-                placeholder="manager@bp0.work"
-                on:input={(e) => onEscalationInput(m, (e.currentTarget as HTMLInputElement).value)}
-              />
-            </td>
-            <td><span class="badge {m.is_active ? 'active' : 'inactive'}">{m.is_active ? 'Active' : 'Inactive'}</span></td>
-            <td class="actions-col">
-              <button
-                type="button"
-                on:click={() => save(m)}
-                disabled={!isDirty(m.id) || savingId === m.id}
-              >{savingId === m.id ? 'Saving…' : 'Save'}</button>
-            </td>
+            <th>Mailbox address</th>
+            <th>Type</th>
+            <th>Display name</th>
+            <th>Escalation email</th>
+            <th>Active</th>
+            <th class="actions-col">Actions</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-</section>
+        </thead>
+        <tbody>
+          {#each managers as row, i (row.id)}
+            {@const idx = rows.indexOf(row)}
+            <tr>
+              <td class="addr">
+                <code>{row.email_address}</code>
+                {#if row.role}<div class="role">{row.role}</div>{/if}
+              </td>
+              <td><span class="badge type">{typeLabel(row.mailbox_mode)}</span></td>
+              <td>
+                <input type="text" bind:value={rows[idx].display_name_input} />
+              </td>
+              <td>
+                <input
+                  type="email"
+                  placeholder="manager@bp0.work"
+                  bind:value={rows[idx].escalation_input}
+                />
+              </td>
+              <td>
+                <span class="badge {row.is_active ? 'active' : 'inactive'}"
+                  >{row.is_active ? 'Active' : 'Inactive'}</span
+                >
+              </td>
+              <td class="actions-col">
+                <button
+                  type="button"
+                  on:click={() => save(row)}
+                  disabled={row.saving || !rowIsDirty(row)}
+                  >{row.saving ? 'Saving…' : 'Save'}</button
+                >
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  </section>
+{/if}
 
 <style>
   h1 { margin: 0 0 0.5rem; }
