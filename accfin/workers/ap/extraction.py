@@ -5,14 +5,16 @@ from __future__ import annotations
 from decimal import Decimal
 
 CRITICAL_FIELDS: dict[str, frozenset[str]] = {
+    # AP Process document Step 1 mandatory fields
     "ap_invoice": frozenset(
         {
             "vendor_name",
-            "invoice_number",
+            "invoice_number",   # document_number
             "total_amount",
-            "invoice_date",
+            "invoice_date",     # document_date
             "due_date",
-            "currency",
+            "payment_terms",
+            # document_type defaults to "invoice" when absent — not treated as missing
         }
     ),
     "ap_po_validation": frozenset({"po_reference", "total_amount", "vendor_name"}),

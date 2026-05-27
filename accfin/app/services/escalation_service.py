@@ -24,6 +24,17 @@ from app.services.binding_authority_service import (
 )
 from app.services.executive_mail_service import ExecutiveMailService
 
+# Mirrors AP_OVERRIDE_KEYS in workers.ap.handlers — kept here to avoid circular import
+_AP_STEP_OVERRIDE_KEYS: dict[str, str] = {
+    "AP_PARSING_INCOMPLETE":    "override_parsing",
+    "AP_DUPLICATE_FOUND":       "override_duplicate",
+    "AP_VENDOR_INACTIVE":       "override_vendor_inactive",
+    "AP_PAYMENT_TERMS_MISMATCH": "override_payment_terms",
+    "AP_CONTRACT_MISSING":      "override_contract",
+    "AP_SENDER_NOT_VALIDATED":  "override_sender_validation",
+    "AP_COA_NOT_FOUND":         "override_coa_not_found",
+}
+
 
 class EscalationService:
     def __init__(self, session: AsyncSession) -> None:
@@ -162,16 +173,18 @@ class EscalationService:
                     case.workflow_metadata = meta
                     message = "Approved. Journal entry posted and submitter notified."
                 else:
+                    ap_override_key = _AP_STEP_OVERRIDE_KEYS.get(str(reason_code))
                     period_closed = reason_code == "PERIOD_CLOSED"
                     await self._executive_mail.resume_after_manager_approve(
                         case=case,
                         escalation=row,
                         actor_name=responder,
-                        override_po_check=reason_code != "PERIOD_CLOSED",
+                        override_po_check=not period_closed,
                         override_gl_period=period_closed,
                         gl_period_override_reason=trimmed_comment
                         or "Manager approved GL period override",
                         gl_period_posted_by=responder,
+                        ap_step_override_key=ap_override_key,
                     )
                     message = "Approved. Case requeued for processing and submitter notified."
 
@@ -192,7 +205,8 @@ class EscalationService:
                     )
                     message = "Rejected. Submitter has been notified."
                 else:
-                    case.status = "rejected"
+                    is_ap_step = str(reason_code) in _AP_STEP_OVERRIDE_KEYS
+                    case.status = "case_rejected" if is_ap_step else "rejected"
                     meta = dict(case.workflow_metadata or {})
                     meta["manager_decision"] = "rejected"
                     meta["escalation_pending"] = False

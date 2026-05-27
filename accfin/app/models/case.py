@@ -47,6 +47,7 @@ class Counterparty(Base, TimestampMixin):
     contract_expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     supplier_owner: Mapped[str | None] = mapped_column(Text, nullable=True)
     contract_warning_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("30"))
+    payment_terms: Mapped[str | None] = mapped_column(String(20), nullable=True)
     extra_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
 
 
@@ -78,6 +79,14 @@ _CASE_STATUS = ENUM(
     "exception",
     "manual_review",
     "on_hold",
+    # AP workflow statuses (migration 062)
+    "validation",
+    "case_rejected",
+    "journal_entry_created",
+    "journal_pending_approval",
+    "journal_posted",
+    "case_closed",
+    "validation_completed",
     name="case_status",
     create_type=False,
 )
