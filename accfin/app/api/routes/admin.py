@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date
-from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
@@ -13,7 +12,6 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
-from app.core.config import get_settings
 from app.core.dependencies import (
     require_client_admin,
     require_finance_setup_access,
@@ -24,8 +22,6 @@ from app.core.exceptions import AppHTTPException
 from app.models.accounting_period import AccountingPeriod
 from app.models.gl_cutoff_reminder import GlCutoffReminder
 from app.models.agreements import DirectorExpenseAgreement, RentalAgreement
-from app.models.case import Counterparty
-from app.models.counterparty_master import PaymentTerm, TenantTaxCode
 from app.models.expense import ExpensePolicy
 from app.models.ledger import CoaAccount
 from app.models.mail import MailGatewayConfig
@@ -155,28 +151,6 @@ def _period_year_month_add(year: int, month: int, offset: int) -> tuple[int, int
     return total // 12, (total % 12) + 1
 
 
-async def _calendar_complete(session: AsyncSession, tid: UUID) -> tuple[bool, str]:
-    today = date.today()
-    y, m = today.year, today.month
-    missing: list[str] = []
-    for offset in range(13):
-        py, pm = _period_year_month_add(y, m, offset)
-        exists = await session.scalar(
-            select(func.count())
-            .select_from(AccountingPeriod)
-            .where(
-                AccountingPeriod.tenant_id == tid,
-                AccountingPeriod.period_year == py,
-                AccountingPeriod.period_month == pm,
-            )
-        )
-        if not exists:
-            missing.append(f"{py}-{pm:02d}")
-    if not missing:
-        return True, "Current month and next 12 months generated"
-    return False, f"Missing periods: {', '.join(missing[:3])}{'…' if len(missing) > 3 else ''}"
-
-
 # --- Dashboard ---
 
 
@@ -186,18 +160,11 @@ async def admin_dashboard(
     session: AsyncSession = Depends(get_db_session),
 ) -> DashboardResponse:
     tid = await _tenant_id(user, session)
-    finance_ui = get_settings().edge_public_base_url
     profile = await session.get(TenantProfile, tid)
     coa_count = await session.scalar(
         select(func.count()).select_from(CoaAccount).where(CoaAccount.is_active.is_(True))
     )
     coa_n = coa_count or 0
-    mailboxes = (
-        await session.execute(
-            select(MailGatewayConfig).where(MailGatewayConfig.is_active.is_(True))
-        )
-    ).scalars().all()
-    mail_unconfigured = [m.email_address for m in mailboxes if not _nonempty(m.display_name)]
     users_by_role: dict[str, User] = {}
     user_rows = await session.execute(
         select(User, Role)
@@ -218,35 +185,6 @@ async def admin_dashboard(
         _nonempty(profile.email_signature_html) or _nonempty(profile.email_signature_plain)
     )
     limits_ok = await _has_expense_limits(session)
-    cal_ok, cal_detail = await _calendar_complete(session, tid)
-    reminder_count = await session.scalar(
-        select(func.count())
-        .select_from(GlCutoffReminder)
-        .where(GlCutoffReminder.tenant_id == tid, GlCutoffReminder.is_active.is_(True))
-    )
-    reminders_ok = (reminder_count or 0) > 0
-    terms_count = await session.scalar(
-        select(func.count()).select_from(PaymentTerm).where(PaymentTerm.is_active.is_(True))
-    )
-    tax_count = await session.scalar(
-        select(func.count()).select_from(TenantTaxCode).where(TenantTaxCode.is_active.is_(True))
-    )
-    terms_ok = (terms_count or 0) > 0
-    tax_ok = (tax_count or 0) > 0
-
-    today = date.today()
-    expiring_until = today + timedelta(days=30)
-    expiring_contracts = await session.scalar(
-        select(func.count())
-        .select_from(Counterparty)
-        .where(
-            Counterparty.type.in_(("vendor", "supplier")),
-            Counterparty.contract_expiry_date.is_not(None),
-            Counterparty.contract_expiry_date >= today,
-            Counterparty.contract_expiry_date <= expiring_until,
-        )
-    )
-    expiring_n = expiring_contracts or 0
 
     checks = [
         DashboardCheckItem(
@@ -271,38 +209,8 @@ async def admin_dashboard(
             detail=f"{coa_n} active account(s)" if coa_n else "No accounts — import CSV",
         ),
         DashboardCheckItem(
-            section="payment_terms",
-            label="Payment terms",
-            complete=terms_ok,
-            href=f"{finance_ui}/counterparty-accounts",
-            detail=f"{terms_count or 0} active term(s)" if terms_ok else "Configure payment terms catalog",
-        ),
-        DashboardCheckItem(
-            section="tax_codes",
-            label="GST / tax codes",
-            complete=tax_ok,
-            href=f"{finance_ui}/counterparty-accounts",
-            detail=f"{tax_count or 0} active tax code(s)" if tax_ok else "Map tax codes to GL accounts",
-        ),
-        DashboardCheckItem(
-            section="vendor_contracts",
-            label="Vendor contracts (expiry warnings)",
-            complete=expiring_n == 0,
-            href=f"{finance_ui}/counterparty-accounts",
-            detail=None if expiring_n == 0 else f"{expiring_n} vendor contract(s) expiring within 30 days",
-        ),
-        DashboardCheckItem(
-            section="mailboxes",
-            label="Mailboxes",
-            complete=len(mail_unconfigured) == 0 and len(mailboxes) > 0,
-            href="/mailboxes",
-            detail="All mailboxes have display names"
-            if not mail_unconfigured
-            else f"Missing display name: {', '.join(mail_unconfigured[:2])}",
-        ),
-        DashboardCheckItem(
             section="users",
-            label="Key role emails",
+            label="Key Roles Email (Uses)",
             complete=len(missing_roles) == 0,
             href="/users",
             detail="CEO, CFO, Finance Manager, Accounts Manager configured"
@@ -331,22 +239,6 @@ async def admin_dashboard(
             detail="All five documents uploaded"
             if not reg_missing
             else f"Missing: {', '.join(reg_missing)}",
-        ),
-        DashboardCheckItem(
-            section="calendar",
-            label="Accounting calendar",
-            complete=cal_ok,
-            href=f"{finance_ui}/accounting-calendar",
-            detail=cal_detail,
-        ),
-        DashboardCheckItem(
-            section="gl_reminders",
-            label="GL reminder recipients",
-            complete=reminders_ok,
-            href=f"{finance_ui}/accounting-calendar",
-            detail=f"{reminder_count or 0} active recipient(s)"
-            if reminders_ok
-            else "Add at least one active reminder recipient",
         ),
     ]
     complete = sum(1 for c in checks if c.complete)
