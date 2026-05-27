@@ -2,7 +2,7 @@
 
 # Project Overview
 
-## Version 2.64
+## Version 2.67
 
 ## Filename: 00_Project_Overview.md
 
@@ -621,6 +621,7 @@ Each phase is considered complete when:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.67 | 2026-05-27 | **`0.14.11-admin-ui-cleanup` (planned).** Client Admin dashboard pruned to seven tenant-bootstrap sections (company, signature, COA, key roles email uses, travel policy PDF, expense limits, regulatory). Six finance-domain tiles moved out of Client Admin (`payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders` — all owned by finance-ui §8.22–§8.24). Mailboxes nav tab removed; `/mailboxes` page preserved at direct URL. `05` v1.3.25 §4.16d.1; `11` v2.53 §4.5l; `15` v2.32 §8.13/§8.14. |
 | 2.65 | 2026-05-26 | **`0.14.9-binding-authority` shipped.** `10` §7 tiers in workers; `11` §4.5k; `05` v1.3.24; `15` v2.31; `16` v2.7 — migration `060`, Client Admin thresholds, finance role approval queues. |
 | 2.66 | 2026-05-27 | **`0.14.10-counterparty-fixes` shipped.** Reactivate inactive subaccounts on `/counterparty-accounts`; add vendor contract fields + expiry warning badge and Client Admin dashboard warning. Migration `061`; config version bumped to `0.14.10`. |
 | 2.64 | 2026-05-20 | **Finance UI setup screens.** `15` v2.30, `05` v1.3.23, `11` v2.51 — counterparty/agreements/calendar on finance.mmlogistix; Client Admin travel tab removed (`e73c869`). |

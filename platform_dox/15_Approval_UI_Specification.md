@@ -2,7 +2,7 @@
 
 # Approval UI Specification
 
-## Version 2.30
+## Version 2.32
 
 ## Filename: 15_Approval_UI_Specification.md
 
@@ -602,19 +602,22 @@ Finance UI case detail shows resolved subaccount, term, tax code, and `tax_amoun
 
 **Login:** `system.mmlogistix@bp0.work` (seed) — **`client_admin`** role only (tenant bootstrap, not day-to-day finance setup).
 
-**Navigation (header, `0.14.9`):** Dashboard | Company | Chart of Accounts | Mailboxes | Users | Policies | **Binding Authority** | Logout
+**Navigation (header, `0.14.11`):** Dashboard | Company | Chart of Accounts | Users | Policies | **Binding Authority** | Logout
+
+> **Mailboxes removed from header nav (`0.14.11-admin-ui-cleanup`, planned).** The `/mailboxes` route page (§8.14) and the underlying `/mail/configuration` APIs (`05` §8.6 / §8.8) are preserved for ad-hoc access; only the top-nav entry and the corresponding dashboard tile are removed. Mailbox identity, IMAP/SMTP credential rotation, and Approve-outbound-to-client toggles remain a Client Admin responsibility — they are simply no longer in the day-to-day nav surface.
 
 | Route | Section |
 | ----- | ------- |
-| `/dashboard` | Live completeness checklist; links to **finance.mmlogistix** for payment terms, tax codes, GL calendar |
+| `/dashboard` | Tenant-bootstrap completeness checklist (7 items: company profile, email signature, chart of accounts, **Key Roles Email (Uses)**, Travel & Entertainment policy PDF, expense limits, regulatory documents). Finance-domain setup tiles (payment terms, GST/tax codes, vendor contracts, accounting calendar, GL reminder recipients) are owned by **finance.mmlogistix** (§8.22–§8.24) and are **not** on the Client Admin checklist. |
 | `/company` | Company profile + email signature (HTML/plain) on `tenant_profiles` (`051`) |
 | `/chart-of-accounts` | COA empty state, CSV import (`replace_all`), filter/search table, manual add (`15` §8.10) |
-| `/mailboxes` | Mail config; credential note — IMAP/SMTP via Platform Admin — §8.14 |
 | `/users` | CEO → CFO → Finance Manager → Accounts Manager (acc) |
 | `/policies` | Travel & Entertainment policy PDF (Wasabi) + expense limits + regulatory PDF catalog |
 | `/binding-authority` | AP / AR / expense approval tier ceilings, STP confidence, SLA hours (`05` §4.16d.14, §8.25) |
 
 **Removed from Client Admin (`e73c869`):** `/counterparty-accounts`, `/agreements`, `/accounting-calendar`, `/travel-info`, `/travel-requests` — see finance-ui §8.22–§8.24.
+
+**Removed from Client Admin nav & dashboard (`0.14.11-admin-ui-cleanup`, planned):** `/mailboxes` tab entry. Dashboard tiles deleted: `payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders`. The `users` tile is relabelled **"Key Roles Email (Uses)"**.
 
 **Post-MVP UI:** `/branding` (logo upload screen).
 
@@ -626,6 +629,8 @@ Client Admin **cannot** edit their own login email here — that is Platform Adm
 ---
 
 ### 8.14 Mailboxes (Client Admin UI — `/mailboxes`)
+
+> **Nav surface (`0.14.11-admin-ui-cleanup`, planned):** No longer a top-nav entry in `client-admin-ui`. The route page and `/mail/configuration` APIs are preserved and remain reachable via direct URL `https://admin.mmlogistix.bp0.work/mailboxes`. Mailbox display-name and Approve-outbound-to-client maintenance is occasional rather than daily, so it is removed from the day-to-day nav surface but not the application.
 
 **Purpose:** Configure operational mailboxes per `01` §3.2 and §6.8 and `17` §10. Executives use automated listeners; **manager** mailboxes (`acc`, `fin`, `cfo`, `ceo`) are human-monitored only.
 
@@ -1697,6 +1702,7 @@ Future revisions may add embedded analytics, mobile push, or richer notification
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.32 | 2026-05-27 | **`0.14.11-admin-ui-cleanup` (planned).** §8.13 Client Admin nav trimmed: Mailboxes removed from header. Dashboard tiles deleted: `payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders` — these belong to finance-ui (§8.22–§8.24). `users` tile relabelled "Key Roles Email (Uses)". §8.14 Mailboxes screen still documented (route preserved; direct URL only). |
 | 2.31 | 2026-05-26 | **`0.14.9-binding-authority`.** §8.25 Client Admin `/binding-authority`; §8.13 nav + Policies label; §8.21 binding approval panel; §2.1a approvals tabs (queue/history/cases). `05` §4.16d.14. |
 | 2.30 | 2026-05-20 | **Finance UI setup screens (`e73c869`).** §8.22–§8.24 on finance.mmlogistix; §8.23 agreements; §8.13 Client Admin nav trimmed (no travel, no counterparty/calendar). §3.1 routes + header nav. |
 | 2.29 | 2026-05-20 | **§8.22 subaccount inline edit.** Active rows: Edit/Save/Cancel for `payment_term_id` + credit limit via `PATCH /api/counterparty-accounts/{id}` (`9b0662e`). |

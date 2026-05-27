@@ -1,6 +1,6 @@
 # AI Finance Operations Platform — Specification Suite (`platform_dox`)
 
-## Version 1.23
+## Version 1.26
 
 ## Filename: README.md
 
@@ -91,6 +91,7 @@ When adding a numbered spec file, update the **Companion Documents** table in ev
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.26 | 2026-05-27 | **`0.14.11-admin-ui-cleanup` (planned).** UI-only — Client Admin dashboard pruned to 7 tenant-bootstrap tiles; six finance-domain tiles removed (`payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders`); role-emails tile relabelled "Key Roles Email (Uses)"; Mailboxes removed from header nav (`/mailboxes` page preserved). `05` v1.3.25 §4.16d.1; `11` v2.53 §4.5l; `15` v2.32 §8.13/§8.14; `00` v2.67. |
 | 1.25 | 2026-05-27 | **`0.14.10-counterparty-fixes` shipped.** Reactivate inactive subaccounts, add vendor contract fields + expiry warning badge, and Client Admin dashboard vendor-contract warning. Migration `061`. |
 | 1.24 | 2026-05-26 | **`0.14.9-binding-authority` shipped.** Binding authority tiers in workers; Client Admin `/binding-authority`; finance approval queues. `11` §4.5k; `05` v1.3.24; `10` §7; `15` v2.31; `16` v2.7. |
 | 1.23 | 2026-05-20 | **Finance UI setup screens.** Counterparty, agreements, accounting calendar moved to `finance.mmlogistix`; Client Admin drops Travel tab. `15` v2.30; `05` v1.3.23; `11` v2.51 §4.5j (`e73c869`). |

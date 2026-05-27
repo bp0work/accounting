@@ -2,7 +2,7 @@
 
 # API Specification
 
-## Version 1.3.23
+## Version 1.3.25
 
 ## Filename: 05_API_Specification.md
 
@@ -1261,7 +1261,19 @@ PUT /tenant/expense-policies/{policy_id}
 GET /api/admin/dashboard
 ```
 
-**Response (200):** Completeness checklist (company profile, COA, mailboxes, users, expense limits, policy PDF, regulatory docs, GL reminder recipients, accounting periods, vendor contract expiry warnings).
+**Response (200):** Tenant-bootstrap completeness checklist — **seven sections** (`0.14.11-admin-ui-cleanup`, planned):
+
+| `section` | `label` | Source |
+|-----------|---------|--------|
+| `company` | Company profile | `tenant_profiles` legal_name / UEN / registered_address / contact_email |
+| `signature` | Email signature | `tenant_profiles.email_signature_html` or `email_signature_plain` |
+| `coa` | Chart of accounts | `coa_accounts WHERE is_active` count |
+| `users` | **Key Roles Email (Uses)** | Active users for `ROLE_ADMIN_NAMES` (CEO, CFO, Finance Manager, Accounts Manager) with non-empty email |
+| `travel_policy` | Travel & Entertainment policy (PDF) | `regulatory_documents` row with `document_key = TRAVEL_EXPENSE_POLICY_KEY` |
+| `expense_limits` | Expense limits | At least one named `expense_policies` row with a `daily_limit` or `per_claim_limit` |
+| `regulatory` | Regulatory documents | All five `REGULATORY_CATALOG` keys uploaded |
+
+> **Removed from this checklist (`0.14.11-admin-ui-cleanup`, planned):** `payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders`. These belong to finance-ui setup (`§4.16d.4` counterparty accounts / payment terms / tax codes; `§4.16d.11–§4.16d.13` accounting calendar + reminders) — their completeness signals are surfaced on `https://finance.mmlogistix.bp0.work`, not on the Client Admin dashboard. The mailboxes section continues to exist in the API (`§8.6`/`§8.8`); only the dashboard tile and the top-nav entry in `client-admin-ui` are removed (`15` §8.13).
 
 ### 4.16d.2 Tenant profile (company)
 
@@ -1326,7 +1338,7 @@ Returns a JSON **array** of `CoaAccountResponse` (not wrapped in `{ "data": [...
 
 **Permission:** **`require_finance_setup_access`** (`e73c869`) — `cfo`, `finance_manager`, `accounts_clerk`, `financial_analyst`, `ar_executive`, `ap_executive`, `general_manager`, `client_admin`, or `tenant:admin`. Same gate on §4.16d.8 (agreements) and §4.16d.11–§4.16d.13 (accounting calendar).
 
-**UI host:** `https://finance.mmlogistix.bp0.work` (`15` §8.22–§8.24). Client Admin dashboard checklist links to finance URLs for payment terms, tax codes, and GL calendar (`GET /api/admin/dashboard`).
+**UI host:** `https://finance.mmlogistix.bp0.work` (`15` §8.22–§8.24). Payment terms, GST/tax codes, vendor-contract warnings, accounting calendar, and GL reminder recipients are owned by finance-ui setup; the Client Admin dashboard (`GET /api/admin/dashboard`, §4.16d.1) does **not** carry tiles for these sections after `0.14.11-admin-ui-cleanup`.
 
 #### Counterparty master
 
@@ -5377,6 +5389,7 @@ curl -sS -X POST \
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.25 | 2026-05-27 | **`0.14.11-admin-ui-cleanup` (planned).** §4.16d.1 `GET /api/admin/dashboard` response: 13 → **7** sections. Removed: `payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders` (owned by finance-ui §4.16d.4 / §4.16d.11–13). `users` tile relabelled **"Key Roles Email (Uses)"**. §4.16d.4 cross-ref updated — no more "links to finance URLs" from the Client Admin dashboard. No endpoint surface changes (count unchanged at 144). `15` v2.32. |
 | 1.3.24 | 2026-05-26 | **`0.14.9-binding-authority`.** §4.16d.14 `GET/PATCH /admin/binding-authority`; approvals `binding_queue` filter; case fields `pending_approval_id`, `binding_escalated_to_cfo`. Renumber GL override → §4.16d.15. `10` §7, `15` v2.31. |
 | 1.3.23 | 2026-05-20 | **Finance setup API access.** §4.16d.4/9/11–13: `require_finance_setup_access`; UI on finance.mmlogistix (`e73c869`). Renumber §4.16d.9 agreements (was duplicate §4.16d.8). `15` v2.30. |
 | 1.3.22 | 2026-05-20 | **§4.16d.4 subaccount PATCH in UI.** Client Admin inline edit for `payment_term_id` + credit fields; payment-terms catalog PATCH note. `15` §8.22 v2.29 (`9b0662e`). |

@@ -2,7 +2,7 @@
 
 # Deployment & Operations Runbook
 
-## Version 2.51
+## Version 2.53
 
 ## Filename: 11_Deployment_Operations_Runbook.md
 
@@ -531,8 +531,8 @@ docker compose up -d --force-recreate client-admin-ui
 
 **Verify (Client Admin):**
 
-- Login → header nav: Dashboard | Company | Chart of Accounts | Mailboxes | Users | Policies (no Counterparty, Agreements, Calendar, or Travel)
-- `GET https://admin.mmlogistix.bp0.work/api/admin/dashboard` → checklist JSON; payment terms / tax / calendar links open **finance.mmlogistix** in new tab
+- Login → header nav: Dashboard | Company | Chart of Accounts | Users | Policies | Binding Authority (no Mailboxes, Counterparty, Agreements, Calendar, or Travel — Mailboxes was removed from header in `0.14.11-admin-ui-cleanup`; the `/mailboxes` page is still reachable via direct URL)
+- `GET https://admin.mmlogistix.bp0.work/api/admin/dashboard` → checklist JSON, **7 sections** after `0.14.11-admin-ui-cleanup`: `company`, `signature`, `coa`, `users` (label "Key Roles Email (Uses)"), `travel_policy`, `expense_limits`, `regulatory`. The six removed sections (`payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders`) are now surfaced on **finance.mmlogistix** (`§4.5j`, `§4.5e`)
 - Company (`/company`): email signature HTML/plain saves (`051`); **Preview signature in email** shows HTML + plain footer (`0.14.6`)
 - Outbound SMTP (ack / escalation / clarification / daily log / GL cutoff): footer matches configured signature when set (`18` §10.2)
 - Policies: travel & expense policy PDF upload; regulatory PDF catalog (`Wasabi`)
@@ -583,7 +583,46 @@ docker compose up -d --force-recreate fastapi client-admin-ui finance-ui ar-work
 - Finance UI → **Cases & Approvals** → **My queue** (acc: Tier 2; CFO: Tier 3 + escalated Tier 2)
 - acc **Escalate to CFO** → CFO queue; CFO **Approve** → journal posted + submitter ack
 
-**Client Admin nav:** Dashboard | Company | Chart of Accounts | Mailboxes | Users | Policies | **Binding Authority** | Logout (`15` §8.13).
+**Client Admin nav:** Dashboard | Company | Chart of Accounts | Users | Policies | **Binding Authority** | Logout (`15` §8.13; Mailboxes removed from header in `0.14.11-admin-ui-cleanup` — see §4.5l).
+
+## 4.5l Client Admin UI cleanup (`0.14.11-admin-ui-cleanup`) — planned
+
+**Status:** Planned (UI-only change; no DB migration, no worker rebuild). Affected images: `fastapi`, `client-admin-ui`.
+
+**Scope:** Drop six finance-domain tiles from `GET /api/admin/dashboard` (`05` §4.16d.1) and remove the **Mailboxes** entry from the `client-admin-ui` header. Rename the role-emails tile from "Key role emails" to **"Key Roles Email (Uses)"**.
+
+```bash
+cd /opt/bp0work/accounting && git pull origin main
+cd accfin
+docker compose build --no-cache fastapi client-admin-ui
+docker compose up -d --force-recreate fastapi client-admin-ui
+```
+
+| Component | Why rebuild |
+|-----------|-------------|
+| `fastapi` | `admin_dashboard` returns 7 sections instead of 13; orphaned imports/helper removed |
+| `client-admin-ui` | Top-nav drops `<a href="/mailboxes">` |
+
+**Removed dashboard tiles (now finance-ui only — `15` §8.22–§8.24, `05` §4.16d.4 / §4.16d.11–13):**
+
+| `section` | Replaces with |
+|-----------|---------------|
+| `payment_terms` | finance-ui `/counterparty-accounts` Tab 2 |
+| `tax_codes` | finance-ui `/counterparty-accounts` Tab 3 |
+| `vendor_contracts` | finance-ui counterparty master expiry badge |
+| `mailboxes` | direct URL only (`/mailboxes` page preserved) |
+| `calendar` | finance-ui `/accounting-calendar` |
+| `gl_reminders` | finance-ui `/accounting-calendar` reminder recipients |
+
+**Verify:**
+
+- `GET https://admin.mmlogistix.bp0.work/api/admin/dashboard` → JSON has `total_count = 7`; sections are exactly `company`, `signature`, `coa`, `users`, `travel_policy`, `expense_limits`, `regulatory`
+- `users` tile `label == "Key Roles Email (Uses)"`
+- Client Admin header nav has no **Mailboxes** entry; `https://admin.mmlogistix.bp0.work/mailboxes` still loads when typed directly
+- `GET /api/health` → `0.14.11-admin-ui-cleanup`
+- finance-ui setup screens unchanged (still authoritative for the six dropped concerns)
+
+**No DB migration; no worker restart.**
 
 ## 4.5j Finance UI — setup screens (`e73c869`)
 
@@ -3784,6 +3823,7 @@ volumes:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.53 | 2026-05-27 | **`0.14.11-admin-ui-cleanup` planned.** §4.5l: UI-only deploy (`fastapi` + `client-admin-ui`); dashboard 13 → 7 sections; six finance-domain tiles removed (`payment_terms`, `tax_codes`, `vendor_contracts`, `mailboxes`, `calendar`, `gl_reminders`); `users` tile relabelled "Key Roles Email (Uses)"; Mailboxes removed from header nav (`/mailboxes` page preserved). Cross-ref `05` v1.3.25, `15` v2.32. |
 | 2.52 | 2026-05-26 | **`0.14.9-binding-authority` shipped.** §4.5k deploy (migration `060`, workers, Client Admin `/binding-authority`, finance approval queues); §20.0.1/E → `060`. Cross-ref `10` §7, `05` v1.3.24, `15` v2.31, `16` v2.7. |
 | 2.51 | 2026-05-20 | **§4.5j finance-ui setup screens.** Counterparty/agreements/calendar moved from Client Admin; `require_finance_setup_access`; §20.2 `e73c869`. Cross-ref `15` v2.30, `05` v1.3.23. |
 | 2.50 | 2026-05-20 | **§8.22 subaccount edit UI.** §4.5i: Edit/Save on Subaccounts; UI-only deploy `9b0662e`; §20.2 row. Cross-ref `15` v2.29, `05` v1.3.22. |
