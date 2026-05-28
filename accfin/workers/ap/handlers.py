@@ -91,6 +91,35 @@ AP_OVERRIDE_KEYS: dict[str, str] = {
     _REASON_COA_NOT_FOUND:     "override_coa_not_found",
 }
 
+# AP Process step ids for manual-retry resume (stored on escalation → cleared on worker pickup).
+_RESUME_STEP_ORDER: tuple[str, ...] = ("2A", "2B", "2C", "2D", "2E", "2F")
+REASON_TO_RESUME_STEP: dict[str, str] = {
+    _REASON_PARSING: "2A",
+    _REASON_DUPLICATE: "2B",
+    _REASON_VENDOR_NOT_FOUND: "2C",
+    _REASON_VENDOR_INACTIVE: "2C",
+    _REASON_PAYMENT_TERMS: "2D",
+    _REASON_CONTRACT: "2E",
+    _REASON_SENDER_VALIDATION: "2E",
+    _REASON_COA_NOT_FOUND: "2F",
+}
+
+
+def _resume_step_reached(resume_from: str | None, step_id: str) -> bool:
+    """True when this validation step should run (skip preceding steps on retry)."""
+    if resume_from is None:
+        return True
+    return _RESUME_STEP_ORDER.index(step_id) >= _RESUME_STEP_ORDER.index(resume_from)
+
+
+def _pop_resume_from_step(case: Case) -> str | None:
+    """Read and clear ``resume_from_step`` so later retries are not affected."""
+    meta = dict(case.workflow_metadata or {})
+    step = meta.pop("resume_from_step", None)
+    if step is not None:
+        case.workflow_metadata = meta
+    return str(step) if step else None
+
 
 class APWorkerService:
     def __init__(self, session: AsyncSession, hermes: HermesClient | None = None) -> None:
@@ -212,6 +241,17 @@ class APWorkerService:
         preserve_case_status: bool = False,
     ) -> dict:
         """Escalate current validation step to ACC, set case to manual_review."""
+        resume_step = REASON_TO_RESUME_STEP.get(reason_code)
+        meta_updates: dict = {}
+        if resume_step:
+            meta_updates["resume_from_step"] = resume_step
+        if extracted_fields is not None:
+            meta_updates["extracted_fields"] = extracted_fields
+        if extraction_confidence is not None:
+            meta_updates["extraction_confidence"] = extraction_confidence
+        if meta_updates:
+            _update_meta(case, meta_updates)
+
         svc = ExecutiveMailService(self._session)
         case.status = "manual_review"
         await self._session.flush()
@@ -284,24 +324,64 @@ class APWorkerService:
     # Main invoice handler — 7-step AP validation sequence
     # ------------------------------------------------------------------
 
+    async def _load_linked_vendor(
+        self, case: Case, vendor_name_str: str
+    ) -> tuple[Counterparty | None, CounterpartyAccount | None]:
+        """Resolve vendor links from case FKs when retry skips step 2C."""
+        counterparty: Counterparty | None = None
+        subaccount: CounterpartyAccount | None = None
+        if case.counterparty_id:
+            counterparty = await self._session.get(Counterparty, case.counterparty_id)
+        if case.counterparty_account_id:
+            subaccount = await self._session.get(
+                CounterpartyAccount, case.counterparty_account_id
+            )
+        if counterparty is None and vendor_name_str:
+            counterparty, subaccount, _ = await lookup_vendor(
+                self._session, vendor_name_str, uen=None
+            )
+        return counterparty, subaccount
+
+    def _load_invoice_from_metadata(
+        self, case: Case, email: Email | None
+    ) -> tuple[object, dict, float, dict]:
+        """Use ACC-confirmed ``extracted_fields`` — no Hermes re-extraction."""
+        meta = case.workflow_metadata or {}
+        extracted = dict(meta.get("extracted_fields") or {})
+        inv = extracted_fields_to_invoice(extracted)
+        confidence_f = float(
+            meta.get("extraction_confidence") or case.confidence_score or 0
+        )
+        email_subject = email.subject if email else None
+        email_body_text = email.body_text if email else None
+        sender_val = extract_sender_validation(email_subject, email_body_text)
+        return inv, extracted, confidence_f, sender_val
+
     async def handle_ap_invoice(self, message: dict) -> dict:  # noqa: PLR0912, PLR0915
         case = await self._load_case(UUID(message["case_id"]))
         if case is None:
             return {"status": "skipped", "reason": "case_not_found"}
 
         email = await self._email_for_case(case)
+        resume_from = _pop_resume_from_step(case)
         overrides: dict = (case.workflow_metadata or {}).get("ap_step_overrides", {})
 
-        if message.get("parsing_confirmed"):
-            meta = case.workflow_metadata or {}
-            extracted = dict(meta.get("extracted_fields") or {})
-            inv = extracted_fields_to_invoice(extracted)
-            confidence_f = float(
-                meta.get("extraction_confidence") or case.confidence_score or 0
+        if resume_from:
+            await self._add_timeline(
+                case,
+                "processing_resumed",
+                description=f"Resuming AP validation from step {resume_from}",
+                metadata={"resume_from_step": resume_from},
             )
-            email_subject = email.subject if email else None
-            email_body_text = email.body_text if email else None
-            sender_val = extract_sender_validation(email_subject, email_body_text)
+
+        use_stored_extraction = bool(
+            message.get("parsing_confirmed") or resume_from is not None
+        )
+
+        if use_stored_extraction:
+            inv, extracted, confidence_f, sender_val = self._load_invoice_from_metadata(
+                case, email
+            )
             await self._start_processing(case)
         else:
             # ── Extract ────────────────────────────────────────────────────
@@ -328,53 +408,57 @@ class APWorkerService:
             # Merge sender_validated into extraction metadata
             extracted = invoice_extracted_fields(inv)
             extracted["document_type"] = getattr(inv, "document_type", None) or "invoice"
-
-            # ── Step 1: Parsing validation ────────────────────────────────
             await self._start_processing(case)
-            if not overrides.get("override_parsing"):
-                missing = list(inv.missing_fields or [])
-                has_critical = has_critical_missing("ap_invoice", missing)
-                if has_critical or confidence_f < 0.70:
-                    missing_label = ", ".join(missing) if missing else "low extraction confidence"
-                    summary = (
-                        f"Unable to parse all required details for {case.case_number}. "
-                        f"Missing fields: {missing_label}. "
-                        f"Please advise: a) provide missing details for reprocessing quoting "
-                        f"Case ID {case.case_number}, or b) ask sender to resubmit quoting "
-                        f"Case ID {case.case_number}."
-                    )
-                    _update_meta(case, {
-                        "current_stage": "parsing",
-                        "extraction_confidence": confidence_f,
-                        "extracted_fields": extracted,
-                        "missing_fields": missing,
-                        "error_type": _REASON_PARSING,
-                        "reason_code": _REASON_PARSING,
-                    })
-                    await self._add_timeline(
-                        case, "parsing_failed",
-                        from_status="processing", to_status="manual_review",
-                        description=f"Parsing failed: {missing_label}",
-                        metadata={"missing_fields": missing, "confidence": confidence_f},
-                    )
-                    return await self._escalate_step(
-                        case, email,
-                        reason_code=_REASON_PARSING,
-                        summary=summary,
-                        extracted_fields=extracted,
-                        extraction_confidence=confidence_f,
-                        missing_fields=missing,
-                        escalation_template="manager.escalation.missing_fields",
-                        reattach_inbound_attachments=True,
-                    )
 
+        if _resume_step_reached(resume_from, "2A") and not overrides.get("override_parsing"):
+            missing = list(inv.missing_fields or [])
+            has_critical = has_critical_missing("ap_invoice", missing)
+            if has_critical or confidence_f < 0.70:
+                missing_label = ", ".join(missing) if missing else "low extraction confidence"
+                summary = (
+                    f"Unable to parse all required details for {case.case_number}. "
+                    f"Missing fields: {missing_label}. "
+                    f"Please advise: a) provide missing details for reprocessing quoting "
+                    f"Case ID {case.case_number}, or b) ask sender to resubmit quoting "
+                    f"Case ID {case.case_number}."
+                )
+                _update_meta(case, {
+                    "current_stage": "parsing",
+                    "extraction_confidence": confidence_f,
+                    "extracted_fields": extracted,
+                    "missing_fields": missing,
+                    "error_type": _REASON_PARSING,
+                    "reason_code": _REASON_PARSING,
+                })
+                await self._add_timeline(
+                    case, "parsing_failed",
+                    from_status="processing", to_status="manual_review",
+                    description=f"Parsing failed: {missing_label}",
+                    metadata={"missing_fields": missing, "confidence": confidence_f},
+                )
+                return await self._escalate_step(
+                    case, email,
+                    reason_code=_REASON_PARSING,
+                    summary=summary,
+                    extracted_fields=extracted,
+                    extraction_confidence=confidence_f,
+                    missing_fields=missing,
+                    escalation_template="manager.escalation.missing_fields",
+                    reattach_inbound_attachments=True,
+                )
+
+        if _resume_step_reached(resume_from, "2A"):
             await self._add_timeline(
                 case, "parsing_completed",
                 description=f"Parsing OK — confidence {confidence_f:.2f}",
                 metadata={"confidence": confidence_f, "extracted_fields": extracted},
             )
 
-            if await requires_parsing_confirmation(self._session, case, email):
+            if (
+                resume_from is None
+                and not use_stored_extraction
+                and await requires_parsing_confirmation(self._session, case, email)
+            ):
                 confirm_fields = invoice_to_confirmation_fields(
                     inv, document_type=extracted.get("document_type")
                 )
@@ -391,8 +475,16 @@ class APWorkerService:
                     actor_name="ap-worker",
                 )
 
+        _update_meta(
+            case,
+            {
+                "extracted_fields": extracted,
+                "extraction_confidence": confidence_f,
+            },
+        )
+
         # ── Step 2: Duplicate check ───────────────────────────────────
-        if not overrides.get("override_duplicate"):
+        if _resume_step_reached(resume_from, "2B") and not overrides.get("override_duplicate"):
             doc_number = (
                 getattr(inv, "invoice_number", None)
                 or getattr(inv, "document_number", None)
@@ -434,16 +526,24 @@ class APWorkerService:
                         include_escalate=False,
                     )
 
-        await self._add_timeline(case, "duplicate_checked", description="No duplicate found")
+        if _resume_step_reached(resume_from, "2B"):
+            await self._add_timeline(case, "duplicate_checked", description="No duplicate found")
 
         # ── Step 3: Vendor subaccount ─────────────────────────────────
         vendor_name_str = inv.vendor_name or case.counterparty_name or ""
-        uen = getattr(inv, "vendor_uen", None) or getattr(inv, "registration_number", None)
-        counterparty, subaccount, vendor_status = await lookup_vendor(
-            self._session, vendor_name_str, uen=uen
-        )
+        counterparty: Counterparty | None = None
+        subaccount: CounterpartyAccount | None = None
 
-        if vendor_status == "not_found":
+        if _resume_step_reached(resume_from, "2C"):
+            uen = getattr(inv, "vendor_uen", None) or getattr(inv, "registration_number", None)
+            counterparty, subaccount, vendor_status = await lookup_vendor(
+                self._session, vendor_name_str, uen=uen
+            )
+        else:
+            counterparty, subaccount = await self._load_linked_vendor(case, vendor_name_str)
+            vendor_status = "resume_skip"
+
+        if _resume_step_reached(resume_from, "2C") and vendor_status == "not_found":
             summary = (
                 f"Vendor {vendor_name_str} has no subaccount in the system. "
                 f"Vendor must be set up before this document can be processed. "
@@ -471,7 +571,7 @@ class APWorkerService:
                 preserve_case_status=True,
             )
 
-        if vendor_status == "inactive" and not overrides.get("override_vendor_inactive"):
+        if vendor_status == "inactive" and _resume_step_reached(resume_from, "2C") and not overrides.get("override_vendor_inactive"):
             summary = (
                 f"Vendor {vendor_name_str} has an inactive subaccount. "
                 f"Please advise: a) reactivate and proceed, or b) reject document."
@@ -494,7 +594,11 @@ class APWorkerService:
                 extraction_confidence=confidence_f,
             )
 
-        if vendor_status == "inactive" and overrides.get("override_vendor_inactive"):
+        if (
+            vendor_status == "inactive"
+            and _resume_step_reached(resume_from, "2C")
+            and overrides.get("override_vendor_inactive")
+        ):
             # Manager approved reactivation — reactivate subaccount now
             if subaccount is not None:
                 subaccount.is_active = True
@@ -512,13 +616,14 @@ class APWorkerService:
         if subaccount and not case.counterparty_account_id:
             case.counterparty_account_id = subaccount.id
 
-        await self._add_timeline(
-            case, "vendor_validated",
-            description=f"Vendor {vendor_name_str} — status {vendor_status}",
-        )
+        if _resume_step_reached(resume_from, "2C"):
+            await self._add_timeline(
+                case, "vendor_validated",
+                description=f"Vendor {vendor_name_str} — status {vendor_status}",
+            )
 
         # ── Step 4: Payment terms ─────────────────────────────────────
-        if not overrides.get("override_payment_terms"):
+        if _resume_step_reached(resume_from, "2D") and not overrides.get("override_payment_terms"):
             doc_terms = getattr(inv, "payment_terms", None) or extracted.get("payment_terms")
             subaccount_terms_code: str | None = None
             if subaccount and subaccount.payment_term_id:
@@ -554,18 +659,23 @@ class APWorkerService:
                         extraction_confidence=confidence_f,
                     )
 
-        await self._add_timeline(case, "payment_terms_validated", description="Payment terms OK")
+        if _resume_step_reached(resume_from, "2D"):
+            await self._add_timeline(case, "payment_terms_validated", description="Payment terms OK")
 
-        # ── Step 5a: Contract validation ──────────────────────────────
-        today = date.today()
-        contract_valid = bool(
-            counterparty
-            and counterparty.has_contract
-            and counterparty.contract_expiry_date
-            and counterparty.contract_expiry_date >= today
-        )
+        # ── Step 5a/5b: Contract + sender validation ─────────────────
+        if _resume_step_reached(resume_from, "2E"):
+            today = date.today()
+            contract_valid = bool(
+                counterparty
+                and counterparty.has_contract
+                and counterparty.contract_expiry_date
+                and counterparty.contract_expiry_date >= today
+            )
+        else:
+            contract_valid = True
+            sender_val = {"sender_validated": True, "failure_reason": None, "validation_date": None}
 
-        if not contract_valid and not overrides.get("override_contract"):
+        if _resume_step_reached(resume_from, "2E") and not contract_valid and not overrides.get("override_contract"):
             summary = (
                 f"Vendor {vendor_name_str} subaccount has no valid contract "
                 f"(or contract has expired). Please advise: "
@@ -588,8 +698,7 @@ class APWorkerService:
                 extraction_confidence=confidence_f,
             )
 
-        # ── Step 5b: Sender validation ────────────────────────────────
-        if not sender_val["sender_validated"] and not overrides.get("override_sender_validation"):
+        if _resume_step_reached(resume_from, "2E") and not sender_val["sender_validated"] and not overrides.get("override_sender_validation"):
             failure_reason = sender_val.get("failure_reason") or (
                 "Document not validated. Please include 'validated dd/mm/yyyy' in your email "
                 "(e.g. 'validated 28/05/2026')"
@@ -619,59 +728,61 @@ class APWorkerService:
                 extraction_confidence=confidence_f,
             )
 
-        await self._add_timeline(
-            case, "contract_validated",
-            description=(
-                f"Contract valid={contract_valid} "
-                f"sender_validated={sender_val['sender_validated']}"
-            ),
-        )
+        if _resume_step_reached(resume_from, "2E"):
+            await self._add_timeline(
+                case, "contract_validated",
+                description=(
+                    f"Contract valid={contract_valid} "
+                    f"sender_validated={sender_val['sender_validated']}"
+                ),
+            )
 
-        # Store sender_validated in extraction metadata
-        meta_extraction = dict((case.workflow_metadata or {}).get("extraction", {}))
-        meta_extraction["sender_validated"] = sender_val["sender_validated"]
-        meta_extraction["validation_date"] = sender_val.get("validation_date")
-        _update_meta(case, {"extraction": meta_extraction})
+            meta_extraction = dict((case.workflow_metadata or {}).get("extraction", {}))
+            meta_extraction["sender_validated"] = sender_val["sender_validated"]
+            meta_extraction["validation_date"] = sender_val.get("validation_date")
+            _update_meta(case, {"extraction": meta_extraction})
 
         # ── Step 6: COA mapping ───────────────────────────────────────
-        coa_override_code: str | None = overrides.get("coa_account_code")
-        po = None
-        if inv.po_reference:
-            po = await self._pos.get_by_po_number(inv.po_reference)
+        expense_code = ""
+        if _resume_step_reached(resume_from, "2F"):
+            coa_override_code: str | None = overrides.get("coa_account_code")
+            po = None
+            if inv.po_reference:
+                po = await self._pos.get_by_po_number(inv.po_reference)
 
-        expense_code = coa_override_code or resolve_expense_account_code(
-            po.line_items if po else None
-        )
-        expense_account = await self._ledger.get_account_by_code(expense_code)
-
-        if expense_account is None:
-            summary = (
-                f"Unable to identify the correct GL account for "
-                f"{vendor_name_str} — {extracted.get('document_type', 'invoice')}. "
-                f"Please advise which account to use."
+            expense_code = coa_override_code or resolve_expense_account_code(
+                po.line_items if po else None
             )
-            _update_meta(case, {
-                "error_type": _REASON_COA_NOT_FOUND,
-                "reason_code": _REASON_COA_NOT_FOUND,
-                "expense_code_attempted": expense_code,
-            })
+            expense_account = await self._ledger.get_account_by_code(expense_code)
+
+            if expense_account is None:
+                summary = (
+                    f"Unable to identify the correct GL account for "
+                    f"{vendor_name_str} — {extracted.get('document_type', 'invoice')}. "
+                    f"Please advise which account to use."
+                )
+                _update_meta(case, {
+                    "error_type": _REASON_COA_NOT_FOUND,
+                    "reason_code": _REASON_COA_NOT_FOUND,
+                    "expense_code_attempted": expense_code,
+                })
+                await self._add_timeline(
+                    case, "coa_not_found",
+                    from_status="processing", to_status="manual_review",
+                    description=summary,
+                )
+                return await self._escalate_step(
+                    case, email,
+                    reason_code=_REASON_COA_NOT_FOUND,
+                    summary=summary,
+                    extracted_fields=extracted,
+                    extraction_confidence=confidence_f,
+                )
+
             await self._add_timeline(
-                case, "coa_not_found",
-                from_status="processing", to_status="manual_review",
-                description=summary,
+                case, "coa_mapped",
+                description=f"Expense account {expense_code} resolved",
             )
-            return await self._escalate_step(
-                case, email,
-                reason_code=_REASON_COA_NOT_FOUND,
-                summary=summary,
-                extracted_fields=extracted,
-                extraction_confidence=confidence_f,
-            )
-
-        await self._add_timeline(
-            case, "coa_mapped",
-            description=f"Expense account {expense_code} resolved",
-        )
 
         # ── Step 7: Document type routing + journal ───────────────────
         amount = Decimal(str(inv.total_amount or "0"))
