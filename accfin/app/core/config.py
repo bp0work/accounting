@@ -149,7 +149,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.11-ap-process-alignment"
+        return "0.14.22-redis-socket-keepalive"
 
     @property
     def edge_public_base_url(self) -> str:

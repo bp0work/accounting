@@ -33,6 +33,7 @@ from app.schemas.case import (
 )
 from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
+from app.services.case_retry import execute_case_retry
 from app.services.case_service import CaseService
 from app.services.case_visibility import (
     client_vendor_name,
@@ -246,10 +247,8 @@ async def transition_case_status(
 async def retry_case(
     case_id: UUID,
     user: TokenData = Depends(require_permission("cases:write")),
-    session: AsyncSession = Depends(get_db_session),
 ) -> CaseRetryResponse:
-    service = CaseService(session)
-    return await service.retry_case(case_id, user=user)
+    return await execute_case_retry(case_id, user=user)
 
 
 @router.get("/cases/{case_id}/timeline")

@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_session_factory
 from app.core.exceptions import AppHTTPException
 from app.core.state_machine import CaseStateMachine, TransitionResult
-from app.models.accounting_period import AccountingPeriod
 from app.policies.engine import PolicyEngine
 from app.repositories.case import CaseRepository
 from app.repositories.policy import PolicyRepository
@@ -18,11 +16,8 @@ from fastapi import status
 
 from app.schemas.auth import TokenData
 from app.schemas.case import CaseRetryResponse
-from app.services.queue_router import enqueue_accounts
+from app.services.case_retry import execute_case_retry
 from app.services.wasabi_archive import WasabiArchiveService
-
-RETRYABLE_STATUSES = frozenset({"exception", "manual_review"})
-RETRYABLE_HERMES_ON_HOLD_CODES = frozenset({"HERMES_TIMEOUT", "HERMES_UNAVAILABLE"})
 
 
 @dataclass
@@ -153,125 +148,6 @@ class CaseService:
         await self._session.refresh(case)
         return result
 
-    async def _period_closed_hold_retryable(
-        self, case, *, session: AsyncSession | None = None
-    ) -> bool:
-        if case.status != "on_hold":
-            return False
-        meta = case.workflow_metadata or {}
-        if meta.get("reason_code") != "PERIOD_CLOSED" and meta.get("error_type") != "PERIOD_CLOSED":
-            return False
-        period_id = meta.get("gl_period_id")
-        if not period_id:
-            return False
-        try:
-            pid = UUID(str(period_id))
-        except (TypeError, ValueError):
-            return False
-        db = session or self._session
-        period = await db.get(AccountingPeriod, pid)
-        return period is not None and period.status != "closed"
-
-    async def _transient_hermes_hold_retryable(self, case) -> bool:
-        if case.status != "on_hold":
-            return False
-        meta = case.workflow_metadata or {}
-        error_code = str(meta.get("error_code") or "").strip().upper()
-        return error_code in RETRYABLE_HERMES_ON_HOLD_CODES
-
     async def retry_case(self, case_id: UUID, *, user: TokenData) -> CaseRetryResponse:
-        """
-        Requeue a case for worker processing.
-
-        DB writes run in a dedicated session and commit before Redis enqueue
-        (same phased pattern as accounts-worker classification — no ORM use
-        across external awaits).
-        """
-        factory = get_session_factory()
-        message_id = str(uuid4())
-        previous_status: str
-        case_id_val: UUID
-        case_number: str
-        case_type: str
-        email_id: UUID | None
-        priority: str
-        stp_eligible: bool
-        confidence_score: float
-
-        async with factory() as session:
-            cases = CaseRepository(session)
-            case = await cases.get(case_id)
-            if case is None:
-                raise AppHTTPException(
-                    status.HTTP_404_NOT_FOUND, "CASE_NOT_FOUND", "Case not found"
-                )
-
-            retryable = case.status in RETRYABLE_STATUSES
-            if not retryable:
-                retryable = await self._period_closed_hold_retryable(case, session=session)
-            if not retryable:
-                retryable = await self._transient_hermes_hold_retryable(case)
-            if not retryable:
-                raise AppHTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    "CASE_NOT_RETRYABLE",
-                    f"Case in status '{case.status}' cannot be retried; "
-                    f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))}, "
-                    f"or on_hold after GL period reopen, "
-                    f"or on_hold with transient Hermes errors "
-                    f"({', '.join(sorted(RETRYABLE_HERMES_ON_HOLD_CODES))})",
-                )
-
-            previous_status = case.status
-            case_id_val = case.id
-            case_number = case.case_number
-            case_type = case.type
-            email_id = case.email_id
-            priority = case.priority or "medium"
-            stp_eligible = bool(case.stp_eligible)
-            confidence_score = float(case.confidence_score or 0)
-
-            meta = dict(case.workflow_metadata or {})
-            for key in ("error_message", "error_reason", "error_type", "reason_code", "reason"):
-                meta.pop(key, None)
-            meta.update(
-                {
-                    "current_stage": "processing",
-                    "reprocess_requested": True,
-                    "manual_retry": True,
-                }
-            )
-            case.workflow_metadata = meta
-            case.status = "classified"
-
-            await cases.add_timeline(
-                case_id=case_id_val,
-                event_type="case_retry",
-                from_status=previous_status,
-                to_status="classified",
-                actor=str(user.user_id),
-                description="Manual retry — requeued to accounts_queue",
-                metadata={"queue_message_id": message_id},
-                actor_user_id=user.user_id,
-            )
-            await session.commit()
-
-        await enqueue_accounts(
-            case_id=case_id_val,
-            case_type=case_type,
-            case_number=case_number,
-            email_id=email_id,
-            priority=priority,
-            stp_eligible=stp_eligible,
-            confidence_score=confidence_score,
-            source="case-retry",
-            message_id=message_id,
-        )
-
-        return CaseRetryResponse(
-            case_id=case_id_val,
-            case_number=case_number,
-            message_id=message_id,
-            status="classified",
-            previous_status=previous_status,
-        )
+        """Delegate to module-level retry (no request-scoped session across Redis)."""
+        return await execute_case_retry(case_id, user=user)

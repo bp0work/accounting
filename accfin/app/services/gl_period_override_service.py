@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,19 +82,7 @@ class GlPeriodOverrideService:
         case.workflow_metadata = meta
         case.status = "classified"
 
-        message_id = await enqueue_accounts(
-            case_id=case.id,
-            case_type=case.type,
-            case_number=case.case_number,
-            email_id=case.email_id,
-            priority=case.priority or "medium",
-            stp_eligible=bool(case.stp_eligible),
-            confidence_score=float(case.confidence_score or 0),
-            source="gl-period-override",
-            gl_period_override=True,
-            gl_period_override_reason=reason,
-            gl_period_posted_by=poster,
-        )
+        message_id = str(uuid4())
 
         await self._cases.add_timeline(
             case_id=case.id,
@@ -124,8 +112,32 @@ class GlPeriodOverrideService:
         )
 
         await self._session.commit()
+
+        case_id = case.id
+        case_type = case.type
+        case_number = case.case_number
+        email_id = case.email_id
+        priority = case.priority or "medium"
+        stp_eligible = bool(case.stp_eligible)
+        confidence_score = float(case.confidence_score or 0)
+
+        await enqueue_accounts(
+            case_id=case_id,
+            case_type=case_type,
+            case_number=case_number,
+            email_id=email_id,
+            priority=priority,
+            stp_eligible=stp_eligible,
+            confidence_score=confidence_score,
+            source="gl-period-override",
+            gl_period_override=True,
+            gl_period_override_reason=reason,
+            gl_period_posted_by=poster,
+            message_id=message_id,
+        )
+
         return {
-            "case_id": str(case.id),
+            "case_id": str(case_id),
             "period_id": str(period.id),
             "message_id": message_id,
             "status": "requeued",

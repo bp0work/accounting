@@ -14,5 +14,6 @@ This git repository contains **implementation code only**. Do **not** commit doc
 | **Scope** | Edit only implementation paths (`accfin/`, `finance-ui/`, `platform-admin-ui/`, `client-admin-ui/`) |
 | **No docs in git** | Do not add or restore `platform_dox/`, `*.md` READMEs, runbooks, incident playbooks, `accfin/docs/` specification copies, or design-suite excerpts |
 | **No spec in git** | Numbered design documents (`00`–`21`), OpenAPI mirrors, and version-history tables stay on the developer machine only |
+| **Version bump** | Every PR must bump `accfin/app/core/config.py` → `Settings.version` and the **Release version** line in the repo root `README.md` to the same deploy tag (e.g. `0.14.22-redis-socket-keepalive`). Update local `platform_dox/` version history in the same change set (not committed to git). |
 
 When design authority is required, use the **local specification workspace** outside this git root. That content is not pushed to GitHub.
