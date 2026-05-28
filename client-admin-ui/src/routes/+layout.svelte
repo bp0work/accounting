@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { ACCESS_TOKEN_KEY, clearToken, getToken } from '$lib/api/client';
-  import { APP_TITLE, FINANCE_UI_URL } from '$lib/branding';
+  import { APP_TITLE } from '$lib/branding';
 
   $: isLogin = $page.url.pathname === '/login';
   /** Re-run on navigation (e.g. after login) — initial `let` alone does not update on client route change. */
@@ -40,20 +40,6 @@
         <a href="/mailboxes">Mailboxes</a>
         <a href="/binding-authority">Binding Authority</a>
         <a href="/policies">Policies</a>
-        <a
-          href={`${FINANCE_UI_URL}/agreements`}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="ext"
-          title="Opens in finance.mmlogistix.bp0.work"
-        >Agreements ↗</a>
-        <a
-          href={`${FINANCE_UI_URL}/accounting-calendar`}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="ext"
-          title="Opens in finance.mmlogistix.bp0.work"
-        >Accounting Calendar ↗</a>
         <button type="button" class="link-btn" on:click={logout}>Logout</button>
       </nav>
     {/if}
@@ -84,12 +70,6 @@
     font: inherit;
     text-decoration: underline;
     cursor: pointer;
-  }
-  .nav a.ext {
-    color: #475569;
-  }
-  .nav a.ext:hover {
-    color: #1d4ed8;
   }
   .main {
     padding: 1.5rem;
