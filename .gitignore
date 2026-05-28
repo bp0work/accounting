@@ -29,3 +29,7 @@ build/
 
 # Docker volumes (local)
 accfin/.data/
+
+# Documentation — specs and READMEs live outside this repo (local only)
+platform_dox/
+*.md
