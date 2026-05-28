@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { decodeJwtSub } from '$lib/jwt';
-  import { getToken } from '$lib/api/client';
+  import { resolveNavDisplayName } from '$lib/displayUser';
 
   import type { MenuLink } from './userMenuTypes';
 
@@ -12,17 +11,18 @@
   let rootEl: HTMLDivElement;
   let username = 'User';
 
-  function refreshUsername() {
-    const token = getToken();
-    username = (token && decodeJwtSub(token)) || 'User';
+  async function refreshUsername() {
+    username = await resolveNavDisplayName();
   }
 
-  onMount(refreshUsername);
+  onMount(() => {
+    void refreshUsername();
+  });
 
   function toggle(e: MouseEvent) {
     e.stopPropagation();
     open = !open;
-    if (open) refreshUsername();
+    if (open) void refreshUsername();
   }
 
   function handleWindowClick(e: MouseEvent) {

@@ -4,15 +4,14 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { decodeJwtSub } from '$lib/jwt';
-  import { ensureValidAccessToken, getToken } from '$lib/api/client';
+  import { ensureValidAccessToken } from '$lib/api/client';
+  import { resolveNavDisplayName } from '$lib/displayUser';
 
   let username = '';
 
   onMount(async () => {
     if (!(await ensureValidAccessToken())) return;
-    const token = getToken();
-    username = (token && decodeJwtSub(token)) || 'User';
+    username = await resolveNavDisplayName();
   });
 </script>
 
