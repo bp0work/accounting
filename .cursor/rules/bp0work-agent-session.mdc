@@ -1,18 +1,18 @@
 ---
-description: bp0.work implementation repo — no specification documents in git
+description: bp0.work implementation repo — no documentation in git
 alwaysApply: true
 ---
 
 # bp0.work — Application repository rules
 
-This git repository contains **implementation code only**. Do **not** add platform specification documents, deployment checklists, or design-suite copies here.
+This git repository contains **implementation code only**. Do **not** commit documentation that describes architecture, APIs, deployment, operations, or how the system works.
 
 ## Non-negotiables
 
 | Rule | Detail |
 |------|--------|
-| **Scope** | Edit only files under this `application/` repository |
-| **No spec files in git** | Do not create or restore `accfin/docs/` specification stubs, version history tables, or copies of numbered design documents |
-| **READMEs** | Keep component READMEs limited to how to run/build that component in this repo |
+| **Scope** | Edit only implementation paths (`accfin/`, `finance-ui/`, `platform-admin-ui/`, `client-admin-ui/`) |
+| **No docs in git** | Do not add or restore `platform_dox/`, `*.md` READMEs, runbooks, incident playbooks, `accfin/docs/` specification copies, or design-suite excerpts |
+| **No spec in git** | Numbered design documents (`00`–`21`), OpenAPI mirrors, and version-history tables stay on the developer machine only |
 
-When design authority is required, use the **local specification workspace** on the developer machine (outside this git root). That content is not pushed to GitHub.
+When design authority is required, use the **local specification workspace** outside this git root. That content is not pushed to GitHub.
