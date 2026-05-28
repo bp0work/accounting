@@ -29,6 +29,53 @@ export function documentTypeLabel(caseType: string): string {
 }
 
 /** Client / Vendor column — AP shows extracted vendor; AR shows classified customer. */
+/** Worker/agent label for dashboard "Action by" when state is Processing. */
+export function processingAgentLabel(caseType: string): string {
+  if (caseType.startsWith('treasury_')) return 'Treasury Agent';
+  if (
+    caseType === 'ap_invoice' ||
+    caseType === 'ap_credit_note' ||
+    caseType === 'ap_debit_note' ||
+    caseType === 'ap_po_validation' ||
+    caseType === 'ap_payment_proposal'
+  ) {
+    return 'AP Agent';
+  }
+  if (
+    caseType === 'ar_invoice' ||
+    caseType === 'ar_payment_advice' ||
+    caseType === 'ar_credit_note'
+  ) {
+    return 'AR Agent';
+  }
+  if (caseType === 'expense_claim') return 'Expense Agent';
+  if (caseType === 'general_inquiry') return 'Accounts Agent';
+  return 'AI Agent';
+}
+
+const MS_24H = 24 * 60 * 60 * 1000;
+
+/** Exclude from Recent Cases when shown under Overdue (SLA or stuck processing). */
+export function isExcludedFromRecentCases(
+  item: {
+    id: string;
+    is_overdue: boolean;
+    status_group?: string | null;
+    status_group_label?: string | null;
+    last_activity_at?: string | null;
+    created_at: string;
+  },
+  overdueCaseIds: ReadonlySet<string>,
+): boolean {
+  if (item.is_overdue || overdueCaseIds.has(item.id)) return true;
+  const processing =
+    item.status_group === 'processing' || item.status_group_label === 'Processing';
+  if (!processing) return false;
+  const ts = item.last_activity_at || item.created_at;
+  if (!ts) return false;
+  return Date.now() - new Date(ts).getTime() > MS_24H;
+}
+
 export function clientVendorColumnValue(item: {
   type: string;
   client_vendor_name?: string | null;
