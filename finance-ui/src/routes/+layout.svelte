@@ -5,7 +5,15 @@
   import { clearToken, getToken } from '$lib/api/client';
   import { requires2faWarning } from '$lib/api/auth';
   import { APP_TITLE } from '$lib/branding';
+  import UserMenu from '$lib/components/UserMenu.svelte';
+  import type { MenuLink } from '$lib/components/userMenuTypes';
   import { initSessionUser, sessionUser } from '$lib/stores/session';
+
+  const userMenuLinks: MenuLink[] = [
+    { kind: 'link', href: '/settings/notifications', label: 'Notifications', icon: '🔔' },
+    { kind: 'link', href: '/settings/security', label: 'Security', icon: '🔒' },
+    { kind: 'link', href: '/settings/security', label: 'Change Password', icon: '🔑' },
+  ];
 
   $: isLogin = $page.url.pathname === '/login';
 
@@ -44,13 +52,8 @@
       <nav class="nav">
         <a href="/dashboard">Dashboard</a>
         <a href="/approvals">Cases & Approvals</a>
-        <a href="/counterparty-accounts">Counterparty accounts</a>
-        <a href="/agreements">Agreements</a>
-        <a href="/accounting-calendar">Accounting calendar</a>
         <a href="/export">Export</a>
-        <a href="/settings/notifications">Notifications</a>
-        <a href="/settings/security">Security</a>
-        <button type="button" class="link-btn" on:click={logout}>Logout</button>
+        <UserMenu links={userMenuLinks} onLogout={logout} />
       </nav>
     {/if}
   </header>
@@ -74,23 +77,18 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 1rem;
+    width: 100%;
   }
   .brand {
     font-size: 1.05rem;
   }
   .nav {
-    display: inline-flex;
+    display: flex;
     flex-wrap: wrap;
     gap: 1rem;
     align-items: center;
-  }
-  .link-btn {
-    background: none;
-    border: none;
-    color: #1d4ed8;
-    font: inherit;
-    padding: 0;
-    text-decoration: underline;
+    flex: 1;
+    min-width: 0;
   }
   .banner-2fa {
     background: #fef3c7;
