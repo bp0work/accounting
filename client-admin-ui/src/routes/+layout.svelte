@@ -4,6 +4,12 @@
   import { page } from '$app/stores';
   import { ACCESS_TOKEN_KEY, clearToken, getToken } from '$lib/api/client';
   import { APP_TITLE } from '$lib/branding';
+  import UserMenu from '$lib/components/UserMenu.svelte';
+  import type { MenuLink } from '$lib/components/userMenuTypes';
+
+  const userMenuLinks: MenuLink[] = [
+    { kind: 'link', href: '/settings/security', label: 'Change Password', icon: '🔑' },
+  ];
 
   $: isLogin = $page.url.pathname === '/login';
   /** Re-run on navigation (e.g. after login) — initial `let` alone does not update on client route change. */
@@ -41,7 +47,7 @@
         <a href="/binding-authority">Binding Authority</a>
         <a href="/policies">Travel &amp; Entertainment</a>
         <a href="/regulatory-policies">Regulatory Policies</a>
-        <button type="button" class="link-btn" on:click={logout}>Logout</button>
+        <UserMenu links={userMenuLinks} onLogout={logout} />
       </nav>
     {/if}
   </header>
@@ -57,20 +63,16 @@
     flex-wrap: wrap;
     gap: 1rem;
     align-items: center;
+    width: 100%;
   }
   .nav {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
     font-size: 0.875rem;
-  }
-  .link-btn {
-    background: none;
-    border: none;
-    color: #1d4ed8;
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
   }
   .main {
     padding: 1.5rem;
