@@ -13,7 +13,6 @@ from app.models.case import Case
 from app.models.executive_mail import PendingOutboundEmail
 from app.models.mail import Email, MailGatewayConfig
 from app.repositories.case import CaseRepository
-from app.repositories.executive_mail import ExecutiveMailRepository
 from app.schemas.hermes import ExtractedInvoice
 from app.services.executive_mail_service import ExecutiveMailService
 from app.services.outbound_mail_service import OutboundMailService
