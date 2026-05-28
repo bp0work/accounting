@@ -36,6 +36,11 @@ class CaseRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_for_retry(self, case_id: UUID) -> Case | None:
+        """Load case for manual retry without relationship eager loads (avoids greenlet on flush)."""
+        result = await self._session.execute(select(Case).where(Case.id == case_id))
+        return result.scalar_one_or_none()
+
     def _date_range_filter(self, q, *, date_from: date | None, date_to: date | None):
         if date_from is not None:
             start = datetime.combine(date_from, time.min, tzinfo=UTC)
