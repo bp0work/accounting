@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppHTTPException
 from app.core.state_machine import CaseStateMachine, TransitionResult
+from app.models.user import User
 from app.policies.engine import PolicyEngine
 from app.repositories.case import CaseRepository
 from app.repositories.policy import PolicyRepository
@@ -17,6 +18,7 @@ from fastapi import status
 from app.schemas.auth import TokenData
 from app.schemas.case import CaseRetryResponse
 from app.services.case_retry import execute_case_retry
+from app.services.timeline_actor import timeline_actor_label_for_user
 from app.services.wasabi_archive import WasabiArchiveService
 
 
@@ -126,12 +128,18 @@ class CaseService:
             )
 
         if instance is not None and result.to_state:
+            actor_label = "system"
+            if user is not None:
+                db_user = await self._session.get(User, user.user_id)
+                actor_label = timeline_actor_label_for_user(
+                    db_user, fallback=str(user.user_id)
+                )
             await self._cases.record_transition(
                 instance=instance,
                 from_state=result.from_state.value,
                 to_state=result.to_state.value,
                 trigger=trigger,
-                actor=str(user.user_id) if user else "system",
+                actor=actor_label,
                 metadata={"policy_action": policy_action},
             )
             await self._cases.add_timeline(
@@ -139,7 +147,7 @@ class CaseService:
                 event_type="status_changed",
                 from_status=result.from_state.value,
                 to_status=result.to_state.value,
-                actor=str(user.user_id) if user else "system",
+                actor=actor_label,
                 description=f"Trigger: {trigger}",
                 actor_user_id=user.user_id if user else None,
             )
