@@ -150,6 +150,9 @@ class MailGatewayConfig(Base, TimestampMixin):
     password_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="60")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    require_parsing_confirmation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     default_case_type: Mapped[str | None] = mapped_column(
         ENUM(
             "ar_invoice",

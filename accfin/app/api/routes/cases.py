@@ -31,6 +31,16 @@ from app.schemas.case import (
     QueueStatusResponse,
     TimelineEntryResponse,
 )
+from app.schemas.parsing_confirmation import (
+    ConfirmParsingRequest,
+    ConfirmParsingResponse,
+    RejectParsingRequest,
+    RejectParsingResponse,
+)
+from app.services.parsing_confirmation_service import (
+    execute_confirm_parsing,
+    execute_reject_parsing,
+)
 from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
 from app.services.case_retry import execute_case_retry
@@ -249,6 +259,24 @@ async def retry_case(
     user: TokenData = Depends(require_permission("cases:write")),
 ) -> CaseRetryResponse:
     return await execute_case_retry(case_id, user=user)
+
+
+@router.post("/cases/{case_id}/confirm-parsing", response_model=ConfirmParsingResponse)
+async def confirm_parsing(
+    case_id: UUID,
+    body: ConfirmParsingRequest,
+    user: TokenData = Depends(require_permission("cases:write")),
+) -> ConfirmParsingResponse:
+    return await execute_confirm_parsing(case_id, user=user, body=body)
+
+
+@router.post("/cases/{case_id}/reject-parsing", response_model=RejectParsingResponse)
+async def reject_parsing(
+    case_id: UUID,
+    body: RejectParsingRequest,
+    user: TokenData = Depends(require_permission("cases:write")),
+) -> RejectParsingResponse:
+    return await execute_reject_parsing(case_id, user=user, body=body)
 
 
 @router.get("/cases/{case_id}/timeline")

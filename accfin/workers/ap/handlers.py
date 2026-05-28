@@ -57,6 +57,12 @@ from workers.common.policy_escalation import (
     route_po_mismatch_escalation,
     route_po_not_found_escalation,
 )
+from workers.common.parsing_confirmation import (
+    extracted_fields_to_invoice,
+    invoice_to_confirmation_fields,
+    pause_for_parsing_confirmation,
+    requires_parsing_confirmation,
+)
 from workers.common.processing_failure import route_processing_failure
 
 logger = logging.getLogger(__name__)
@@ -284,75 +290,104 @@ class APWorkerService:
         email = await self._email_for_case(case)
         overrides: dict = (case.workflow_metadata or {}).get("ap_step_overrides", {})
 
-        # ── Extract ────────────────────────────────────────────────────
-        text, att_id, body = await self._attachment_text(case.email_id)
-        try:
-            extraction = await self._hermes.extract_invoice(
-                self._invoice_extract_request(case, text=text, att_id=att_id, body=body)
+        if message.get("parsing_confirmed"):
+            meta = case.workflow_metadata or {}
+            extracted = dict(meta.get("extracted_fields") or {})
+            inv = extracted_fields_to_invoice(extracted)
+            confidence_f = float(
+                meta.get("extraction_confidence") or case.confidence_score or 0
             )
-        except HermesError as exc:
-            return await self._route_exception(case, email, exc.error_code, str(exc))
-
-        inv = extraction.output
-        if inv is None:
+            email_subject = email.subject if email else None
+            email_body_text = email.body_text if email else None
+            sender_val = extract_sender_validation(email_subject, email_body_text)
             await self._start_processing(case)
-            return await self._route_exception(case, email, "EMPTY_EXTRACTION", "Empty extraction")
-
-        confidence_f = float(extraction.confidence_score)
-
-        # Sender validation runs on email text — not Hermes
-        email_subject = email.subject if email else None
-        email_body_text = email.body_text if email else None
-        sender_val = extract_sender_validation(email_subject, email_body_text)
-
-        # Merge sender_validated into extraction metadata
-        extracted = invoice_extracted_fields(inv)
-        extracted["document_type"] = getattr(inv, "document_type", None) or "invoice"
-
-        # ── Step 1: Parsing validation ────────────────────────────────
-        await self._start_processing(case)
-        if not overrides.get("override_parsing"):
-            missing = list(inv.missing_fields or [])
-            has_critical = has_critical_missing("ap_invoice", missing)
-            if has_critical or confidence_f < 0.70:
-                missing_label = ", ".join(missing) if missing else "low extraction confidence"
-                summary = (
-                    f"Unable to parse all required details for {case.case_number}. "
-                    f"Missing fields: {missing_label}. "
-                    f"Please advise: a) provide missing details for reprocessing quoting "
-                    f"Case ID {case.case_number}, or b) ask sender to resubmit quoting "
-                    f"Case ID {case.case_number}."
+        else:
+            # ── Extract ────────────────────────────────────────────────────
+            text, att_id, body = await self._attachment_text(case.email_id)
+            try:
+                extraction = await self._hermes.extract_invoice(
+                    self._invoice_extract_request(case, text=text, att_id=att_id, body=body)
                 )
-                _update_meta(case, {
-                    "current_stage": "parsing",
-                    "extraction_confidence": confidence_f,
-                    "extracted_fields": extracted,
-                    "missing_fields": missing,
-                    "error_type": _REASON_PARSING,
-                    "reason_code": _REASON_PARSING,
-                })
-                await self._add_timeline(
-                    case, "parsing_failed",
-                    from_status="processing", to_status="manual_review",
-                    description=f"Parsing failed: {missing_label}",
-                    metadata={"missing_fields": missing, "confidence": confidence_f},
+            except HermesError as exc:
+                return await self._route_exception(case, email, exc.error_code, str(exc))
+
+            inv = extraction.output
+            if inv is None:
+                await self._start_processing(case)
+                return await self._route_exception(case, email, "EMPTY_EXTRACTION", "Empty extraction")
+
+            confidence_f = float(extraction.confidence_score)
+
+            # Sender validation runs on email text — not Hermes
+            email_subject = email.subject if email else None
+            email_body_text = email.body_text if email else None
+            sender_val = extract_sender_validation(email_subject, email_body_text)
+
+            # Merge sender_validated into extraction metadata
+            extracted = invoice_extracted_fields(inv)
+            extracted["document_type"] = getattr(inv, "document_type", None) or "invoice"
+
+            # ── Step 1: Parsing validation ────────────────────────────────
+            await self._start_processing(case)
+            if not overrides.get("override_parsing"):
+                missing = list(inv.missing_fields or [])
+                has_critical = has_critical_missing("ap_invoice", missing)
+                if has_critical or confidence_f < 0.70:
+                    missing_label = ", ".join(missing) if missing else "low extraction confidence"
+                    summary = (
+                        f"Unable to parse all required details for {case.case_number}. "
+                        f"Missing fields: {missing_label}. "
+                        f"Please advise: a) provide missing details for reprocessing quoting "
+                        f"Case ID {case.case_number}, or b) ask sender to resubmit quoting "
+                        f"Case ID {case.case_number}."
+                    )
+                    _update_meta(case, {
+                        "current_stage": "parsing",
+                        "extraction_confidence": confidence_f,
+                        "extracted_fields": extracted,
+                        "missing_fields": missing,
+                        "error_type": _REASON_PARSING,
+                        "reason_code": _REASON_PARSING,
+                    })
+                    await self._add_timeline(
+                        case, "parsing_failed",
+                        from_status="processing", to_status="manual_review",
+                        description=f"Parsing failed: {missing_label}",
+                        metadata={"missing_fields": missing, "confidence": confidence_f},
+                    )
+                    return await self._escalate_step(
+                        case, email,
+                        reason_code=_REASON_PARSING,
+                        summary=summary,
+                        extracted_fields=extracted,
+                        extraction_confidence=confidence_f,
+                        missing_fields=missing,
+                        escalation_template="manager.escalation.missing_fields",
+                        reattach_inbound_attachments=True,
+                    )
+
+            await self._add_timeline(
+                case, "parsing_completed",
+                description=f"Parsing OK — confidence {confidence_f:.2f}",
+                metadata={"confidence": confidence_f, "extracted_fields": extracted},
+            )
+
+            if await requires_parsing_confirmation(self._session, case, email):
+                confirm_fields = invoice_to_confirmation_fields(
+                    inv, document_type=extracted.get("document_type")
                 )
-                return await self._escalate_step(
-                    case, email,
-                    reason_code=_REASON_PARSING,
-                    summary=summary,
-                    extracted_fields=extracted,
+                if sender_val is not None:
+                    confirm_fields["sender_validated"] = (
+                        "true" if sender_val else "false"
+                    )
+                return await pause_for_parsing_confirmation(
+                    self._session,
+                    case=case,
+                    email=email,
+                    extracted_fields=confirm_fields,
                     extraction_confidence=confidence_f,
-                    missing_fields=missing,
-                    escalation_template="manager.escalation.missing_fields",
-                    reattach_inbound_attachments=True,
+                    actor_name="ap-worker",
                 )
-
-        await self._add_timeline(
-            case, "parsing_completed",
-            description=f"Parsing OK — confidence {confidence_f:.2f}",
-            metadata={"confidence": confidence_f, "extracted_fields": extracted},
-        )
 
         # ── Step 2: Duplicate check ───────────────────────────────────
         if not overrides.get("override_duplicate"):

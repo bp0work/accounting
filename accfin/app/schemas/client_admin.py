@@ -78,6 +78,7 @@ class MailConfigurationResponse(BaseModel):
     mailbox_mode: str
     escalation_manager_email: str | None
     is_active: bool
+    require_parsing_confirmation: bool = False
     username_masked: str
     server_host: str
 
@@ -87,6 +88,7 @@ class MailConfigurationResponse(BaseModel):
 class MailConfigurationUpdate(BaseModel):
     display_name: str | None = None
     escalation_manager_email: str | None = None
+    require_parsing_confirmation: bool | None = None
 
 
 class AdminUserResponse(BaseModel):

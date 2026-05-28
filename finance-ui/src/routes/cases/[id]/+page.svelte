@@ -9,8 +9,11 @@
     fetchCase,
     fetchCaseTimeline,
     retryCase,
+    confirmParsing,
+    rejectParsing,
     overrideGlPeriodPost,
     type CaseItem,
+    type ParsingConfirmationFields,
     type TimelineEntry,
   } from '$lib/api/cases';
   import {
@@ -35,6 +38,30 @@
   let overrideSubmitting = false;
   let savedHintFields = new Set<string>();
   let teachMessage = '';
+  let parsingBusy = false;
+  let parsingMessage = '';
+  let rejectParsingReason = '';
+
+  const confirmParsingRoles = new Set([
+    'accounts_clerk',
+    'finance_manager',
+    'cfo',
+    'finance_director',
+  ]);
+
+  let parsingFormKey = '';
+  let parsingForm: ParsingConfirmationFields = {
+    document_type: 'invoice',
+    document_number: '',
+    document_date: '',
+    due_date: '',
+    vendor_name: '',
+    total_amount: '',
+    gst_amount: '',
+    currency: 'SGD',
+    payment_terms: '',
+    sender_validated: false,
+  };
 
   type TeachFieldForm = {
     field_name: string;
@@ -106,6 +133,31 @@
     reviewSnapshot.missing.length > 0 &&
     vendorName.length > 0;
   $: canRetryWithHints = showTeachPanel && savedHintFields.size > 0;
+  $: canConfirmParsing =
+    item?.status === 'pending_confirmation' && confirmParsingRoles.has(role);
+  $: isExpenseConfirm = item?.type === 'expense_claim';
+
+  $: if (item?.status === 'pending_confirmation') {
+    const raw = item.workflow_metadata?.extracted_fields;
+    const key = `${item.id}:${JSON.stringify(raw ?? {})}`;
+    if (key !== parsingFormKey && raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      parsingFormKey = key;
+      const f = raw as Record<string, unknown>;
+      parsingForm = {
+        document_type: String(f.document_type ?? 'invoice'),
+        document_number: f.document_number != null ? String(f.document_number) : '',
+        document_date: String(f.document_date ?? f.invoice_date ?? ''),
+        due_date: f.due_date != null ? String(f.due_date) : '',
+        vendor_name: f.vendor_name != null ? String(f.vendor_name) : '',
+        total_amount: f.total_amount != null ? String(f.total_amount) : '',
+        gst_amount: String(f.gst_amount ?? f.tax_amount ?? ''),
+        currency: String(f.currency ?? 'SGD'),
+        payment_terms: f.payment_terms != null ? String(f.payment_terms) : '',
+        sender_validated:
+          String(f.sender_validated ?? 'false').toLowerCase() === 'true',
+      };
+    }
+  }
 
   $: if (item && showTeachPanel) {
     const names = reviewSnapshot.missing;
@@ -196,6 +248,54 @@
     }
   }
 
+  async function handleConfirmParsing() {
+    if (!item || parsingBusy || !canConfirmParsing) return;
+    parsingBusy = true;
+    parsingMessage = '';
+    error = '';
+    try {
+      const body: ParsingConfirmationFields = {
+        ...parsingForm,
+        document_number: parsingForm.document_number?.trim() || null,
+        document_date: parsingForm.document_date?.trim() || null,
+        due_date: parsingForm.due_date?.trim() || null,
+        vendor_name: parsingForm.vendor_name?.trim() || null,
+        total_amount: parsingForm.total_amount?.trim() || null,
+        gst_amount: parsingForm.gst_amount?.trim() || null,
+        payment_terms: parsingForm.payment_terms?.trim() || null,
+      };
+      const result = await confirmParsing(id, body);
+      parsingMessage = `Parsing confirmed (${result.correction_count} correction(s)) — case requeued.`;
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Confirm parsing failed';
+    } finally {
+      parsingBusy = false;
+    }
+  }
+
+  async function handleRejectParsing() {
+    if (!item || parsingBusy || !canConfirmParsing) return;
+    const reason = rejectParsingReason.trim();
+    if (!reason) {
+      error = 'Rejection reason is required.';
+      return;
+    }
+    parsingBusy = true;
+    parsingMessage = '';
+    error = '';
+    try {
+      await rejectParsing(id, reason);
+      parsingMessage = 'Parsing rejected — submitter notified.';
+      rejectParsingReason = '';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Reject parsing failed';
+    } finally {
+      parsingBusy = false;
+    }
+  }
+
   async function handleRetry() {
     if (!item || retrying) return;
     retrying = true;
@@ -250,6 +350,10 @@
       status_change: 'Status / policy / extraction',
       exception_raised: 'Escalation / exception',
       case_retry: 'Manual retry',
+      parsing_completed: 'Parsing completed',
+      parsing_awaiting_confirmation: 'Awaiting parsing confirmation',
+      parsing_confirmed: 'Parsing confirmed',
+      parsing_rejected: 'Parsing rejected',
       journal_linked: 'Journal posted',
       approval_requested: 'Approval requested',
     };
@@ -435,6 +539,111 @@
           {/if}
         </section>
       {/if}
+    {/if}
+    {#if item.status === 'pending_confirmation'}
+      <section class="confirm-box">
+        <h2>Confirm Parsing</h2>
+        {#if canConfirmParsing}
+          <p class="hint">
+            Review extracted fields before duplicate check and validation continue.
+          </p>
+          {#if !isExpenseConfirm}
+            <label>
+              Document type
+              <select bind:value={parsingForm.document_type}>
+                <option value="invoice">Invoice</option>
+                <option value="credit_note">Credit note</option>
+                <option value="debit_note">Debit note</option>
+              </select>
+            </label>
+            <label>
+              Document number
+              <input type="text" bind:value={parsingForm.document_number} />
+            </label>
+            <label>
+              Document date
+              <input type="date" bind:value={parsingForm.document_date} />
+            </label>
+            <label>
+              Due date
+              <input type="date" bind:value={parsingForm.due_date} />
+            </label>
+          {:else}
+            <p class="hint">Expense claim — confirm totals and claimant below.</p>
+          {/if}
+          <label>
+            {isExpenseConfirm ? 'Claimant' : 'Vendor name'}
+            <input type="text" bind:value={parsingForm.vendor_name} />
+          </label>
+          <label>
+            Total amount
+            <input type="number" step="0.01" bind:value={parsingForm.total_amount} />
+          </label>
+          {#if !isExpenseConfirm}
+            <label>
+              GST amount
+              <input type="number" step="0.01" bind:value={parsingForm.gst_amount} />
+            </label>
+            <label>
+              Currency
+              <select bind:value={parsingForm.currency}>
+                <option value="SGD">SGD</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="AUD">AUD</option>
+              </select>
+            </label>
+            <label>
+              Payment terms
+              <select bind:value={parsingForm.payment_terms}>
+                <option value="">—</option>
+                <option value="immediate">Immediate</option>
+                <option value="net_7">Net 7</option>
+                <option value="net_14">Net 14</option>
+                <option value="net_30">Net 30</option>
+                <option value="net_60">Net 60</option>
+                <option value="net_90">Net 90</option>
+              </select>
+            </label>
+            <label class="toggle-row">
+              <input type="checkbox" bind:checked={parsingForm.sender_validated} />
+              Validated by sender
+            </label>
+          {/if}
+          <div class="confirm-actions">
+            <button
+              type="button"
+              class="approve"
+              disabled={parsingBusy}
+              onclick={handleConfirmParsing}
+            >
+              {parsingBusy ? 'Working…' : 'Confirm & Continue'}
+            </button>
+            <label class="reject-reason">
+              Rejection reason
+              <textarea
+                bind:value={rejectParsingReason}
+                rows="2"
+                placeholder="Required to reject"
+              ></textarea>
+            </label>
+            <button
+              type="button"
+              class="reject"
+              disabled={parsingBusy}
+              onclick={handleRejectParsing}
+            >
+              Reject
+            </button>
+          </div>
+        {:else}
+          <p class="hint">Awaiting confirmation by Accounts or Finance leadership.</p>
+        {/if}
+        {#if parsingMessage}
+          <p class="hint success">{parsingMessage}</p>
+        {/if}
+      </section>
     {/if}
     <p>{item.subject}</p>
     <p>Client / Vendor: {clientVendorColumnValue(item)}</p>
@@ -682,6 +891,60 @@
   .review-box h2 {
     margin: 0 0 0.5rem;
     font-size: 1rem;
+  }
+  .confirm-box {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #93c5fd;
+    border-radius: 8px;
+    background: #eff6ff;
+  }
+  .confirm-box h2 {
+    margin-top: 0;
+  }
+  .confirm-box label {
+    display: block;
+    margin-top: 0.65rem;
+    font-size: 0.9rem;
+  }
+  .confirm-box input,
+  .confirm-box select,
+  .confirm-box textarea {
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    margin-top: 0.25rem;
+    box-sizing: border-box;
+  }
+  .confirm-actions {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+  .confirm-actions .approve {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: 1px solid #15803d;
+    background: #dcfce7;
+    color: #166534;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .confirm-actions .reject {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: 1px solid #b91c1c;
+    background: #fee2e2;
+    color: #991b1b;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
   .teach-box {
     margin-top: 1rem;

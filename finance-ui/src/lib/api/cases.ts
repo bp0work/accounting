@@ -80,6 +80,43 @@ export function retryCase(caseId: string) {
   return apiFetch<CaseRetryResult>(`/cases/${caseId}/retry`, { method: 'POST' });
 }
 
+export type ParsingConfirmationFields = {
+  document_type: string;
+  document_number?: string | null;
+  document_date?: string | null;
+  due_date?: string | null;
+  vendor_name?: string | null;
+  total_amount?: string | null;
+  gst_amount?: string | null;
+  currency: string;
+  payment_terms?: string | null;
+  sender_validated: boolean;
+};
+
+export type ConfirmParsingResult = {
+  case_id: string;
+  case_number: string;
+  status: string;
+  message_id: string;
+  parsing_confirmed_by: string;
+  parsing_confirmed_at: string;
+  correction_count: number;
+};
+
+export function confirmParsing(caseId: string, extracted_fields: ParsingConfirmationFields) {
+  return apiFetch<ConfirmParsingResult>(`/cases/${caseId}/confirm-parsing`, {
+    method: 'POST',
+    body: JSON.stringify({ extracted_fields }),
+  });
+}
+
+export function rejectParsing(caseId: string, reason: string) {
+  return apiFetch<{ case_id: string; case_number: string; status: string }>(
+    `/cases/${caseId}/reject-parsing`,
+    { method: 'POST', body: JSON.stringify({ reason }) }
+  );
+}
+
 export function overrideGlPeriodPost(
   periodId: string,
   caseId: string,
