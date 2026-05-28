@@ -54,10 +54,22 @@ async def _period_closed_hold_retryable(session: AsyncSession, case: Case) -> bo
 
 
 def _transient_hermes_code(meta: dict) -> str | None:
-    for key in ("error_code", "error_type", "reason_code"):
-        code = str(meta.get(key) or "").strip().upper()
-        if code in RETRYABLE_HERMES_ON_HOLD_CODES:
-            return code
+    for key in (
+        "error_code",
+        "error_type",
+        "reason_code",
+        "error_message",
+        "error_reason",
+    ):
+        raw = str(meta.get(key) or "").strip().upper()
+        if not raw:
+            continue
+        if raw in RETRYABLE_HERMES_ON_HOLD_CODES:
+            return raw
+        if "HERMES_TIMEOUT" in raw:
+            return "HERMES_TIMEOUT"
+        if "HERMES_UNAVAILABLE" in raw:
+            return "HERMES_UNAVAILABLE"
     return None
 
 
@@ -65,6 +77,24 @@ def _transient_hermes_hold_retryable(case: Case) -> bool:
     if case.status != "on_hold":
         return False
     return _transient_hermes_code(case.workflow_metadata or {}) is not None
+
+
+def case_can_manual_retry(
+    case: Case,
+    *,
+    linked_gl_period_status: str | None = None,
+) -> bool:
+    """Whether POST /cases/{id}/retry is expected to succeed (Finance UI actions)."""
+    if case.status in RETRYABLE_STATUSES:
+        return True
+    if case.status != "on_hold":
+        return False
+    if _transient_hermes_hold_retryable(case):
+        return True
+    meta = case.workflow_metadata or {}
+    if meta.get("reason_code") == "PERIOD_CLOSED" or meta.get("error_type") == "PERIOD_CLOSED":
+        return linked_gl_period_status is not None and linked_gl_period_status != "closed"
+    return False
 
 
 async def _persist_case_retry(case_id: UUID, user: TokenData) -> _CaseRetrySnapshot:

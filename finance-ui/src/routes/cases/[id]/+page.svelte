@@ -137,10 +137,11 @@
   }
 
   $: canRetryTransientHermes = item ? isTransientHermesCase(item) : false;
-  $: showStandardRetry =
+  $: showCaseRetry =
     item &&
-    (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes) &&
-    (!canRetryWithHints || canRetryTransientHermes);
+    (item.can_retry === true ||
+      ((retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes) &&
+        (!canRetryWithHints || canRetryTransientHermes)));
 
   $: id = $page.params.id;
 
@@ -479,6 +480,26 @@
     {#if item.error_reason}
       <p class="badge error">Error: {item.error_reason}</p>
     {/if}
+    {#if showCaseRetry}
+      <div class="retry-actions">
+        <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
+          {retrying ? 'Requeuing…' : 'Retry processing'}
+        </button>
+        {#if canRetryTransientHermes || (item.error_reason ?? '').toUpperCase().includes('HERMES')}
+          <p class="hint">
+            Hermes timed out or was temporarily unavailable. Retry requeues this case; ensure Ollama
+            shows the model loaded (<code>ollama ps</code>).
+          </p>
+        {:else if canRetryAfterReopen}
+          <p class="hint">
+            The GL period for this posting date has been reopened — you can reprocess without an
+            override.
+          </p>
+        {:else if item.status === 'manual_review'}
+          <p class="hint">Requeue this case for another extraction and validation pass.</p>
+        {/if}
+      </div>
+    {/if}
     <p><strong>{item.case_number}</strong> · {item.type}</p>
     <p>Status: <strong>{item.status}</strong>{#if item.processing_stage} · Stage: {item.processing_stage}{/if}</p>
     {#if item.status_reason && !item.error_reason}
@@ -564,13 +585,6 @@
             <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
               {retrying ? 'Requeuing…' : 'Retry with hints'}
             </button>
-          {:else if canRetryTransientHermes}
-            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-              {retrying ? 'Requeuing…' : 'Retry processing'}
-            </button>
-            <p class="hint">
-              Hermes timed out or was temporarily unavailable. Retry requeues this case after Ollama is healthy.
-            </p>
           {/if}
         </section>
       {/if}
@@ -695,18 +709,6 @@
         Override &amp; post
       </button>
       <p class="hint">This case is blocked because the posting date falls in a closed GL period.</p>
-    {/if}
-    {#if showStandardRetry}
-      <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-        {retrying ? 'Requeuing…' : 'Retry processing'}
-      </button>
-      {#if canRetryAfterReopen}
-        <p class="hint">The GL period for this posting date has been reopened — you can reprocess without an override.</p>
-      {:else if canRetryTransientHermes}
-        <p class="hint">
-          Hermes timed out or was temporarily unavailable. Retry requeues this case; ensure Hermes and Ollama are healthy on the server.
-        </p>
-      {/if}
     {/if}
     {#if retryMessage}
       <p class="hint success">{retryMessage}</p>

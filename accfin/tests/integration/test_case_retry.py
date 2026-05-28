@@ -90,6 +90,28 @@ async def test_case_retry_requeues_on_hold_hermes_timeout(
 
 
 @pytest.mark.integration
+async def test_get_case_includes_can_retry_for_on_hold_hermes(
+    db_session, async_client: AsyncClient, auth_headers
+) -> None:
+    case = Case(
+        case_number=f"CAS-CANRETRY-{uuid4().hex[:8]}",
+        type="ap_invoice",
+        status="on_hold",
+        subject="Hermes",
+        workflow_metadata={
+            "reason_code": "HERMES_TIMEOUT",
+            "error_reason": "HERMES_TIMEOUT:",
+        },
+    )
+    db_session.add(case)
+    await db_session.commit()
+
+    response = await async_client.get(f"/api/cases/{case.id}", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["can_retry"] is True
+
+
+@pytest.mark.integration
 async def test_case_retry_rejects_non_retryable_status(
     db_session, async_client: AsyncClient, auth_headers
 ) -> None:

@@ -41,6 +41,7 @@ class CaseResponse(BaseModel):
     current_approval_tier: int | None = None
     pending_approval_id: UUID | None = None
     binding_escalated_to_cfo: bool = False
+    can_retry: bool = False
 
 
 class CaseListResponse(BaseModel):

@@ -46,6 +46,7 @@ from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
 from app.services.case_retry import execute_case_retry
 from app.services.case_service import CaseService
+from app.services.case_retry import case_can_manual_retry
 from app.services.timeline_actor import resolve_timeline_actor_display
 from app.services.case_visibility import (
     client_vendor_name,
@@ -138,6 +139,9 @@ def _case_response(
             "current_approval_tier": case.current_approval_tier,
             "pending_approval_id": pending_approval_id,
             "binding_escalated_to_cfo": bool(wf.get("binding_escalated_to_cfo")),
+            "can_retry": case_can_manual_retry(
+                case, linked_gl_period_status=linked_gl_period_status
+            ),
         }
     )
 

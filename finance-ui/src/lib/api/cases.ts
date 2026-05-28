@@ -26,6 +26,8 @@ export type CaseItem = {
   current_approval_tier?: number | null;
   pending_approval_id?: string | null;
   binding_escalated_to_cfo?: boolean;
+  /** Server-computed: POST /cases/{id}/retry is allowed */
+  can_retry?: boolean;
 };
 
 export type TimelineEntry = {
