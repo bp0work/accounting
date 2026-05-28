@@ -19,6 +19,7 @@ export type CaseItem = {
   processing_stage?: string | null;
   status_group?: string | null;
   status_group_label?: string | null;
+  action_by?: string | null;
   status_label?: string | null;
   error_reason?: string | null;
   status_reason?: string | null;

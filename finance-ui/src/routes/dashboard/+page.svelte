@@ -30,6 +30,10 @@
     const ts = c.last_activity_at || c.created_at;
     return new Date(ts).toLocaleString();
   }
+
+  function formatActionBy(c: CaseItem) {
+    return c.action_by?.trim() ? c.action_by : '—';
+  }
 </script>
 
 <h1>Operations dashboard</h1>
@@ -87,6 +91,7 @@
             <th>Case</th>
             <th>Type</th>
             <th>State</th>
+            <th>Action by</th>
             <th>Last Activity</th>
           </tr>
         </thead>
@@ -96,6 +101,7 @@
               <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
               <td>{c.type}</td>
               <td>{c.status_group_label || '—'}</td>
+              <td>{formatActionBy(c)}</td>
               <td>{formatActivity(c)}</td>
             </tr>
           {/each}
@@ -114,6 +120,7 @@
               <th>Case</th>
               <th>Type</th>
               <th>State</th>
+              <th>Action by</th>
             </tr>
           </thead>
           <tbody>
@@ -122,6 +129,7 @@
                 <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
                 <td>{c.type}</td>
                 <td>{c.status_group_label || '—'}</td>
+                <td>{formatActionBy(c)}</td>
               </tr>
             {/each}
           </tbody>

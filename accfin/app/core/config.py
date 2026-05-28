@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.32-case-state-labels"
+        return "0.14.34-dashboard-action-by"
 
     @property
     def edge_public_base_url(self) -> str:

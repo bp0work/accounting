@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 from app.models.case import Case
 from app.services.case_visibility import (
+    case_action_by,
     case_status_group,
     case_status_group_label,
     case_status_label,
@@ -146,6 +147,40 @@ def test_rejected_status_not_grouped_as_attention():
     case = _case(status="rejected", workflow_metadata={})
     assert case_status_group(case) == "rejected"
     assert case_status_group_label(case) == "Rejected"
+
+
+def test_action_by_processing_is_blank():
+    case = _case(status="classified", workflow_metadata={})
+    assert case_action_by(case) is None
+
+
+def test_action_by_manual_review_is_acc():
+    case = _case(status="manual_review", workflow_metadata={})
+    assert case_action_by(case) == "ACC"
+
+
+def test_action_by_tier2_approval_is_acc():
+    case = _case(status="pending_approval", current_approval_tier=2, workflow_metadata={})
+    assert case_action_by(case) == "ACC"
+
+
+def test_action_by_tier3_approval_is_cfo():
+    case = _case(status="pending_approval", current_approval_tier=3, workflow_metadata={})
+    assert case_action_by(case) == "CFO"
+
+
+def test_action_by_binding_escalation_is_cfo():
+    case = _case(
+        status="pending_approval",
+        current_approval_tier=2,
+        workflow_metadata={"binding_escalated_to_cfo": True},
+    )
+    assert case_action_by(case) == "CFO"
+
+
+def test_action_by_completed_is_blank():
+    case = _case(status="posted", workflow_metadata={})
+    assert case_action_by(case) is None
 
 
 def test_client_vendor_name_ap_falls_back_to_counterparty():
