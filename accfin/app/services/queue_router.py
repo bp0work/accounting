@@ -34,6 +34,7 @@ async def enqueue_accounts(
     gl_period_override_reason: str | None = None,
     gl_period_posted_by: str | None = None,
     message_id: str | None = None,
+    parsing_confirmed: bool = False,
 ) -> str:
     message_id = message_id or str(uuid4())
     payload = {
@@ -62,6 +63,8 @@ async def enqueue_accounts(
             payload["gl_period_override_reason"] = gl_period_override_reason
         if gl_period_posted_by:
             payload["gl_period_posted_by"] = gl_period_posted_by
+    if parsing_confirmed:
+        payload["parsing_confirmed"] = True
     redis = get_redis()
     await redis.rpush(get_settings().accounts_queue_name, json.dumps(payload))
     return message_id

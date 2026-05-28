@@ -38,6 +38,12 @@ from workers.ar.extraction import (
 from app.services.binding_authority_service import BindingAuthorityService, apply_binding_sla
 from workers.common.binding_authority_escalation import route_binding_authority_escalation
 from workers.common.gl_period_check import ensure_gl_period_allows_posting
+from workers.common.parsing_confirmation import (
+    extracted_fields_to_invoice,
+    invoice_to_confirmation_fields,
+    pause_for_parsing_confirmation,
+    requires_parsing_confirmation,
+)
 from workers.common.processing_failure import route_processing_failure
 
 logger = logging.getLogger(__name__)
@@ -103,33 +109,75 @@ class ARWorkerService:
         if case is None:
             return {"status": "skipped", "reason": "case_not_found"}
 
-        text, att_id, body = await self._attachment_text(case.email_id)
-        try:
-            extraction = await self._hermes.extract_invoice(
-                ExtractInvoiceRequest(
-                    case_id=case.id,
-                    attachment_id=att_id or case.id,
-                    extracted_text=text,
-                    email_body=body,
-                    document_role="ar",
-                    customer_hint=case.counterparty_name,
-                    supplier_hint=case.counterparty_name,
-                    currency_hint=case.amount_currency or "SGD",
-                )
-            )
-        except HermesError as exc:
-            return await self._route_exception(case, exc.error_code, str(exc))
+        email = await self._email_for_case(case)
 
-        inv = extraction.output
-        if inv is None:
-            return await self._route_manual(case, "Empty extraction")
+        if message.get("parsing_confirmed"):
+            meta = case.workflow_metadata or {}
+            extracted = dict(meta.get("extracted_fields") or {})
+            inv = extracted_fields_to_invoice(extracted)
+            confidence_f = float(
+                meta.get("extraction_confidence") or case.confidence_score or 0
+            )
+        else:
+            text, att_id, body = await self._attachment_text(case.email_id)
+            try:
+                extraction = await self._hermes.extract_invoice(
+                    ExtractInvoiceRequest(
+                        case_id=case.id,
+                        attachment_id=att_id or case.id,
+                        extracted_text=text,
+                        email_body=body,
+                        document_role="ar",
+                        customer_hint=case.counterparty_name,
+                        supplier_hint=case.counterparty_name,
+                        currency_hint=case.amount_currency or "SGD",
+                    )
+                )
+            except HermesError as exc:
+                return await self._route_exception(case, exc.error_code, str(exc))
+
+            inv = extraction.output
+            if inv is None:
+                return await self._route_manual(case, "Empty extraction")
+
+            confidence_f = float(extraction.confidence_score)
+            if not (
+                has_critical_missing("ar_invoice", inv.missing_fields)
+                or confidence_f < 0.70
+            ):
+                await self._cases.add_timeline(
+                    case_id=case.id,
+                    event_type="parsing_completed",
+                    from_status=case.status,
+                    to_status=case.status,
+                    actor="ar-worker",
+                    description=f"Parsing OK — confidence {confidence_f:.2f}",
+                    metadata={"confidence": confidence_f},
+                )
+                if await requires_parsing_confirmation(self._session, case, email):
+                    doc_type = (
+                        "credit_note"
+                        if case.type == "ar_credit_note"
+                        else "invoice"
+                    )
+                    confirm_fields = invoice_to_confirmation_fields(
+                        inv, document_type=doc_type
+                    )
+                    return await pause_for_parsing_confirmation(
+                        self._session,
+                        case=case,
+                        email=email,
+                        extracted_fields=confirm_fields,
+                        extraction_confidence=confidence_f,
+                        actor_name="ar-worker",
+                    )
 
         resolution = await apply_intake_to_case(
             self._session,
             case=case,
             inv=inv,
             tax_direction="output",
-            confidence=float(extraction.confidence_score),
+            confidence=confidence_f,
             document_type="ar_invoice",
         )
         if resolution.warnings:
@@ -150,7 +198,7 @@ class ARWorkerService:
         binding = BindingAuthorityService(self._session)
         tier, thresholds = await binding.evaluate_tier(
             amount=amount,
-            confidence=float(extraction.confidence_score),
+            confidence=confidence_f,
             risk_flags=risk_flags,
             case_type=case.type,
         )
@@ -172,7 +220,6 @@ class ARWorkerService:
             description=f"Binding authority tier {tier}",
             metadata={"policy_tier": tier},
         )
-        confidence_f = float(extraction.confidence_score)
         if has_critical_missing("ar_invoice", inv.missing_fields) or confidence_f < 0.70:
             final_status = "manual_review"
         elif tier == 1 and confidence_f >= thresholds.stp_confidence_minimum and not risk_flags:
@@ -189,7 +236,8 @@ class ARWorkerService:
             )
 
         posting_date = inv.invoice_date or date.today()
-        email = await self._email_for_case(case)
+        if email is None:
+            email = await self._email_for_case(case)
         period_block = await ensure_gl_period_allows_posting(
             self._session,
             case,
@@ -227,7 +275,7 @@ class ARWorkerService:
         case.workflow_metadata = {
             **(case.workflow_metadata or {}),
             "current_stage": "processing",
-            "extraction_confidence": extraction.confidence_score,
+            "extraction_confidence": confidence_f,
             "policy_tier": tier,
             "stp": final_status == "posted",
             "missing_fields": inv.missing_fields,
@@ -249,7 +297,7 @@ class ARWorkerService:
                 "total_amount": str(amount),
                 "currency": inv.currency,
                 "vendor": case.counterparty_name,
-                "confidence": extraction.confidence_score,
+                "confidence": confidence_f,
                 "missing_fields": inv.missing_fields,
             },
         )
@@ -368,7 +416,7 @@ class ARWorkerService:
             **(case.workflow_metadata or {}),
             "payment_ref": pa.bank_reference,
             "unallocated_amount": str(unallocated),
-            "extraction_confidence": extraction.confidence_score,
+            "extraction_confidence": confidence_f,
         }
         await self._timeline_completed(case, "ar_payment_advice", pa.bank_reference, final, None)
         await self._session.flush()

@@ -79,6 +79,7 @@ export type MailboxConfig = {
   mailbox_mode: string;
   escalation_manager_email: string | null;
   is_active: boolean;
+  require_parsing_confirmation?: boolean;
   username_masked?: string | null;
   server_host?: string | null;
 };
@@ -86,6 +87,7 @@ export type MailboxConfig = {
 export type MailboxConfigUpdate = {
   display_name?: string | null;
   escalation_manager_email?: string | null;
+  require_parsing_confirmation?: boolean;
 };
 
 export function listMailboxes(): Promise<MailboxConfig[]> {

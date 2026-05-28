@@ -14,6 +14,8 @@
   type Row = MailboxConfig & {
     display_name_input: string;
     escalation_input: string;
+    require_parsing_confirmation: boolean;
+    require_parsing_confirmation_saved: boolean;
     saving: boolean;
   };
 
@@ -46,6 +48,8 @@
           ...m,
           display_name_input: m.display_name ?? '',
           escalation_input: m.escalation_manager_email ?? '',
+          require_parsing_confirmation: Boolean(m.require_parsing_confirmation),
+          require_parsing_confirmation_saved: Boolean(m.require_parsing_confirmation),
           saving: false,
         }));
     } catch (e) {
@@ -68,12 +72,25 @@
     return mode;
   }
 
+  function showParsingToggle(row: Row): boolean {
+    if (row.mailbox_mode !== 'executive_agent') return false;
+    const addr = row.email_address.toLowerCase();
+    return (
+      addr.startsWith('accap.') ||
+      addr.startsWith('accar.') ||
+      addr.startsWith('accexp.')
+    );
+  }
+
   function rowIsDirty(row: Row): boolean {
     const dn = row.display_name_input.trim();
     const es = row.escalation_input.trim();
     const currentDn = (row.display_name ?? '').trim();
     const currentEs = (row.escalation_manager_email ?? '').trim();
-    return dn !== currentDn || es !== currentEs;
+    const parsingDirty =
+      showParsingToggle(row) &&
+      row.require_parsing_confirmation !== row.require_parsing_confirmation_saved;
+    return dn !== currentDn || es !== currentEs || parsingDirty;
   }
 
   async function save(row: Row) {
@@ -92,12 +109,20 @@
     if (es !== (row.escalation_manager_email ?? '').trim()) {
       body.escalation_manager_email = es || null;
     }
+    if (
+      showParsingToggle(row) &&
+      row.require_parsing_confirmation !== row.require_parsing_confirmation_saved
+    ) {
+      body.require_parsing_confirmation = row.require_parsing_confirmation;
+    }
     try {
       const updated = await patchMailbox(row.id, body);
       row.display_name = updated.display_name;
       row.escalation_manager_email = updated.escalation_manager_email;
       row.display_name_input = updated.display_name ?? '';
       row.escalation_input = updated.escalation_manager_email ?? '';
+      row.require_parsing_confirmation = Boolean(updated.require_parsing_confirmation);
+      row.require_parsing_confirmation_saved = row.require_parsing_confirmation;
       msg = 'Saved ' + row.email_address;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Save failed';
@@ -134,6 +159,7 @@
             <th>Type</th>
             <th>Display name</th>
             <th>Escalation email</th>
+            <th>Parsing confirm</th>
             <th>Active</th>
             <th class="actions-col">Actions</th>
           </tr>
@@ -156,6 +182,19 @@
                   placeholder="manager@bp0.work"
                   bind:value={rows[idx].escalation_input}
                 />
+              </td>
+              <td class="parsing-col">
+                {#if showParsingToggle(row)}
+                  <label class="toggle">
+                    <input
+                      type="checkbox"
+                      bind:checked={rows[idx].require_parsing_confirmation}
+                    />
+                    Require parsing confirmation
+                  </label>
+                {:else}
+                  <span class="muted">—</span>
+                {/if}
               </td>
               <td>
                 <span class="badge {row.is_active ? 'active' : 'inactive'}"
@@ -246,6 +285,16 @@
     border-radius: 4px;
   }
   section { margin-bottom: 1.5rem; }
+  .parsing-col .toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .parsing-col .muted {
+    color: #94a3b8;
+  }
   table {
     width: 100%;
     border-collapse: collapse;

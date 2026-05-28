@@ -544,6 +544,7 @@ async def list_mail_configuration(
                 mailbox_mode=m.mailbox_mode,
                 escalation_manager_email=m.escalation_manager_email,
                 is_active=m.is_active,
+                require_parsing_confirmation=bool(m.require_parsing_confirmation),
                 username_masked=_mask_username(m.username),
                 server_host=m.server_host,
             )
@@ -573,6 +574,7 @@ async def patch_mail_configuration(
         mailbox_mode=m.mailbox_mode,
         escalation_manager_email=m.escalation_manager_email,
         is_active=m.is_active,
+        require_parsing_confirmation=bool(m.require_parsing_confirmation),
         username_masked=_mask_username(m.username),
         server_host=m.server_host,
     )

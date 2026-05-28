@@ -29,6 +29,11 @@ from app.services.binding_authority_service import BindingAuthorityService, appl
 from workers.common.binding_authority_escalation import route_binding_authority_escalation
 from workers.common.gl_period_check import ensure_gl_period_allows_posting
 from workers.common.policy_escalation import route_travel_request_escalation
+from workers.common.parsing_confirmation import (
+    expense_claim_to_confirmation_fields,
+    pause_for_parsing_confirmation,
+    requires_parsing_confirmation,
+)
 from workers.common.processing_failure import route_processing_failure
 from workers.common.travel_detection import claim_requires_travel_request
 
@@ -60,11 +65,23 @@ class ExpenseWorkerService:
         if case.status in ("posted", "completed", "pending_approval"):
             return {"status": "skipped", "reason": "terminal_state", "case_status": case.status}
 
-        claim = await self._expense.get_claim_by_case(case.id)
-        if claim is None:
-            claim = await self._bootstrap_from_email(case)
+        email = None
+        if case.email_id:
+            result = await self._session.execute(
+                select(Email).where(Email.id == case.email_id)
+            )
+            email = result.scalar_one_or_none()
+
+        if message.get("parsing_confirmed"):
+            claim = await self._expense.get_claim_by_case(case.id)
             if claim is None:
-                return {"status": "manual_review", "case_id": str(case.id), "reason": "no_claim_data"}
+                return {"status": "skipped", "reason": "no_claim_data"}
+        else:
+            claim = await self._expense.get_claim_by_case(case.id)
+            if claim is None:
+                claim = await self._bootstrap_from_email(case)
+                if claim is None:
+                    return {"status": "manual_review", "case_id": str(case.id), "reason": "no_claim_data"}
 
         case.status = "processing"
         claim.status = "processing"
@@ -106,6 +123,26 @@ class ExpenseWorkerService:
 
         if confidence < 0.70 or not claim.line_items:
             return await self._finish_manual_review(case, claim, "INCOMPLETE_EXTRACTION")
+
+        if not message.get("parsing_confirmed"):
+            await self._cases.add_timeline(
+                case_id=case.id,
+                event_type="parsing_completed",
+                from_status="processing",
+                to_status="processing",
+                actor="expense-worker",
+                description=f"Expense extraction OK — confidence {confidence:.2f}",
+                metadata={"confidence": confidence},
+            )
+            if await requires_parsing_confirmation(self._session, case, email):
+                return await pause_for_parsing_confirmation(
+                    self._session,
+                    case=case,
+                    email=email,
+                    extracted_fields=expense_claim_to_confirmation_fields(claim),
+                    extraction_confidence=confidence,
+                    actor_name="expense-worker",
+                )
 
         if claim_requires_travel_request(claim.line_items):
             travel = await self._travel.find_approved_for_period(

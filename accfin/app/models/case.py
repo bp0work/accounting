@@ -87,6 +87,7 @@ _CASE_STATUS = ENUM(
     "journal_posted",
     "case_closed",
     "validation_completed",
+    "pending_confirmation",
     name="case_status",
     create_type=False,
 )
