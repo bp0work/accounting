@@ -474,13 +474,25 @@
 
 {#if error}<p class="error">{error}</p>{/if}
 {#if item}
-  <div class="card" class:overdue={item.is_overdue} class:exception={item.status === 'exception' || item.status === 'manual_review'}>
+  <div
+    class="card"
+    class:overdue={item.is_overdue}
+    class:exception={item.status_group === 'attention' ||
+      item.status === 'exception' ||
+      item.status === 'manual_review'}
+  >
     {#if item.is_overdue}<p class="badge warn">Overdue — past SLA threshold</p>{/if}
     {#if item.error_reason}
       <p class="badge error">Error: {item.error_reason}</p>
     {/if}
     <p><strong>{item.case_number}</strong> · {item.type}</p>
-    <p>Status: <strong>{item.status}</strong>{#if item.processing_stage} · Stage: {item.processing_stage}{/if}</p>
+    <p class="case-state" title="System status: {item.status}">
+      <span class="status-group status-group-{item.status_group ?? 'processing'}">
+        {item.status_group_label ?? item.status}
+      </span>
+      <span class="state-sep">·</span>
+      <strong class="status-label">{item.status_label ?? item.status}</strong>
+    </p>
     {#if item.status_reason && !item.error_reason}
       <p class="hint">{item.status_reason}</p>
     {/if}
@@ -816,6 +828,47 @@
   .exception {
     border-color: #fed7aa;
     background: #fff7ed;
+  }
+  .case-state {
+    margin: 0.35rem 0;
+  }
+  .status-group {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: none;
+  }
+  .status-group-intake,
+  .status-group-queued {
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+  .status-group-processing,
+  .status-group-parsing_review,
+  .status-group-approval {
+    background: #fef9c3;
+    color: #854d0e;
+  }
+  .status-group-complete {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .status-group-attention {
+    background: #ffedd5;
+    color: #9a3412;
+  }
+  .status-group-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+  .state-sep {
+    margin: 0 0.35rem;
+    color: #94a3b8;
+  }
+  .status-label {
+    font-weight: 600;
   }
   .badge {
     font-weight: 600;

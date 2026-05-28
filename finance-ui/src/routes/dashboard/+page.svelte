@@ -86,8 +86,8 @@
           <tr>
             <th>Case</th>
             <th>Type</th>
+            <th>Group</th>
             <th>Status</th>
-            <th>Stage</th>
             <th>Processing</th>
             <th>Last activity</th>
             <th>Error</th>
@@ -99,8 +99,8 @@
             <tr class="overdue-row">
               <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
               <td>{c.type}</td>
-              <td>{c.status}</td>
-              <td>{c.processing_stage || '—'}</td>
+              <td>{c.status_group_label || '—'}</td>
+              <td>{c.status_label || c.status}</td>
               <td>{c.processing_time_minutes ?? '—'} min</td>
               <td>{formatActivity(c)}</td>
               <td class="error-cell">{c.error_reason || '—'}</td>
@@ -121,8 +121,8 @@
             <tr>
               <th>Case</th>
               <th>Type</th>
+              <th>Group</th>
               <th>Status</th>
-              <th>Stage</th>
               <th>Last activity</th>
               <th>Error</th>
             </tr>
@@ -132,8 +132,8 @@
               <tr>
                 <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
                 <td>{c.type}</td>
-                <td>{c.status}</td>
-                <td>{c.processing_stage || '—'}</td>
+                <td>{c.status_group_label || '—'}</td>
+                <td>{c.status_label || c.status}</td>
                 <td>{formatActivity(c)}</td>
                 <td class="error-cell">{c.error_reason || '—'}</td>
               </tr>

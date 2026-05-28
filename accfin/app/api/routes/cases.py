@@ -48,6 +48,9 @@ from app.services.case_retry import execute_case_retry
 from app.services.case_service import CaseService
 from app.services.timeline_actor import resolve_timeline_actor_display
 from app.services.case_visibility import (
+    case_status_group,
+    case_status_group_label,
+    case_status_label,
     client_vendor_name,
     error_reason,
     last_activity_at,
@@ -129,6 +132,9 @@ def _case_response(
             "processing_time_minutes": processing_time_minutes(case),
             "is_overdue": is_case_overdue(case),
             "processing_stage": processing_stage(case),
+            "status_group": case_status_group(case),
+            "status_group_label": case_status_group_label(case),
+            "status_label": case_status_label(case),
             "error_reason": error_reason(case),
             "status_reason": status_reason(case),
             "last_activity_at": last_activity_at(case),

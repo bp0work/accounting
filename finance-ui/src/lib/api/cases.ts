@@ -17,6 +17,9 @@ export type CaseItem = {
   processing_time_minutes?: number | null;
   is_overdue: boolean;
   processing_stage?: string | null;
+  status_group?: string | null;
+  status_group_label?: string | null;
+  status_label?: string | null;
   error_reason?: string | null;
   status_reason?: string | null;
   last_activity_at?: string | null;

@@ -7,8 +7,73 @@ from datetime import datetime
 from app.models.case import Case
 
 EXCEPTION_STATUSES = frozenset({"exception", "manual_review", "on_hold", "rejected"})
+REJECTED_STATUSES = frozenset({"rejected", "case_rejected"})
 AP_CASE_TYPES = frozenset({"ap_invoice", "ap_po_validation", "ap_payment_proposal"})
 AR_CASE_TYPES = frozenset({"ar_invoice", "ar_payment_advice", "ar_statement"})
+
+# High-level buckets for finance UI (group → human-readable status).
+STATUS_GROUP_LABELS: dict[str, str] = {
+    "intake": "Intake",
+    "queued": "Queued",
+    "processing": "Processing",
+    "parsing_review": "Parsing review",
+    "approval": "Approval",
+    "complete": "Complete",
+    "attention": "Needs attention",
+    "rejected": "Rejected",
+}
+
+_STATUS_DISPLAY_LABELS: dict[str, str] = {
+    "inbound": "Received",
+    "classified": "Waiting for worker",
+    "processing": "In progress",
+    "validation": "Validating",
+    "pending_confirmation": "Confirm extracted fields",
+    "pending_approval": "Awaiting approval",
+    "approved": "Approved",
+    "posted": "Posted to GL",
+    "completed": "Completed",
+    "exception": "Exception",
+    "manual_review": "Manual review",
+    "on_hold": "On hold",
+    "rejected": "Rejected",
+    "case_rejected": "Case rejected",
+    "journal_entry_created": "Journal draft created",
+    "journal_pending_approval": "Journal awaiting approval",
+    "journal_posted": "Journal posted",
+    "case_closed": "Closed",
+    "validation_completed": "Validation complete",
+}
+
+_WORKFLOW_STEP_LABELS: dict[str, str] = {
+    "classification": "Classifying",
+    "intake": "Intake",
+    "parsing": "Parsing document",
+    "parsing_confirmation": "Parsing confirmation",
+    "processing": "Processing",
+    "extraction": "Extracting fields",
+    "journal_created": "Journal created",
+    "completed": "Completed",
+}
+
+# DB statuses where workflow_metadata.current_stage must not override display.
+_STATUS_AUTHORITATIVE = frozenset(
+    {
+        "inbound",
+        "classified",
+        "pending_confirmation",
+        "pending_approval",
+        "approved",
+        "posted",
+        "completed",
+        "case_closed",
+        "journal_posted",
+        "validation_completed",
+        "case_rejected",
+        "rejected",
+    }
+    | REJECTED_STATUSES
+)
 
 
 def _extracted_field(workflow_metadata: dict, field: str) -> str | None:
@@ -35,38 +100,120 @@ def client_vendor_name(case: Case) -> str | None:
     return case.counterparty_name
 
 
-def processing_stage(case: Case) -> str:
-    meta = case.workflow_metadata or {}
-    if case.status in EXCEPTION_STATUSES:
-        stage = meta.get("current_stage")
-        if not stage or stage in ("classification", "intake"):
-            return "exception"
-    stage = meta.get("current_stage")
-    if isinstance(stage, str) and stage:
-        if stage in ("classification", "intake"):
-            return "classified" if case.status != "inbound" else "intake"
-        if stage in ("processing", "extraction"):
-            return "processing"
-        return stage
-
+def case_status_group(case: Case) -> str:
+    """Machine id for UI grouping — derived from authoritative ``case.status``."""
     status = case.status
     if status == "inbound":
         return "intake"
     if status == "classified":
-        return "classified"
-    if status in ("processing", "pending_approval", "approved"):
+        return "queued"
+    if status in ("processing", "validation", "journal_entry_created"):
         return "processing"
+    if status == "pending_confirmation":
+        return "parsing_review"
+    if status in ("pending_approval", "approved", "journal_pending_approval"):
+        return "approval"
+    if status in (
+        "posted",
+        "completed",
+        "case_closed",
+        "journal_posted",
+        "validation_completed",
+    ):
+        return "complete"
     if status in EXCEPTION_STATUSES:
-        return "exception"
-    if status in ("posted", "completed"):
+        return "attention"
+    if status in REJECTED_STATUSES:
+        return "rejected"
+    return "processing"
+
+
+def case_status_group_label(case: Case) -> str:
+    return STATUS_GROUP_LABELS.get(case_status_group(case), "Processing")
+
+
+def _workflow_step(case: Case) -> str | None:
+    meta = case.workflow_metadata or {}
+    stage = meta.get("current_stage")
+    if isinstance(stage, str) and stage:
+        return stage
+    return None
+
+
+def case_status_label(case: Case) -> str:
+    """Human-readable status — DB status first; worker step only when consistent."""
+    status = case.status
+    base = _STATUS_DISPLAY_LABELS.get(status, status.replace("_", " ").title())
+
+    if status == "on_hold":
+        meta = case.workflow_metadata or {}
+        if meta.get("escalation_pending"):
+            return "On hold — awaiting escalation response"
+        code = meta.get("reason_code") or meta.get("error_type")
+        if code:
+            return f"On hold ({code})"
+
+    if status in _STATUS_AUTHORITATIVE:
+        return base
+
+    step = _workflow_step(case)
+    if step and status in ("processing", "validation"):
+        return _WORKFLOW_STEP_LABELS.get(step, step.replace("_", " ").title())
+
+    if status in EXCEPTION_STATUSES:
+        if step and step not in ("classification", "intake"):
+            return _WORKFLOW_STEP_LABELS.get(step, step.replace("_", " ").title())
+        return base
+
+    return base
+
+
+def processing_stage(case: Case) -> str:
+    """Legacy step field — kept for API compat; aligned with group/label."""
+    group = case_status_group(case)
+    if group == "intake":
+        return "intake"
+    if group == "queued":
+        return "classified"
+    if group == "rejected":
+        return "rejected" if case.status == "rejected" else "case_rejected"
+    if group == "complete":
         return "completed"
-    return status
+    if group == "attention":
+        step = _workflow_step(case)
+        if not step or step in ("classification", "intake"):
+            return "exception"
+        if step in ("processing", "extraction"):
+            return "processing"
+        return step
+    if group == "parsing_review":
+        return "parsing_confirmation"
+    if group == "approval":
+        return "processing"
+    step = _workflow_step(case)
+    if step:
+        if step in ("classification", "intake"):
+            return "classified"
+        if step in ("processing", "extraction"):
+            return "processing"
+        return step
+    if case.status == "classified":
+        return "classified"
+    if case.status in ("processing", "pending_approval", "approved"):
+        return "processing"
+    return case.status
 
 
 def error_reason(case: Case) -> str | None:
+    meta = case.workflow_metadata or {}
+    if case.status in REJECTED_STATUSES:
+        for key in ("error_message", "error_reason", "reason_code", "reason", "error_type"):
+            val = meta.get(key)
+            if val:
+                return str(val)
+        return None
     if case.status not in EXCEPTION_STATUSES and case.status != "on_hold":
         return None
-    meta = case.workflow_metadata or {}
     for key in ("error_message", "error_reason", "reason_code", "reason", "error_type"):
         val = meta.get(key)
         if val:
@@ -101,6 +248,10 @@ def status_reason(case: Case) -> str | None:
         return "Classified — queued for domain worker"
     if case.status == "processing":
         return "Domain worker processing in progress"
+    if case.status == "pending_confirmation":
+        return "Review extracted fields and confirm or reject parsing"
+    if case.status in REJECTED_STATUSES:
+        return "Case was rejected and will not continue processing"
     return None
 
 
