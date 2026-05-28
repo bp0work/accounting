@@ -1,6 +1,6 @@
 {
   "name": "client-admin-ui",
-  "version": "0.14.19-calendar-split",
+  "version": "0.14.23-vendor-extraction-hints",
   "private": true,
   "type": "module",
   "scripts": {

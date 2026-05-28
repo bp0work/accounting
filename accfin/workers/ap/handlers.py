@@ -26,6 +26,7 @@ from app.policies.engine import PolicyEngine
 from app.repositories.case import CaseRepository
 from app.repositories.ledger import LedgerRepository
 from app.repositories.purchase_order import PurchaseOrderRepository
+from app.constants.tenant import TENANT_MMLOGISTIX
 from app.schemas.hermes import (
     CheckDuplicateRequest,
     ExtractInvoiceRequest,
@@ -127,6 +128,35 @@ class APWorkerService:
         if not email_id:
             return "", None, ""
         return await build_extraction_context(self._session, email_id, hermes=self._hermes)
+
+    def _invoice_extract_request(
+        self,
+        case: Case,
+        *,
+        text: str,
+        att_id: UUID | None,
+        body: str,
+    ) -> ExtractInvoiceRequest:
+        meta = case.workflow_metadata or {}
+        extracted = meta.get("extracted_fields")
+        vendor_for_hints: str | None = None
+        if isinstance(extracted, dict):
+            raw_vendor = extracted.get("vendor_name")
+            if raw_vendor:
+                vendor_for_hints = str(raw_vendor).strip() or None
+        if not vendor_for_hints and case.counterparty_name:
+            vendor_for_hints = case.counterparty_name.strip()
+        return ExtractInvoiceRequest(
+            case_id=case.id,
+            attachment_id=att_id or case.id,
+            extracted_text=text,
+            email_body=body,
+            document_role="ap",
+            supplier_hint=case.counterparty_name,
+            currency_hint=case.amount_currency or "SGD",
+            tenant_id=TENANT_MMLOGISTIX,
+            vendor_name_for_hints=vendor_for_hints,
+        )
 
     async def _start_processing(self, case: Case) -> None:
         from_status = case.status
@@ -253,15 +283,7 @@ class APWorkerService:
         text, att_id, body = await self._attachment_text(case.email_id)
         try:
             extraction = await self._hermes.extract_invoice(
-                ExtractInvoiceRequest(
-                    case_id=case.id,
-                    attachment_id=att_id or case.id,
-                    extracted_text=text,
-                    email_body=body,
-                    document_role="ap",
-                    supplier_hint=case.counterparty_name,
-                    currency_hint=case.amount_currency or "SGD",
-                )
+                self._invoice_extract_request(case, text=text, att_id=att_id, body=body)
             )
         except HermesError as exc:
             return await self._route_exception(case, email, exc.error_code, str(exc))
@@ -870,15 +892,7 @@ class APWorkerService:
         text, att_id, body = await self._attachment_text(case.email_id)
         try:
             extraction = await self._hermes.extract_invoice(
-                ExtractInvoiceRequest(
-                    case_id=case.id,
-                    attachment_id=att_id or case.id,
-                    extracted_text=text,
-                    email_body=body,
-                    document_role="ap",
-                    supplier_hint=case.counterparty_name,
-                    currency_hint=case.amount_currency or "SGD",
-                )
+                self._invoice_extract_request(case, text=text, att_id=att_id, body=body)
             )
         except HermesError as exc:
             email = await self._email_for_case(case)

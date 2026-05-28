@@ -61,6 +61,8 @@ class ExtractInvoiceRequest(BaseModel):
     supplier_hint: str | None = None
     customer_hint: str | None = None
     currency_hint: str = "SGD"
+    tenant_id: UUID | None = None
+    vendor_name_for_hints: str | None = None
 
 
 class InvoiceLineItem(BaseModel):

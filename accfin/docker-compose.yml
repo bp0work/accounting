@@ -300,6 +300,8 @@ services:
     networks:
       - backend
     depends_on:
+      db:
+        condition: service_healthy
       ollama:
         condition: service_healthy
     healthcheck:

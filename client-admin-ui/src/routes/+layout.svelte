@@ -44,6 +44,7 @@
         <a href="/company">Company</a>
         <a href="/chart-of-accounts">Chart of Accounts</a>
         <a href="/mailboxes">Mailboxes</a>
+        <a href="/vendor-extraction-hints">Vendor hints</a>
         <a href="/binding-authority">Binding Authority</a>
         <a href="/policies">Travel &amp; Entertainment</a>
         <a href="/regulatory-policies">Regulatory Policies</a>
