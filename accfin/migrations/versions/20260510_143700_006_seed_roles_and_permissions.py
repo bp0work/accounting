@@ -171,7 +171,8 @@ def upgrade() -> None:
         ),
         (
             ROLE_ACCOUNTS_CLERK,
-            "('cases:read', 'cases:write', 'journal-entries:read', 'reconciliation:read', 'mail:read')",
+            """('cases:read', 'cases:write', 'approvals:read', 'approvals:approve',
+            'journal-entries:read', 'reconciliation:read', 'mail:read')""",
         ),
         (
             ROLE_FINANCIAL_ANALYST,
