@@ -222,7 +222,9 @@ async def admin_dashboard(
             label="Travel & Entertainment policy (PDF)",
             complete=travel_doc is not None,
             href="/policies",
-            detail=travel_doc.filename if travel_doc else "Upload policy PDF on Policies page",
+            detail=travel_doc.filename
+            if travel_doc
+            else "Upload policy PDF on Travel & Entertainment page",
         ),
         DashboardCheckItem(
             section="expense_limits",
@@ -235,7 +237,7 @@ async def admin_dashboard(
             section="regulatory",
             label="Regulatory documents",
             complete=len(reg_missing) == 0,
-            href="/policies",
+            href="/regulatory-policies",
             detail="All five documents uploaded"
             if not reg_missing
             else f"Missing: {', '.join(reg_missing)}",
