@@ -88,10 +88,7 @@
             <th>Type</th>
             <th>Group</th>
             <th>Status</th>
-            <th>Processing</th>
             <th>Last activity</th>
-            <th>Error</th>
-            <th>SLA deadline</th>
           </tr>
         </thead>
         <tbody>
@@ -101,10 +98,7 @@
               <td>{c.type}</td>
               <td>{c.status_group_label || '—'}</td>
               <td>{c.status_label || c.status}</td>
-              <td>{c.processing_time_minutes ?? '—'} min</td>
               <td>{formatActivity(c)}</td>
-              <td class="error-cell">{c.error_reason || '—'}</td>
-              <td>{c.sla_deadline ? new Date(c.sla_deadline).toLocaleString() : '—'}</td>
             </tr>
           {/each}
         </tbody>
@@ -123,8 +117,6 @@
               <th>Type</th>
               <th>Group</th>
               <th>Status</th>
-              <th>Last activity</th>
-              <th>Error</th>
             </tr>
           </thead>
           <tbody>
@@ -134,8 +126,6 @@
                 <td>{c.type}</td>
                 <td>{c.status_group_label || '—'}</td>
                 <td>{c.status_label || c.status}</td>
-                <td>{formatActivity(c)}</td>
-                <td class="error-cell">{c.error_reason || '—'}</td>
               </tr>
             {/each}
           </tbody>
@@ -186,11 +176,6 @@
   }
   .overdue-row {
     background: #fef2f2;
-  }
-  .error-cell {
-    color: #c2410c;
-    max-width: 12rem;
-    word-break: break-word;
   }
   .table-wrap {
     overflow-x: auto;
