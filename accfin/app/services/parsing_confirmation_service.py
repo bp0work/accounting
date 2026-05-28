@@ -11,6 +11,7 @@ from app.core.database import get_session_factory
 from app.core.exceptions import AppHTTPException
 from app.models.case import Case
 from app.models.mail import Email
+from app.models.user import User
 from app.repositories.case import CaseRepository
 from app.schemas.auth import TokenData
 from app.schemas.parsing_confirmation import (
@@ -21,6 +22,7 @@ from app.schemas.parsing_confirmation import (
 )
 from app.services.executive_mail_service import ExecutiveMailService
 from app.services.queue_router import enqueue_accounts
+from app.services.timeline_actor import timeline_actor_label_for_user
 from fastapi import status
 from workers.common.parsing_confirmation import normalize_extracted_fields
 
@@ -88,14 +90,17 @@ async def execute_confirm_parsing(
         previous_status = case.status
         case.status = "classified"
 
-        display = user.role or str(user.user_id)
+        db_user = await session.get(User, user.user_id)
+        actor_label = timeline_actor_label_for_user(
+            db_user, fallback=str(user.user_id)
+        )
         await cases.add_timeline(
             case_id=case.id,
             event_type="parsing_confirmed",
             from_status=previous_status,
             to_status="classified",
-            actor=str(user.user_id),
-            description=f"Parsing confirmed by {display} with {corrections} correction(s)",
+            actor=actor_label,
+            description=f"Parsing confirmed by {actor_label} with {corrections} correction(s)",
             metadata={
                 "correction_count": corrections,
                 "queue_message_id": message_id,
@@ -164,14 +169,17 @@ async def execute_reject_parsing(
         meta["rejection_reason"] = body.reason
         case.workflow_metadata = meta
 
-        display = user.role or str(user.user_id)
+        db_user = await session.get(User, user.user_id)
+        actor_label = timeline_actor_label_for_user(
+            db_user, fallback=str(user.user_id)
+        )
         await cases.add_timeline(
             case_id=case.id,
             event_type="parsing_rejected",
             from_status=previous_status,
             to_status="case_rejected",
-            actor=str(user.user_id),
-            description=f"Parsing rejected by {display}",
+            actor=actor_label,
+            description=f"Parsing rejected by {actor_label}",
             metadata={"reason": body.reason},
             actor_user_id=user.user_id,
         )

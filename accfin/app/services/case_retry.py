@@ -11,10 +11,12 @@ from app.core.database import get_session_factory
 from app.core.exceptions import AppHTTPException
 from app.models.accounting_period import AccountingPeriod
 from app.models.case import Case
+from app.models.user import User
 from app.repositories.case import CaseRepository
 from app.schemas.auth import TokenData
 from app.schemas.case import CaseRetryResponse
 from app.services.queue_router import enqueue_accounts
+from app.services.timeline_actor import timeline_actor_label_for_user
 from fastapi import status
 
 RETRYABLE_STATUSES = frozenset({"exception", "manual_review"})
@@ -115,12 +117,17 @@ async def _persist_case_retry(case_id: UUID, user: TokenData) -> _CaseRetrySnaps
         case.workflow_metadata = meta
         case.status = "classified"
 
+        db_user = await session.get(User, user.user_id)
+        actor_label = timeline_actor_label_for_user(
+            db_user, fallback=str(user.user_id)
+        )
+
         await cases.add_timeline(
             case_id=case.id,
             event_type="case_retry",
             from_status=previous_status,
             to_status="classified",
-            actor=str(user.user_id),
+            actor=actor_label,
             description="Manual retry — requeued to accounts_queue",
             metadata={"queue_message_id": message_id},
             actor_user_id=user.user_id,

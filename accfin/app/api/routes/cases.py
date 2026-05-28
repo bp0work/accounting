@@ -17,6 +17,7 @@ from app.core.exceptions import AppHTTPException
 from app.core.redis_client import get_redis
 from app.models.accounting_period import AccountingPeriod
 from app.models.mail import Email
+from app.models.user import User
 from app.models.policy import Approval
 from app.repositories.case import CaseRepository
 from app.repositories.policy import PolicyRepository
@@ -45,6 +46,7 @@ from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
 from app.services.case_retry import execute_case_retry
 from app.services.case_service import CaseService
+from app.services.timeline_actor import resolve_timeline_actor_display
 from app.services.case_visibility import (
     client_vendor_name,
     error_reason,
@@ -290,7 +292,21 @@ async def get_case_timeline(
     if not case:
         raise AppHTTPException(status.HTTP_404_NOT_FOUND, "CASE_NOT_FOUND", "Case not found")
     entries = sorted(case.timeline, key=lambda t: t.created_at)
-    return [TimelineEntryResponse.model_validate(t) for t in entries]
+    user_ids = {t.actor_user_id for t in entries if t.actor_user_id}
+    users_by_id: dict[UUID, User] = {}
+    if user_ids:
+        rows = await session.scalars(select(User).where(User.id.in_(user_ids)))
+        users_by_id = {u.id: u for u in rows}
+
+    out: list[TimelineEntryResponse] = []
+    for entry in entries:
+        row = TimelineEntryResponse.model_validate(entry)
+        out.append(
+            row.model_copy(
+                update={"actor": resolve_timeline_actor_display(entry, users_by_id)}
+            )
+        )
+    return out
 
 
 @router.get("/workflow/queues", response_model=QueueStatusResponse)
