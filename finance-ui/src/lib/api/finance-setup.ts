@@ -69,7 +69,7 @@ export function deleteGlCutoffReminder(id: string) {
 }
 
 export function listAccountingPeriods() {
-  return apiFetch<Array<Record<string, unknown>>>('/accounting-periods');
+  return apiFetch<Array<Record<string, unknown>>>('/accounting-periods?include_historical=true');
 }
 
 export function generateAccountingPeriods(months = 13) {

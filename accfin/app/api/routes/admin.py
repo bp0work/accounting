@@ -1325,14 +1325,23 @@ async def delete_gl_cutoff_reminder(
 
 @router.get("/accounting-periods", response_model=list[AccountingPeriodResponse])
 async def list_accounting_periods(
+    include_historical: bool = Query(True),
     user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[AccountingPeriodResponse]:
     tid = await _tenant_id(user, session)
+    stmt = select(AccountingPeriod).where(AccountingPeriod.tenant_id == tid)
+    if not include_historical:
+        today = date.today()
+        stmt = stmt.where(
+            (AccountingPeriod.period_year > today.year)
+            | (
+                (AccountingPeriod.period_year == today.year)
+                & (AccountingPeriod.period_month >= today.month)
+            )
+        )
     result = await session.execute(
-        select(AccountingPeriod)
-        .where(AccountingPeriod.tenant_id == tid)
-        .order_by(AccountingPeriod.period_year.desc(), AccountingPeriod.period_month.desc())
+        stmt.order_by(AccountingPeriod.period_year.desc(), AccountingPeriod.period_month.desc())
     )
     return [AccountingPeriodResponse.model_validate(p) for p in result.scalars().all()]
 
