@@ -93,6 +93,14 @@ async def test_uat_012_subaccounts_and_duplicate(
         json={"name": f"ACME UAT {uuid4().hex[:6]}", "type": "supplier", "code": f"ACME-{uuid4().hex[:4]}"},
     )
     assert cp_resp.status_code == 201, cp_resp.text
+
+    vendor_alias = await async_client.post(
+        "/api/counterparties",
+        headers=client_admin_headers,
+        json={"name": f"VENDOR UAT {uuid4().hex[:6]}", "type": "vendor", "code": f"VND-{uuid4().hex[:4]}"},
+    )
+    assert vendor_alias.status_code == 201, vendor_alias.text
+    assert vendor_alias.json()["type"] == "supplier"
     cp_id = cp_resp.json()["id"]
 
     terms = await async_client.get("/api/payment-terms", headers=client_admin_headers)

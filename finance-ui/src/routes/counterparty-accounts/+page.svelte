@@ -82,11 +82,16 @@
   async function addCounterparty() {
     error = '';
     msg = '';
+    const name = cpName.trim();
+    if (!name) {
+      error = 'Enter a legal name before adding a counterparty.';
+      return;
+    }
     try {
       const isVendor = cpType === 'vendor' || cpType === 'supplier';
       await createCounterparty({
-        name: cpName,
-        type: cpType,
+        name,
+        type: isVendor ? 'vendor' : cpType,
         code: cpCode || null,
         has_contract: isVendor ? cpHasContract : false,
         contract_reference: isVendor && cpContractReference.trim() ? cpContractReference.trim() : null,
@@ -279,7 +284,9 @@
         <option value="vendor">Vendor</option>
       </select>
       <input bind:value={cpCode} placeholder="Code (optional)" />
-      <button type="button" onclick={addCounterparty}>Add counterparty</button>
+      <button type="button" disabled={!cpName.trim()} onclick={addCounterparty}>
+        Add counterparty
+      </button>
     </div>
     {#if cpType === 'vendor'}
       <div class="row wrap vendor-contract">
