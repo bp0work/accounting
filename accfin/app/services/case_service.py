@@ -21,6 +21,7 @@ from app.services.queue_router import enqueue_accounts
 from app.services.wasabi_archive import WasabiArchiveService
 
 RETRYABLE_STATUSES = frozenset({"exception", "manual_review"})
+RETRYABLE_HERMES_ON_HOLD_CODES = frozenset({"HERMES_TIMEOUT", "HERMES_UNAVAILABLE"})
 
 
 @dataclass
@@ -167,17 +168,29 @@ class CaseService:
         period = await self._session.get(AccountingPeriod, pid)
         return period is not None and period.status != "closed"
 
+    async def _transient_hermes_hold_retryable(self, case) -> bool:
+        if case.status != "on_hold":
+            return False
+        meta = case.workflow_metadata or {}
+        error_code = str(meta.get("error_code") or "").strip().upper()
+        return error_code in RETRYABLE_HERMES_ON_HOLD_CODES
+
     async def retry_case(self, case_id: UUID, *, user: TokenData) -> CaseRetryResponse:
         case = await self.get_case(case_id)
         retryable = case.status in RETRYABLE_STATUSES
         if not retryable:
             retryable = await self._period_closed_hold_retryable(case)
         if not retryable:
+            retryable = await self._transient_hermes_hold_retryable(case)
+        if not retryable:
             raise AppHTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "CASE_NOT_RETRYABLE",
                 f"Case in status '{case.status}' cannot be retried; "
-                f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))}, or on_hold after GL period reopen",
+                f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))}, "
+                f"or on_hold after GL period reopen, "
+                f"or on_hold with transient Hermes errors "
+                f"({', '.join(sorted(RETRYABLE_HERMES_ON_HOLD_CODES))})",
             )
 
         previous_status = case.status
