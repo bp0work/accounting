@@ -1,6 +1,6 @@
 {
   "name": "client-admin-ui",
-  "version": "0.14.23-vendor-extraction-hints",
+  "version": "0.14.37-fixed-nav-logo",
   "private": true,
   "type": "module",
   "scripts": {
