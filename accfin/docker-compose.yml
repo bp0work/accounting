@@ -293,6 +293,11 @@ services:
       - .env
     environment:
       HERMES_OLLAMA_BASE_URL: http://ollama:11434
+      HERMES_OLLAMA_KEEP_ALIVE: ${HERMES_OLLAMA_KEEP_ALIVE:-24h}
+      HERMES_OLLAMA_TIMEOUT_SECONDS: ${HERMES_OLLAMA_TIMEOUT_SECONDS:-180}
+      HERMES_OLLAMA_WARMUP: ${HERMES_OLLAMA_WARMUP:-true}
+      HERMES_EXTRACTION_MODEL: ${HERMES_EXTRACTION_MODEL:-qwen2.5:7b}
+      HERMES_VISION_MODEL: ${HERMES_VISION_MODEL:-qwen2.5vl:7b}
       HERMES_API_KEY: ${FINANCE_HERMES_API_KEY}
       HERMES_PORT: "8001"
     ports:
@@ -308,8 +313,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 180s
 
   db:
     image: postgres:15-alpine
@@ -423,12 +428,13 @@ services:
       - backend
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_KEEP_ALIVE: ${HERMES_OLLAMA_KEEP_ALIVE:-24h}
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 120s
 
 networks:
   frontend:
