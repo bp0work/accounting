@@ -185,6 +185,7 @@ class ExecutiveMailService:
         target_email_override: str | None = None,
         include_escalate: bool | None = None,
         preserve_case_status: bool = False,
+        force_reattach_inbound: bool = False,
     ) -> CaseEscalation | None:
         """Step 1: manager review before any sender failure notification."""
         existing = await self._pending_escalation(case.id)
@@ -248,7 +249,9 @@ class ExecutiveMailService:
         }
 
         source_email_id = email.id if email else case.email_id
-        has_inbound_attachments = await self._inbound_attachment_count(source_email_id) > 0
+        has_inbound_attachments = force_reattach_inbound or (
+            await self._inbound_attachment_count(source_email_id) > 0
+        )
         if has_inbound_attachments:
             context["notification"]["reattach_inbound_attachments"] = True
 
