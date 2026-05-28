@@ -151,6 +151,32 @@ def _period_year_month_add(year: int, month: int, offset: int) -> tuple[int, int
     return total // 12, (total % 12) + 1
 
 
+def _parse_start_month(value: str | None) -> tuple[int, int] | None:
+    if not value:
+        return None
+    try:
+        year_str, month_str = value.split("-", 1)
+        year = int(year_str)
+        month = int(month_str)
+    except (ValueError, AttributeError):
+        return None
+    if month < 1 or month > 12:
+        return None
+    return year, month
+
+
+async def _accounting_start_month(session: AsyncSession) -> tuple[int, int] | None:
+    repo = SystemSettingsRepository(session)
+    raw = await repo.get_value("accounting_start_date")
+    if not raw:
+        return None
+    try:
+        d = date.fromisoformat(raw)
+    except ValueError:
+        return None
+    return d.year, d.month
+
+
 # --- Dashboard ---
 
 
@@ -1166,11 +1192,20 @@ async def get_accounting_settings(
     session: AsyncSession = Depends(get_db_session),
     _user: TokenData = Depends(require_finance_setup_access()),
 ) -> AccountingSettingsResponse:
+    repo = SystemSettingsRepository(session)
+    raw_start = await repo.get_value("accounting_start_date")
+    start_date = None
+    if raw_start:
+        try:
+            start_date = date.fromisoformat(raw_start)
+        except ValueError:
+            start_date = None
     return AccountingSettingsResponse(
         accounting_fye_month=await accounting_fye_month(session),
         trial_balance_frequency=await trial_balance_frequency(session),
         audit_frequency=await audit_frequency(session),
         gl_cutoff_working_days=await gl_cutoff_working_days(session),
+        accounting_start_date=start_date,
     )
 
 
@@ -1199,13 +1234,27 @@ async def patch_accounting_settings(
             "integer",
             "accounting",
         )
+    if body.accounting_start_date is not None:
+        entries["accounting_start_date"] = (
+            body.accounting_start_date.isoformat(),
+            "date",
+            "accounting",
+        )
     if entries:
         await repo.set_many(entries)
+    raw_start = await repo.get_value("accounting_start_date")
+    start_date = None
+    if raw_start:
+        try:
+            start_date = date.fromisoformat(raw_start)
+        except ValueError:
+            start_date = None
     return AccountingSettingsResponse(
         accounting_fye_month=await accounting_fye_month(session),
         trial_balance_frequency=await trial_balance_frequency(session),
         audit_frequency=await audit_frequency(session),
         gl_cutoff_working_days=await gl_cutoff_working_days(session),
+        accounting_start_date=start_date,
     )
 
 
@@ -1299,21 +1348,46 @@ async def get_calendar_settings(
 
 @router.post("/accounting-periods/generate", response_model=list[AccountingPeriodResponse])
 async def generate_accounting_periods(
-    months: int = Query(13, ge=1, le=24),
+    months_forward: int = Query(12, ge=1, le=24),
+    start_month: str | None = Query(
+        None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"
+    ),
     user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[AccountingPeriodResponse]:
-    """Create periods for the current month and the next ``months - 1`` months (default 13)."""
+    """
+    Generate periods from configured accounting start month (or override) through current+N.
+    - start_month query (`YYYY-MM`) overrides configured start month for one-off generation.
+    - Existing periods are skipped (no duplicates).
+    - Newly created historical periods are closed; current/future are open.
+    """
     tid = await _tenant_id(user, session)
     today = date.today()
-    y, m = today.year, today.month
+    current_y, current_m = today.year, today.month
+    configured = await _accounting_start_month(session)
+    override = _parse_start_month(start_month)
+    start_y, start_m = override or configured or (current_y, current_m)
+
+    # End at current month + months_forward (inclusive).
+    end_y, end_m = _period_year_month_add(current_y, current_m, months_forward)
     reviewer = "finfa.mmlogistix@bp0.work"
     fye = await accounting_fye_month(session)
     freq = await audit_frequency(session)
     days = await gl_cutoff_working_days(session)
-    created = []
-    for offset in range(months):
-        py, pm = _period_year_month_add(y, m, offset)
+    existing_rows = await session.execute(
+        select(AccountingPeriod.period_year, AccountingPeriod.period_month).where(
+            AccountingPeriod.tenant_id == tid
+        )
+    )
+    existing = {(y, m) for y, m in existing_rows.all()}
+    created: list[AccountingPeriod] = []
+
+    # Walk month-by-month from start to end (inclusive).
+    py, pm = start_y, start_m
+    while (py < end_y) or (py == end_y and pm <= end_m):
+        if (py, pm) in existing:
+            py, pm = _period_year_month_add(py, pm, 1)
+            continue
         p = await ensure_period(
             session,
             tenant_id=tid,
@@ -1324,7 +1398,13 @@ async def generate_accounting_periods(
             audit_freq=freq,
             cutoff_days=days,
         )
+        # Historical periods auto-close; current and future are open.
+        if (py < current_y) or (py == current_y and pm < current_m):
+            p.status = "closed"
+        else:
+            p.status = "open"
         created.append(p)
+        py, pm = _period_year_month_add(py, pm, 1)
     await session.commit()
     return [AccountingPeriodResponse.model_validate(p) for p in created]
 

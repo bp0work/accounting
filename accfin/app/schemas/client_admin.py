@@ -277,6 +277,7 @@ class AccountingSettingsResponse(BaseModel):
     trial_balance_frequency: str = "monthly"
     audit_frequency: str = "annual"
     gl_cutoff_working_days: int = 3
+    accounting_start_date: date | None = None
 
 
 class AccountingSettingsUpdate(BaseModel):
@@ -284,6 +285,7 @@ class AccountingSettingsUpdate(BaseModel):
     trial_balance_frequency: str | None = None
     audit_frequency: str | None = None
     gl_cutoff_working_days: int | None = Field(default=None, ge=1, le=30)
+    accounting_start_date: date | None = None
 
 
 class GlCutoffReminderResponse(BaseModel):
