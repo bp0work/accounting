@@ -2,12 +2,17 @@
   import '../app.css';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { clearToken, getToken } from '$lib/api/client';
+  import { clearToken } from '$lib/api/client';
   import { requires2faWarning } from '$lib/api/auth';
   import { APP_TITLE } from '$lib/branding';
   import UserMenu from '$lib/components/UserMenu.svelte';
   import type { MenuLink } from '$lib/components/userMenuTypes';
-  import { initSessionUser, sessionUser } from '$lib/stores/session';
+  import {
+    authReady,
+    clearAuth,
+    initAuth,
+    sessionUser,
+  } from '$lib/stores/session';
 
   const userMenuLinks: MenuLink[] = [
     { kind: 'link', href: '/settings/notifications', label: 'Notifications', icon: '🔔' },
@@ -16,17 +21,14 @@
   ];
 
   $: isLogin = $page.url.pathname === '/login';
-
-  /** Sync read on first client paint — avoids nav hidden until async onMount. */
-  let isLoggedIn =
-    typeof localStorage !== 'undefined' && !!localStorage.getItem('finance_access_token');
-
+  $: isLoggedIn = $authReady && $sessionUser !== null;
   $: show2faBanner = isLoggedIn && requires2faWarning($sessionUser);
+  $: showAppChrome = !isLogin && $authReady;
+  $: showNav = showAppChrome && isLoggedIn;
 
   onMount(async () => {
-    initSessionUser();
-    isLoggedIn = !!getToken();
-    if (!isLogin && !isLoggedIn) {
+    const loggedIn = await initAuth();
+    if (!isLogin && !loggedIn) {
       const { goto } = await import('$app/navigation');
       await goto('/login');
     }
@@ -34,8 +36,7 @@
 
   async function logout() {
     clearToken();
-    isLoggedIn = false;
-    sessionUser.set(null);
+    clearAuth();
     const { goto } = await import('$app/navigation');
     await goto('/login');
   }
@@ -45,10 +46,26 @@
   <title>{APP_TITLE}</title>
 </svelte:head>
 
-{#if !isLogin}
+{#if isLogin}
+  <main class="main">
+    <slot />
+  </main>
+{:else if !showAppChrome}
+  <header class="app-header app-header--skeleton" aria-busy="true" aria-label="Loading">
+    <span class="brand skeleton-bar skeleton-brand"></span>
+    <span class="skeleton-nav">
+      <span class="skeleton-bar"></span>
+      <span class="skeleton-bar"></span>
+      <span class="skeleton-bar skeleton-short"></span>
+    </span>
+  </header>
+  <main class="main">
+    <slot />
+  </main>
+{:else}
   <header class="app-header">
     <strong class="brand">{APP_TITLE}</strong>
-    {#if isLoggedIn}
+    {#if showNav}
       <nav class="nav">
         <a href="/dashboard">Dashboard</a>
         <a href="/approvals">Cases & Approvals</a>
@@ -66,10 +83,10 @@
       <a href="/settings/security">Security Settings</a>.
     </div>
   {/if}
+  <main class="main">
+    <slot />
+  </main>
 {/if}
-<main class="main">
-  <slot />
-</main>
 
 <style>
   .app-header {
@@ -82,6 +99,9 @@
     gap: 1rem;
     width: 100%;
   }
+  .app-header--skeleton {
+    min-height: 3.25rem;
+  }
   .brand {
     font-size: 1.05rem;
   }
@@ -92,6 +112,39 @@
     align-items: center;
     flex: 1;
     min-width: 0;
+  }
+  .skeleton-nav {
+    display: flex;
+    flex: 1;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    align-items: center;
+    min-width: 0;
+  }
+  .skeleton-bar {
+    display: inline-block;
+    height: 0.875rem;
+    width: 5rem;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.2s ease-in-out infinite;
+  }
+  .skeleton-brand {
+    width: 12rem;
+    height: 1.1rem;
+  }
+  .skeleton-short {
+    width: 3.5rem;
+    border-radius: 999px;
+  }
+  @keyframes skeleton-shimmer {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: -100% 0;
+    }
   }
   .banner-2fa {
     background: #fef3c7;

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { fetchMe, sessionUserFromLogin } from '$lib/api/auth';
   import { getToken } from '$lib/api/client';
-  import { resolveNavDisplayName } from '$lib/displayUser';
+  import { navDisplayName, sessionUser, updateSessionUser } from '$lib/stores/session';
 
   import type { MenuLink } from './userMenuTypes';
 
@@ -10,20 +10,23 @@
 
   let open = false;
   let rootEl: HTMLDivElement;
-  let username = 'User';
 
-  async function refreshUsername() {
-    username = await resolveNavDisplayName(getToken);
+  $: username = navDisplayName($sessionUser);
+
+  async function refreshUsernameFromApi() {
+    if (!getToken()) return;
+    try {
+      const me = await fetchMe();
+      updateSessionUser(sessionUserFromLogin(me));
+    } catch {
+      /* keep store label */
+    }
   }
-
-  onMount(() => {
-    void refreshUsername();
-  });
 
   function toggle(e: MouseEvent) {
     e.stopPropagation();
     open = !open;
-    if (open) void refreshUsername();
+    if (open) void refreshUsernameFromApi();
   }
 
   function handleWindowClick(e: MouseEvent) {
