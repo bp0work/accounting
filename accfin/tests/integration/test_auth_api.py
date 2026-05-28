@@ -119,3 +119,35 @@ async def test_approvals_approve_guard(
     )
     assert denied.status_code == 403
     assert denied.json()["error"]["code"] == "INSUFFICIENT_PERMISSION"
+
+
+@pytest.mark.asyncio
+async def test_change_password(async_client: AsyncClient, test_user: User):
+    login = await async_client.post(
+        "/api/auth/login",
+        json={"username": test_user.username, "password": TEST_PASSWORD},
+    )
+    assert login.status_code == 200
+    access = login.json()["access_token"]
+
+    change = await async_client.post(
+        "/api/auth/change-password",
+        headers={"Authorization": f"Bearer {access}"},
+        json={
+            "current_password": TEST_PASSWORD,
+            "new_password": "NewValidPassword1!",
+        },
+    )
+    assert change.status_code == 204
+
+    old_login = await async_client.post(
+        "/api/auth/login",
+        json={"username": test_user.username, "password": TEST_PASSWORD},
+    )
+    assert old_login.status_code == 401
+
+    new_login = await async_client.post(
+        "/api/auth/login",
+        json={"username": test_user.username, "password": "NewValidPassword1!"},
+    )
+    assert new_login.status_code == 200

@@ -7,6 +7,7 @@ export type SessionUser = {
   email: string;
   role_name: string | null;
   two_factor_enabled: boolean;
+  last_login_at?: string | null;
 };
 
 export type TwoFactorSetupResult = {
@@ -22,6 +23,14 @@ export type LoginUserResponse = {
   email: string;
   role_name?: string | null;
   two_factor_enabled: boolean;
+  last_login_at?: string | null;
+};
+
+export type ActiveSession = {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  revoked_at: string | null;
 };
 
 export type LoginRequest = {
@@ -97,7 +106,26 @@ export function sessionUserFromLogin(user: LoginUserResponse): SessionUser {
     email: user.email,
     role_name: user.role_name ?? null,
     two_factor_enabled: user.two_factor_enabled,
+    last_login_at: user.last_login_at ?? null,
   };
+}
+
+export function fetchMe() {
+  return apiFetch<LoginUserResponse>('/auth/me');
+}
+
+export function listActiveSessions() {
+  return apiFetch<ActiveSession[]>('/auth/sessions');
+}
+
+export function changePassword(currentPassword: string, newPassword: string) {
+  return apiFetch<void>('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
 }
 
 export function setup2fa() {

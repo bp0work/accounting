@@ -84,6 +84,7 @@ export type StoredSessionUser = {
   email: string;
   role_name: string | null;
   two_factor_enabled: boolean;
+  last_login_at?: string | null;
 };
 
 export function setSessionUser(user: StoredSessionUser) {

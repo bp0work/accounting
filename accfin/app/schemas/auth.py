@@ -25,6 +25,11 @@ class TwoFactorDisableRequest(BaseModel):
     totp_code: str = Field(min_length=6, max_length=6)
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=8, max_length=100)
+    new_password: str = Field(min_length=8, max_length=100)
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,6 +67,13 @@ class TwoFactorSetupResponse(BaseModel):
 
 class TwoFactorEnabledResponse(BaseModel):
     two_factor_enabled: bool = True
+
+
+class ActiveSessionResponse(BaseModel):
+    id: UUID
+    created_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None = None
 
 
 class TokenData(BaseModel):

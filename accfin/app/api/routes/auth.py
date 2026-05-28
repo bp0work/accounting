@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.core.dependencies import get_current_user, require_permission
-from app.core.exceptions import unauthorized
 from app.schemas.auth import (
+    ActiveSessionResponse,
+    ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
     RefreshRequest,
@@ -16,9 +17,8 @@ from app.schemas.auth import (
     TwoFactorEnabledResponse,
     TwoFactorSetupResponse,
     TwoFactorVerifyRequest,
+    UserResponse,
 )
-from app.repositories.user import UserRepository
-from app.schemas.auth import UserResponse
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -90,12 +90,38 @@ async def get_me(
     session: AsyncSession = Depends(get_db_session),
 ) -> UserResponse:
     """Current user profile for UI display (username, display_name, etc.)."""
-    svc = AuthService(session)
-    db_user = await UserRepository(session).get_by_id(user.user_id)
-    if db_user is None:
-        raise unauthorized("UNAUTHORIZED", "Invalid or expired token")
-    permissions = await UserRepository(session).get_permission_codes_for_role(db_user.role_id)
-    return svc._user_response(db_user, permissions)
+    return await AuthService(session).get_current_user_profile(user_id=user.user_id)
+
+
+@router.get("/sessions", response_model=list[ActiveSessionResponse])
+async def list_active_sessions(
+    user: TokenData = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[ActiveSessionResponse]:
+    rows = await AuthService(session).list_active_sessions(user_id=user.user_id)
+    return [
+        ActiveSessionResponse(
+            id=row.id,
+            created_at=row.created_at,
+            expires_at=row.expires_at,
+            revoked_at=row.revoked_at,
+        )
+        for row in rows
+    ]
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    body: ChangePasswordRequest,
+    user: TokenData = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    await AuthService(session).change_password(
+        user_id=user.user_id,
+        current_password=body.current_password,
+        new_password=body.new_password,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/session/me", include_in_schema=False)
