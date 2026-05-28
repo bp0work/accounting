@@ -530,10 +530,13 @@ class APWorkerService:
 
         # ── Step 5b: Sender validation ────────────────────────────────
         if not sender_val["sender_validated"] and not overrides.get("override_sender_validation"):
-            failure_reason = sender_val.get("failure_reason") or "Validation phrase not found"
+            failure_reason = sender_val.get("failure_reason") or (
+                "Document not validated. Please include 'validated dd/mm/yyyy' in your email "
+                "(e.g. 'validated 28/05/2026')"
+            )
             summary = (
                 f"Sender has not validated this document. "
-                f"The email does not contain 'validated' with a date within the last 7 days. "
+                f"The email must include 'validated dd/mm/yyyy' with a date in the last 7 days. "
                 f"Reason: {failure_reason}. "
                 f"Please advise: a) reject and ask sender to resubmit with validation, "
                 f"or b) accept with override."

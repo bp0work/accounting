@@ -16,39 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.case import Case, Counterparty
 from app.models.counterparty_master import CounterpartyAccount, PaymentTerm
 
-# Sentence boundary separators for isolating "validated" context
-_SENT_SPLIT = re.compile(r"[.!?\n]")
-
-# Common date sub-patterns (ordered longest → shortest to avoid partial grabs)
-_DATE_FMTS = [
-    ("%d %B %Y", re.compile(r"\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b")),
-    ("%d %b %Y",  re.compile(r"\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b")),
-    ("%d/%m/%Y",  re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b")),
-    ("%m/%d/%Y",  re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b")),
-    ("%Y-%m-%d",  re.compile(r"\b\d{4}-\d{2}-\d{2}\b")),
-    ("%d-%m-%Y",  re.compile(r"\b\d{1,2}-\d{1,2}-\d{4}\b")),
-    ("%d.%m.%Y",  re.compile(r"\b\d{1,2}\.\d{1,2}\.\d{4}\b")),
-]
-
-
-def _try_parse(raw: str) -> date | None:
-    raw = raw.strip()
-    for fmt, _ in _DATE_FMTS:
-        try:
-            return datetime.strptime(raw, fmt).date()
-        except ValueError:
-            continue
-    return None
-
-
-def _dates_in_sentence(sentence: str) -> list[date]:
-    found: list[date] = []
-    for _fmt, pat in _DATE_FMTS:
-        for m in pat.finditer(sentence):
-            d = _try_parse(m.group())
-            if d and d not in found:
-                found.append(d)
-    return found
+_VALIDATION_FAIL_REASON = (
+    "Document not validated. Please include 'validated dd/mm/yyyy' in your email "
+    "(e.g. 'validated 28/05/2026')"
+)
+_VALIDATED_DATE_PATTERN = re.compile(
+    r"\bvalidated\s+(\d{2}/\d{2}/\d{4})\b", re.IGNORECASE
+)
 
 
 def extract_sender_validation(subject: str | None, body: str | None) -> dict:
@@ -60,37 +34,40 @@ def extract_sender_validation(subject: str | None, body: str | None) -> dict:
     """
     combined = " ".join(filter(None, [subject or "", body or ""]))
     if "validated" not in combined.lower():
-        return {"sender_validated": False, "validation_date": None, "failure_reason": None}
+        return {
+            "sender_validated": False,
+            "validation_date": None,
+            "failure_reason": _VALIDATION_FAIL_REASON,
+        }
 
     today = datetime.now(UTC).date()
     cutoff = today - timedelta(days=7)
 
-    # Search sentence-by-sentence to keep date close to the keyword
-    for sentence in _SENT_SPLIT.split(combined):
-        if "validated" not in sentence.lower():
+    for match in _VALIDATED_DATE_PATTERN.finditer(combined):
+        raw_date = match.group(1)
+        try:
+            d = datetime.strptime(raw_date, "%d/%m/%Y").date()
+        except ValueError:
             continue
-        for d in _dates_in_sentence(sentence):
-            if d > today:
-                continue  # future date — skip
-            if d < cutoff:
-                return {
-                    "sender_validated": False,
-                    "validation_date": d.isoformat(),
-                    "failure_reason": (
-                        f"Validation date {d.isoformat()} is more than 7 days old"
-                    ),
-                }
+
+        if d > today or d < cutoff:
             return {
-                "sender_validated": True,
+                "sender_validated": False,
                 "validation_date": d.isoformat(),
-                "failure_reason": None,
+                "failure_reason": _VALIDATION_FAIL_REASON,
             }
 
-    # "validated" present but no parseable date found
+        return {
+            "sender_validated": True,
+            "validation_date": d.isoformat(),
+            "failure_reason": None,
+        }
+
+    # "validated" present but required dd/mm/yyyy format absent or invalid.
     return {
         "sender_validated": False,
         "validation_date": None,
-        "failure_reason": "Validation phrase found but no date provided",
+        "failure_reason": _VALIDATION_FAIL_REASON,
     }
 
 

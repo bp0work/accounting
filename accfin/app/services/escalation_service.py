@@ -34,6 +34,11 @@ _AP_STEP_OVERRIDE_KEYS: dict[str, str] = {
     "AP_SENDER_NOT_VALIDATED":  "override_sender_validation",
     "AP_COA_NOT_FOUND":         "override_coa_not_found",
 }
+_SENDER_VALIDATION_RESUBMIT_TEMPLATE = (
+    "Please resubmit your document quoting Case ID {case_number} and include "
+    "'validated dd/mm/yyyy' in your email (e.g. 'validated 28/05/2026') "
+    "to confirm you have reviewed and approved this document."
+)
 
 
 class EscalationService:
@@ -216,6 +221,10 @@ class EscalationService:
 
                     email = await self._resolve_email(row, case)
                     error_reason = (row.context or {}).get("error_reason") or row.summary
+                    if reason_code == "AP_SENDER_NOT_VALIDATED":
+                        error_reason = _SENDER_VALIDATION_RESUBMIT_TEMPLATE.format(
+                            case_number=case.case_number
+                        )
                     if email is not None:
                         await self._executive_mail.queue_submitter_rejection(
                             case=case,
