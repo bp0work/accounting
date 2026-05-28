@@ -1,6 +1,6 @@
 {
   "name": "client-admin-ui",
-  "version": "0.14.17-nav-display-name",
+  "version": "0.14.18-historical-periods",
   "private": true,
   "type": "module",
   "scripts": {

@@ -221,3 +221,36 @@ export async function downloadAuthenticated(url: string, filename: string) {
   URL.revokeObjectURL(a.href);
 }
 
+export type AccountingSettings = {
+  accounting_fye_month: number;
+  trial_balance_frequency: string;
+  audit_frequency: string;
+  gl_cutoff_working_days: number;
+  accounting_start_date: string | null;
+};
+
+export function getAccountingSettings() {
+  return apiFetch<AccountingSettings>('/admin/accounting-settings');
+}
+
+export function patchAccountingSettings(body: Partial<AccountingSettings>) {
+  return apiFetch<AccountingSettings>('/admin/accounting-settings', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export function generateAccountingPeriods(body?: {
+  months_forward?: number;
+  start_month?: string;
+}) {
+  const params = new URLSearchParams();
+  if (body?.months_forward != null) params.set('months_forward', String(body.months_forward));
+  if (body?.start_month) params.set('start_month', body.start_month);
+  const qs = params.toString();
+  return apiFetch<Array<Record<string, unknown>>>(
+    `/accounting-periods/generate${qs ? `?${qs}` : ''}`,
+    { method: 'POST' }
+  );
+}
+
