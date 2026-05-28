@@ -87,8 +87,7 @@
             <th>Case</th>
             <th>Type</th>
             <th>State</th>
-            <th>Status</th>
-            <th>Last activity</th>
+            <th>Last Activity</th>
           </tr>
         </thead>
         <tbody>
@@ -97,7 +96,6 @@
               <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
               <td>{c.type}</td>
               <td>{c.status_group_label || '—'}</td>
-              <td>{c.status_label || c.status}</td>
               <td>{formatActivity(c)}</td>
             </tr>
           {/each}
@@ -116,7 +114,6 @@
               <th>Case</th>
               <th>Type</th>
               <th>State</th>
-              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -125,7 +122,6 @@
                 <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
                 <td>{c.type}</td>
                 <td>{c.status_group_label || '—'}</td>
-                <td>{c.status_label || c.status}</td>
               </tr>
             {/each}
           </tbody>
