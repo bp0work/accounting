@@ -39,10 +39,12 @@ class HermesError(Exception):
 
 
 class HermesClient:
-    def __init__(self, base_url: str | None = None, *, timeout: float = 120.0) -> None:
+    def __init__(self, base_url: str | None = None, *, timeout: float | None = None) -> None:
         settings = get_settings()
         self._base_url = (base_url or settings.hermes_base_url).rstrip("/")
-        self._timeout = timeout
+        self._timeout = (
+            timeout if timeout is not None else float(settings.hermes_timeout_seconds)
+        )
 
     async def _post(self, path: str, payload: dict) -> dict:
         url = f"{self._base_url}{path}"

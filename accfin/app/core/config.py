@@ -56,6 +56,9 @@ class Settings(BaseSettings):
         default=0.01, alias="FINANCE_RECONCILIATION_AMOUNT_TOLERANCE_PCT"
     )
     hermes_base_url: str = Field(default="http://hermes:8001", alias="FINANCE_HERMES__BASE_URL")
+    hermes_timeout_seconds: float = Field(
+        default=180.0, alias="FINANCE_HERMES__TIMEOUT_SECONDS"
+    )
     attachment_storage_path: str = Field(
         default="/data/attachments", alias="FINANCE_MAIL__ATTACHMENT_STORAGE_PATH"
     )
@@ -149,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.25-parsing-confirmation"
+        return "0.14.26-ollama-keepalive"
 
     @property
     def edge_public_base_url(self) -> str:

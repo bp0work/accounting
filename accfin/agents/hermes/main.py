@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import httpx
@@ -35,9 +36,22 @@ from app.schemas.hermes import (
     SuggestMatchesResponse,
 )
 
-app = FastAPI(title="Hermes", version="0.6.0-ollama-extraction")
-
 OLLAMA_BASE = os.environ.get("HERMES_OLLAMA_BASE_URL", "http://ollama:11434")
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    from agents.hermes.ollama_warmup import warmup_extraction_model
+
+    await warmup_extraction_model()
+    yield
+
+
+app = FastAPI(
+    title="Hermes",
+    version="0.7.0-ollama-keepalive",
+    lifespan=_lifespan,
+)
 
 
 @app.get("/health")
