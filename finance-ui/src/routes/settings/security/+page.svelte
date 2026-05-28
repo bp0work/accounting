@@ -7,8 +7,11 @@
   import QRCode from 'qrcode';
   import {
     disable2fa,
+    fetchMe,
+    listActiveSessions,
     setup2fa,
     verify2fa,
+    type ActiveSession,
     type TwoFactorSetupResult,
   } from '$lib/api/auth';
   import { patchSessionUser } from '$lib/stores/session';
@@ -22,6 +25,9 @@
   let setupLoading = false;
   let verifyLoading = false;
   let disableLoading = false;
+  let sessionLoading = true;
+  let sessions: ActiveSession[] = [];
+  let lastLoginAt = '';
   let setup: TwoFactorSetupResult | null = null;
   let qrDataUrl = '';
   let totpCode = '';
@@ -30,6 +36,21 @@
   onMount(async () => {
     const user = getSessionUser();
     twoFactorEnabled = user?.two_factor_enabled ?? false;
+    lastLoginAt = user?.last_login_at ?? '';
+    try {
+      const [me, activeSessions] = await Promise.all([fetchMe(), listActiveSessions()]);
+      twoFactorEnabled = me.two_factor_enabled;
+      lastLoginAt = me.last_login_at ?? '';
+      patchSessionUser({
+        two_factor_enabled: me.two_factor_enabled,
+        last_login_at: me.last_login_at ?? null,
+      });
+      sessions = activeSessions;
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Unable to load security details';
+    } finally {
+      sessionLoading = false;
+    }
     loading = false;
   });
 
@@ -102,7 +123,7 @@
 </script>
 
 <h1>Security settings</h1>
-<p class="hint">Manage two-factor authentication (TOTP) for your account.</p>
+<p class="hint">Manage two-factor authentication, active sessions, and account activity.</p>
 
 {#if loading}
   <p>Loading…</p>
@@ -196,11 +217,51 @@
       </div>
     {/if}
   </section>
+
+  <section class="card">
+    <h2>Last login</h2>
+    {#if lastLoginAt}
+      <p>{new Date(lastLoginAt).toLocaleString()}</p>
+    {:else}
+      <p class="hint">No login timestamp recorded yet.</p>
+    {/if}
+  </section>
+
+  <section class="card">
+    <h2>Active sessions</h2>
+    {#if sessionLoading}
+      <p>Loading sessions…</p>
+    {:else if sessions.length === 0}
+      <p class="hint">No active sessions found.</p>
+    {:else}
+      <table>
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Created</th>
+            <th>Expires</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each sessions as session}
+            <tr>
+              <td><code>{session.id}</code></td>
+              <td>{new Date(session.created_at).toLocaleString()}</td>
+              <td>{new Date(session.expires_at).toLocaleString()}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  </section>
 {/if}
 
 <style>
   .hint {
     color: #64748b;
+  }
+  .card {
+    margin-bottom: 1rem;
   }
   .error {
     color: #b91c1c;
@@ -287,5 +348,19 @@
   button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th,
+  td {
+    padding: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    font-size: 0.9rem;
+  }
+  code {
+    font-size: 0.8rem;
   }
 </style>

@@ -23,6 +23,7 @@ from app.schemas.auth import (
 )
 from app.services import totp as totp_service
 from app.services.audit_service import AuditService
+from app.services.password_service import PasswordService
 
 # In-process login attempt counter (per username) for rate limiting in dev/MVP.
 _login_attempts: defaultdict[str, int] = defaultdict(int)
@@ -221,4 +222,33 @@ class AuthService:
             raise unauthorized("INVALID_TOTP", "TOTP code invalid or expired")
 
         await self._users.update_two_factor(user, enabled=False, secret=None)
+        await self._session.commit()
+
+    async def get_current_user_profile(self, *, user_id: UUID) -> UserResponse:
+        user = await self._users.get_by_id(user_id)
+        if user is None:
+            raise unauthorized("UNAUTHORIZED", "Invalid or expired token")
+        permissions = await self._users.get_permission_codes_for_role(user.role_id)
+        return self._user_response(user, permissions)
+
+    async def list_active_sessions(self, *, user_id: UUID):
+        return await self._users.list_active_refresh_tokens(user_id)
+
+    async def change_password(
+        self, *, user_id: UUID, current_password: str, new_password: str
+    ) -> None:
+        user = await self._users.get_by_id(user_id)
+        if user is None:
+            raise unauthorized("UNAUTHORIZED", "Invalid or expired token")
+
+        password_service = PasswordService(self._session)
+        if not await password_service.verify_user_password(user.password_hash, current_password):
+            raise unauthorized("INVALID_CREDENTIALS", "Current password is incorrect")
+
+        try:
+            await password_service.change_password(user_id, new_password)
+        except ValueError as exc:
+            raise forbidden("INVALID_PASSWORD", str(exc)) from exc
+
+        await self._users.revoke_all_refresh_tokens(user_id)
         await self._session.commit()

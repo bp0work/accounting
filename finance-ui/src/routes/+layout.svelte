@@ -12,7 +12,7 @@
   const userMenuLinks: MenuLink[] = [
     { kind: 'link', href: '/settings/notifications', label: 'Notifications', icon: '🔔' },
     { kind: 'link', href: '/settings/security', label: 'Security', icon: '🔒' },
-    { kind: 'link', href: '/settings/security', label: 'Change Password', icon: '🔑' },
+    { kind: 'link', href: '/settings/change-password', label: 'Change Password', icon: '🔑' },
   ];
 
   $: isLogin = $page.url.pathname === '/login';

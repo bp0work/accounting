@@ -95,6 +95,19 @@ class UserRepository:
             token.revoked_at = now
         await self._session.flush()
 
+    async def list_active_refresh_tokens(self, user_id: UUID) -> list[RefreshToken]:
+        now = datetime.now(UTC)
+        result = await self._session.execute(
+            select(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.expires_at > now,
+            )
+            .order_by(RefreshToken.created_at.desc())
+        )
+        return list(result.scalars().all())
+
     async def update_two_factor(
         self,
         user: User,
