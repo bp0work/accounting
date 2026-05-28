@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import TYPE_CHECKING
+
 from app.models.case import Case
+
+if TYPE_CHECKING:
+    from app.models.user import User
+
+_CFO_ROLE_NAMES = frozenset({"cfo", "finance_manager", "finance_director"})
+_ACC_ROLE_NAMES = frozenset({"accounts_clerk", "finance_officer"})
 
 REJECTED_STATUSES = frozenset({"rejected", "case_rejected"})
 ATTENTION_STATUSES = frozenset({"exception", "manual_review", "on_hold"})
@@ -128,6 +136,47 @@ def case_status_group(case: Case) -> str:
 
 def case_status_group_label(case: Case) -> str:
     return STATUS_GROUP_LABELS.get(case_status_group(case), "Processing")
+
+
+def _role_action_label(role_name: str | None) -> str | None:
+    if not role_name:
+        return None
+    name = role_name.lower()
+    if name in _CFO_ROLE_NAMES:
+        return "CFO"
+    if name in _ACC_ROLE_NAMES:
+        return "ACC"
+    return None
+
+
+def assignee_action_by(assignee: User) -> str:
+    """Short finance role label or assignee display name — never email/UUID."""
+    role_name = assignee.role.name if getattr(assignee, "role", None) else None
+    label = _role_action_label(role_name)
+    if label:
+        return label
+    return assignee.display_name
+
+
+def case_action_by(case: Case, assignee: User | None = None) -> str | None:
+    """Dashboard 'Action by' — assignee override, else derived from state and approval tier."""
+    if assignee is not None:
+        return assignee_action_by(assignee)
+
+    group = case_status_group(case)
+    if group in ("processing", "rejected", "completed"):
+        return None
+    if group == "attention":
+        return "ACC"
+    if group == "approval":
+        wf = case.workflow_metadata or {}
+        if wf.get("binding_escalated_to_cfo"):
+            return "CFO"
+        tier = case.current_approval_tier
+        if tier is not None and tier >= 3:
+            return "CFO"
+        return "ACC"
+    return None
 
 
 def _workflow_step(case: Case) -> str | None:

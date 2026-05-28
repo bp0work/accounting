@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.database import get_db_session
@@ -48,6 +49,7 @@ from app.services.case_retry import execute_case_retry
 from app.services.case_service import CaseService
 from app.services.timeline_actor import resolve_timeline_actor_display
 from app.services.case_visibility import (
+    case_action_by,
     case_status_group,
     case_status_group_label,
     case_status_label,
@@ -60,6 +62,16 @@ from app.services.case_visibility import (
 from fastapi import status
 
 router = APIRouter(tags=["Cases"])
+
+
+async def _load_assignees_map(session: AsyncSession, cases: list) -> dict[UUID, User]:
+    user_ids = {c.assigned_to for c in cases if c.assigned_to}
+    if not user_ids:
+        return {}
+    result = await session.execute(
+        select(User).where(User.id.in_(user_ids)).options(selectinload(User.role))
+    )
+    return {row.id: row for row in result.scalars().all()}
 
 
 async def _load_from_addresses_map(
@@ -116,6 +128,7 @@ def _case_response(
     from_address: str | None = None,
     linked_gl_period_status: str | None = None,
     pending_approval_id: UUID | None = None,
+    assignee: User | None = None,
 ) -> CaseResponse:
     base = CaseResponse.model_validate(case)
     if from_address is None:
@@ -134,6 +147,7 @@ def _case_response(
             "processing_stage": processing_stage(case),
             "status_group": case_status_group(case),
             "status_group_label": case_status_group_label(case),
+            "action_by": case_action_by(case, assignee),
             "status_label": case_status_label(case),
             "error_reason": error_reason(case),
             "status_reason": status_reason(case),
@@ -190,13 +204,19 @@ async def case_dashboard(
     repo = CaseRepository(session)
     overdue = await repo.list_overdue_cases(limit=20)
     from_map = await _load_from_addresses_map(session, overdue)
+    assignee_map = await _load_assignees_map(session, overdue)
     return CaseDashboardResponse(
         queue_depths=await _queue_status(),
         cases_by_status=await repo.count_by_status(),
         average_processing_time_minutes=await repo.average_processing_minutes_completed(),
         overdue_count=len(overdue),
         overdue_cases=[
-            _case_response(c, from_address=from_map.get(c.email_id)) for c in overdue
+            _case_response(
+                c,
+                from_address=from_map.get(c.email_id),
+                assignee=assignee_map.get(c.assigned_to) if c.assigned_to else None,
+            )
+            for c in overdue
         ],
     )
 
@@ -215,9 +235,15 @@ async def list_cases(
         limit=limit, status_filter=status, date_from=date_from, date_to=date_to
     )
     from_map = await _load_from_addresses_map(session, cases)
+    assignee_map = await _load_assignees_map(session, cases)
     return CaseListResponse(
         data=[
-            _case_response(c, from_address=from_map.get(c.email_id)) for c in cases
+            _case_response(
+                c,
+                from_address=from_map.get(c.email_id),
+                assignee=assignee_map.get(c.assigned_to) if c.assigned_to else None,
+            )
+            for c in cases
         ]
     )
 
@@ -233,11 +259,20 @@ async def get_case(
     from_address = await _load_from_address(session, case)
     pending_id = await _pending_approval_id(session, case_id)
     linked_gl = await _linked_gl_period_status(session, case)
+    assignee = None
+    if case.assigned_to:
+        result = await session.execute(
+            select(User)
+            .where(User.id == case.assigned_to)
+            .options(selectinload(User.role))
+        )
+        assignee = result.scalar_one_or_none()
     return _case_response(
         case,
         from_address=from_address,
         linked_gl_period_status=linked_gl,
         pending_approval_id=pending_id,
+        assignee=assignee,
     )
 
 

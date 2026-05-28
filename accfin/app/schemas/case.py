@@ -34,6 +34,7 @@ class CaseResponse(BaseModel):
     processing_stage: str | None = None
     status_group: str | None = None
     status_group_label: str | None = None
+    action_by: str | None = None
     status_label: str | None = None
     error_reason: str | None = None
     status_reason: str | None = None
