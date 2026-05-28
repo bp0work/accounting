@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.29-ap-vendor-not-found-escalation"
+        return "0.14.30-ap-retry-resume-point"
 
     @property
     def edge_public_base_url(self) -> str:
