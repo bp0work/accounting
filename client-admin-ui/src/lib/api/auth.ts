@@ -1,9 +1,18 @@
-import { apiFetch, apiUrl, setTokens } from './client';
+import { apiUrl, setTokens } from './client';
+import { setCachedDisplayUser } from './displayUserCache';
+
+export type LoginUser = {
+  id: string;
+  username: string;
+  display_name: string;
+  email: string;
+  role_name?: string | null;
+};
 
 export type LoginResult = {
   access_token: string;
   refresh_token: string;
-  user: { role_name?: string | null };
+  user: LoginUser;
 };
 
 export async function loginRequest(username: string, password: string, totpCode?: string) {
@@ -26,4 +35,11 @@ export async function loginRequest(username: string, password: string, totpCode?
 
 export function completeLogin(data: LoginResult) {
   setTokens(data.access_token, data.refresh_token);
+  if (data.user) {
+    setCachedDisplayUser({
+      username: data.user.username,
+      display_name: data.user.display_name,
+      email: data.user.email,
+    });
+  }
 }

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.core.dependencies import get_current_user, require_permission
+from app.core.exceptions import unauthorized
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -16,6 +17,8 @@ from app.schemas.auth import (
     TwoFactorSetupResponse,
     TwoFactorVerifyRequest,
 )
+from app.repositories.user import UserRepository
+from app.schemas.auth import UserResponse
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -79,6 +82,20 @@ async def disable_2fa(
 ) -> Response:
     await AuthService(session).disable_2fa(user_id=user.user_id, totp_code=body.totp_code)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(
+    user: TokenData = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> UserResponse:
+    """Current user profile for UI display (username, display_name, etc.)."""
+    svc = AuthService(session)
+    db_user = await UserRepository(session).get_by_id(user.user_id)
+    if db_user is None:
+        raise unauthorized("UNAUTHORIZED", "Invalid or expired token")
+    permissions = await UserRepository(session).get_permission_codes_for_role(db_user.role_id)
+    return svc._user_response(db_user, permissions)
 
 
 @router.get("/session/me", include_in_schema=False)

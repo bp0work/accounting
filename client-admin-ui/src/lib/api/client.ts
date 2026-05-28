@@ -1,5 +1,7 @@
 export const API_PREFIX = '/api';
 /** localStorage key — layout reads synchronously for first-paint nav. */
+import { clearCachedDisplayUser } from './displayUserCache';
+
 export const ACCESS_TOKEN_KEY = 'client_admin_access_token';
 const REFRESH_TOKEN_KEY = 'client_admin_refresh_token';
 export function apiUrl(path: string): string {
@@ -26,6 +28,7 @@ export function setTokens(access: string, refresh: string) {
 export function clearToken() {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+  clearCachedDisplayUser();
 }
 
 let refreshInFlight: Promise<string> | null = null;

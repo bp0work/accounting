@@ -52,6 +52,9 @@
       <nav class="nav">
         <a href="/dashboard">Dashboard</a>
         <a href="/approvals">Cases & Approvals</a>
+        <a href="/counterparty-accounts">Counterparty Accounts</a>
+        <a href="/agreements">Agreements</a>
+        <a href="/accounting-calendar">Accounting Calendar</a>
         <a href="/export">Export</a>
         <UserMenu links={userMenuLinks} onLogout={logout} />
       </nav>
