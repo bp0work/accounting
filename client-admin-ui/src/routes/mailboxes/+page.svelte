@@ -66,12 +66,6 @@
     return a.email_address.localeCompare(b.email_address);
   }
 
-  function typeLabel(mode: string): string {
-    if (mode === 'executive_agent') return 'Executive Agent';
-    if (mode === 'manager_human') return 'Manager';
-    return mode;
-  }
-
   function showParsingToggle(row: Row): boolean {
     if (row.mailbox_mode !== 'executive_agent') return false;
     const addr = row.email_address.toLowerCase();
@@ -156,7 +150,6 @@
         <thead>
           <tr>
             <th>Mailbox address</th>
-            <th>Type</th>
             <th>Display name</th>
             <th>Escalation email</th>
             <th>Parsing confirm</th>
@@ -172,7 +165,6 @@
                 <code>{row.email_address}</code>
                 {#if row.role}<div class="role">{row.role}</div>{/if}
               </td>
-              <td><span class="badge type">{typeLabel(row.mailbox_mode)}</span></td>
               <td>
                 <input type="text" bind:value={rows[idx].display_name_input} />
               </td>
@@ -225,7 +217,6 @@
         <thead>
           <tr>
             <th>Mailbox address</th>
-            <th>Type</th>
             <th>Display name</th>
             <th>Escalation email</th>
             <th>Active</th>
@@ -240,7 +231,6 @@
                 <code>{row.email_address}</code>
                 {#if row.role}<div class="role">{row.role}</div>{/if}
               </td>
-              <td><span class="badge type">{typeLabel(row.mailbox_mode)}</span></td>
               <td>
                 <input type="text" bind:value={rows[idx].display_name_input} />
               </td>
@@ -334,7 +324,6 @@
   }
   .badge.active { background: #dcfce7; color: #166534; }
   .badge.inactive { background: #fee2e2; color: #991b1b; }
-  .badge.type { background: #e0e7ff; color: #3730a3; }
   .actions-col { width: 6.5rem; text-align: right; }
   button {
     padding: 0.35rem 0.85rem;
