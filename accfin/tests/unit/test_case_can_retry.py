@@ -40,6 +40,16 @@ def test_on_hold_period_closed_not_retryable_when_still_closed():
     assert case_can_manual_retry(case, linked_gl_period_status="closed") is False
 
 
+def test_classified_can_retry():
+    case = Case(
+        case_number="CAS-T-5",
+        type="ap_invoice",
+        status="classified",
+        subject="x",
+    )
+    assert case_can_manual_retry(case) is True
+
+
 def test_posted_cannot_retry():
     case = Case(
         case_number="CAS-T-4",

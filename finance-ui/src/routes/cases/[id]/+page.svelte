@@ -112,7 +112,7 @@
     ? String(item.workflow_metadata.gl_period_id)
     : '';
 
-  const retryableStatuses = new Set(['exception', 'manual_review']);
+  const retryableStatuses = new Set(['exception', 'manual_review', 'classified']);
   const transientHermesStatuses = new Set(['on_hold', 'exception', 'manual_review']);
   const transientHermesCodes = new Set(['HERMES_TIMEOUT', 'HERMES_UNAVAILABLE']);
 
@@ -838,6 +838,12 @@
   .hint.success {
     color: #15803d;
   }
+  .retry-actions {
+    margin: 1rem 0;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--border, #e2e8f0);
+  }
+
   .retry {
     margin-top: 0.75rem;
     padding: 0.5rem 1rem;

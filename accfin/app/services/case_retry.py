@@ -19,7 +19,7 @@ from app.services.queue_router import enqueue_accounts
 from app.services.timeline_actor import timeline_actor_label_for_user
 from fastapi import status
 
-RETRYABLE_STATUSES = frozenset({"exception", "manual_review"})
+RETRYABLE_STATUSES = frozenset({"exception", "manual_review", "classified"})
 RETRYABLE_HERMES_ON_HOLD_CODES = frozenset({"HERMES_TIMEOUT", "HERMES_UNAVAILABLE"})
 
 
@@ -120,7 +120,7 @@ async def _persist_case_retry(case_id: UUID, user: TokenData) -> _CaseRetrySnaps
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "CASE_NOT_RETRYABLE",
                 f"Case in status '{case.status}' cannot be retried; "
-                f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))}, "
+                f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))} (re-queue), "
                 f"or on_hold after GL period reopen, "
                 f"or on_hold with transient Hermes errors "
                 f"({', '.join(sorted(RETRYABLE_HERMES_ON_HOLD_CODES))})",

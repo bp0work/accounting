@@ -90,6 +90,28 @@ async def test_case_retry_requeues_on_hold_hermes_timeout(
 
 
 @pytest.mark.integration
+async def test_case_retry_requeues_classified(
+    db_session, async_client: AsyncClient, auth_headers
+) -> None:
+    case = Case(
+        case_number=f"CAS-RETRY-CLS-{uuid4().hex[:8]}",
+        type="ap_invoice",
+        status="classified",
+        subject="Stuck in queue",
+        workflow_metadata={"current_stage": "classified"},
+    )
+    db_session.add(case)
+    await db_session.commit()
+
+    response = await async_client.post(
+        f"/api/cases/{case.id}/retry",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["previous_status"] == "classified"
+
+
+@pytest.mark.integration
 async def test_get_case_includes_can_retry_for_on_hold_hermes(
     db_session, async_client: AsyncClient, auth_headers
 ) -> None:
