@@ -34,6 +34,11 @@ _AP_STEP_OVERRIDE_KEYS: dict[str, str] = {
     "AP_SENDER_NOT_VALIDATED":  "override_sender_validation",
     "AP_COA_NOT_FOUND":         "override_coa_not_found",
 }
+_REASON_VENDOR_NOT_FOUND = "AP_VENDOR_NOT_FOUND"
+_VENDOR_NOT_FOUND_REJECTION = (
+    "Your document cannot be processed as {vendor_name} is not set up in our system. "
+    "Please contact accounts to register the vendor."
+)
 _SENDER_VALIDATION_RESUBMIT_TEMPLATE = (
     "Please resubmit your document quoting Case ID {case_number} and include "
     "'validated dd/mm/yyyy' in your email (e.g. 'validated 28/05/2026') "
@@ -80,6 +85,14 @@ class EscalationService:
             raise AppHTTPException(404, "ESCALATION_NOT_FOUND", "Escalation not found")
         if row.response_token_hash != token_hash:
             raise AppHTTPException(400, "INVALID_ESCALATION_TOKEN", "Token does not match escalation")
+
+        if str(row.reason_code or "") == _REASON_VENDOR_NOT_FOUND and action != "reject":
+            raise AppHTTPException(
+                422,
+                "VENDOR_NOT_FOUND_REJECT_ONLY",
+                "Vendor not set up — only Reject is available from this email. "
+                "Use Retry in Finance UI after registering the vendor.",
+            )
 
         case = await self._cases.get(row.case_id)
         case_number = case.case_number if case else str(row.case_id)
@@ -135,6 +148,14 @@ class EscalationService:
         if row.response_token_hash != token_hash:
             raise AppHTTPException(400, "INVALID_ESCALATION_TOKEN", "Token does not match escalation")
 
+        if str(row.reason_code or "") == _REASON_VENDOR_NOT_FOUND and action != "reject":
+            raise AppHTTPException(
+                422,
+                "VENDOR_NOT_FOUND_REJECT_ONLY",
+                "Vendor not set up — only Reject is available from this email. "
+                "Use Retry in Finance UI after registering the vendor.",
+            )
+
         if row.status != "pending":
             if row.status in ("approved", "rejected", "escalated"):
                 return EscalationRespondResult(
@@ -156,6 +177,14 @@ class EscalationService:
         message: str | None = None
 
         if action == "approve":
+            reason_code_pre = row.reason_code or ""
+            if str(reason_code_pre) == _REASON_VENDOR_NOT_FOUND:
+                raise AppHTTPException(
+                    422,
+                    "VENDOR_NOT_FOUND_NO_APPROVE",
+                    "Vendor not set up — use Reject to notify the sender, or Retry in Finance UI "
+                    "after registering the vendor. Approve is not available for this escalation.",
+                )
             row.status = "approved"
             row.responded_at = now
             row.responded_by_email = responder
@@ -211,7 +240,12 @@ class EscalationService:
                     message = "Rejected. Submitter has been notified."
                 else:
                     is_ap_step = str(reason_code) in _AP_STEP_OVERRIDE_KEYS
-                    case.status = "case_rejected" if is_ap_step else "rejected"
+                    is_vendor_not_found = str(reason_code) == _REASON_VENDOR_NOT_FOUND
+                    case.status = (
+                        "case_rejected"
+                        if is_ap_step or is_vendor_not_found
+                        else "rejected"
+                    )
                     meta = dict(case.workflow_metadata or {})
                     meta["manager_decision"] = "rejected"
                     meta["escalation_pending"] = False
@@ -221,7 +255,19 @@ class EscalationService:
 
                     email = await self._resolve_email(row, case)
                     error_reason = (row.context or {}).get("error_reason") or row.summary
-                    if reason_code == "AP_SENDER_NOT_VALIDATED":
+                    if is_vendor_not_found:
+                        ctx = row.context or {}
+                        extracted = ctx.get("extracted_fields") or {}
+                        vendor_name = (
+                            meta.get("vendor_name")
+                            or extracted.get("vendor_name")
+                            or case.counterparty_name
+                            or "the vendor"
+                        )
+                        error_reason = _VENDOR_NOT_FOUND_REJECTION.format(
+                            vendor_name=str(vendor_name)
+                        )
+                    elif reason_code == "AP_SENDER_NOT_VALIDATED":
                         error_reason = _SENDER_VALIDATION_RESUBMIT_TEMPLATE.format(
                             case_number=case.case_number
                         )

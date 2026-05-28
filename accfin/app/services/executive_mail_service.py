@@ -24,6 +24,8 @@ from app.services.queue_router import enqueue_accounts
 logger = logging.getLogger(__name__)
 
 INTERNAL_DOMAIN = "@bp0.work"
+_REASON_VENDOR_NOT_FOUND = "AP_VENDOR_NOT_FOUND"
+_VENDOR_NOT_FOUND_TEMPLATE = "manager.escalation.vendor_not_found"
 
 
 class ExecutiveMailService:
@@ -81,16 +83,18 @@ class ExecutiveMailService:
         escalation_id: UUID,
         wire_token: str,
         *,
+        include_approve: bool = True,
         include_escalate: bool = True,
         include_request_info: bool = False,
     ) -> dict[str, str]:
         base = self._settings.edge_public_base_url.rstrip("/")
         qs = f"token={wire_token}"
         path = f"/api/mail/escalations/{escalation_id}/respond"
-        urls = {
-            "approve_url": f"{base}{path}?action=approve&{qs}",
+        urls: dict[str, str] = {
             "reject_url": f"{base}{path}?action=reject&{qs}",
         }
+        if include_approve:
+            urls["approve_url"] = f"{base}{path}?action=approve&{qs}"
         if include_request_info:
             urls["request_info_url"] = f"{base}{path}?action=request_info&{qs}"
         if include_escalate:
@@ -135,6 +139,8 @@ class ExecutiveMailService:
     ) -> PendingOutboundEmail:
         if template_key == "manager.escalation.missing_fields":
             subject = f"[{case.case_number}] Action required — missing invoice fields"
+        elif template_key == _VENDOR_NOT_FOUND_TEMPLATE:
+            subject = f"[{case.case_number}] Action required — vendor not set up"
         else:
             subject = f"[{case.case_number}] Action required — manager review"
 
@@ -223,14 +229,23 @@ class ExecutiveMailService:
         )
         missing_fields_list = list(missing_fields or [])
         is_missing_fields = escalation_template == "manager.escalation.missing_fields"
+        is_vendor_not_found = (
+            reason_code == _REASON_VENDOR_NOT_FOUND
+            or escalation_template == _VENDOR_NOT_FOUND_TEMPLATE
+        )
         show_escalate = (
-            include_escalate
-            if include_escalate is not None
-            else (not is_missing_fields)
+            False
+            if is_vendor_not_found
+            else (
+                include_escalate
+                if include_escalate is not None
+                else (not is_missing_fields)
+            )
         )
         urls = self.escalation_action_urls(
             escalation_id,
             wire,
+            include_approve=not is_vendor_not_found,
             include_escalate=show_escalate,
             include_request_info=is_missing_fields,
         )

@@ -87,6 +87,42 @@ Our team will review it shortly.</p>
 </blockquote>
 {% endif %}"""
 
+_FINANCE_UI_RETRY_NOTE = (
+    "To reprocess after setting up the vendor, use the Retry button "
+    "in the Finance UI case detail page."
+)
+
+_VENDOR_NOT_FOUND_ESCALATION_PLAIN = """\
+Action required — vendor not set up for case {{ case_number }}.
+
+Summary: {{ summary }}
+{% if error_reason %}Reason: {{ error_reason }}{% endif %}
+{% if executive_mailbox %}Executive mailbox: {{ executive_mailbox }}{% endif %}
+
+This vendor is not registered. You may only reject this document so the sender is notified.
+There is no approve or reprocess action from this email.
+
+{{ finance_ui_note }}
+
+Reject: {{ reject_url }}
+"""
+
+_VENDOR_NOT_FOUND_ESCALATION_HTML = """\
+<h2>Action required — vendor not set up</h2>
+<p><strong>Case:</strong> {{ case_number }}</p>
+<p><strong>Summary:</strong> {{ summary }}</p>
+{% if error_reason %}<p><strong>Reason:</strong> {{ error_reason }}</p>{% endif %}
+{% if executive_mailbox %}<p><strong>Executive mailbox:</strong> {{ executive_mailbox }}</p>{% endif %}
+<p>This vendor is not registered. You may only <strong>reject</strong> this document so the sender is notified.
+There is no approve or reprocess action from this email.</p>
+<p><em>{{ finance_ui_note }}</em></p>
+<p>
+  <a href="{{ reject_url }}" style="background:#dc2626;color:#fff;padding:8px 16px;text-decoration:none;border-radius:4px;">Reject</a>
+</p>
+<p style="font-size:12px;color:#64748b;">If the button does not work, use this link:<br>
+Reject: {{ reject_url }}</p>
+"""
+
 _ESCALATION_PLAIN = """\
 Action required — manager review for case {{ case_number }}.
 
@@ -252,6 +288,21 @@ def render_manager_escalation(
     signature: TenantEmailSignature | None = None,
 ) -> tuple[str, str]:
     return _render_signed(_ESCALATION_PLAIN, _ESCALATION_HTML, context, signature=signature)
+
+
+def render_vendor_not_found_escalation(
+    context: dict,
+    *,
+    signature: TenantEmailSignature | None = None,
+) -> tuple[str, str]:
+    ctx = dict(context)
+    ctx.setdefault("finance_ui_note", _FINANCE_UI_RETRY_NOTE)
+    return _render_signed(
+        _VENDOR_NOT_FOUND_ESCALATION_PLAIN,
+        _VENDOR_NOT_FOUND_ESCALATION_HTML,
+        ctx,
+        signature=signature,
+    )
 
 
 def render_missing_fields_escalation(

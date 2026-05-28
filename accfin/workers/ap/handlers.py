@@ -209,6 +209,7 @@ class APWorkerService:
         missing_fields: list[str] | None = None,
         escalation_template: str = "manager.escalation.request",
         reattach_inbound_attachments: bool = False,
+        preserve_case_status: bool = False,
     ) -> dict:
         """Escalate current validation step to ACC, set case to manual_review."""
         svc = ExecutiveMailService(self._session)
@@ -228,6 +229,7 @@ class APWorkerService:
             escalation_template=escalation_template,
             include_escalate=include_escalate,
             force_reattach_inbound=reattach_inbound_attachments,
+            preserve_case_status=preserve_case_status,
         )
         if escalation is None:
             await self._add_timeline(
@@ -445,36 +447,29 @@ class APWorkerService:
             summary = (
                 f"Vendor {vendor_name_str} has no subaccount in the system. "
                 f"Vendor must be set up before this document can be processed. "
-                f"Document will be rejected."
+                f"Use Reject in this email to notify the sender, or set up the vendor "
+                f"and use Retry processing in the Finance UI case detail page."
             )
             _update_meta(case, {
                 "error_type": _REASON_VENDOR_NOT_FOUND,
                 "reason_code": _REASON_VENDOR_NOT_FOUND,
+                "vendor_name": vendor_name_str,
             })
             await self._add_timeline(
                 case, "vendor_not_found",
                 from_status="processing", to_status="manual_review",
                 description=summary,
             )
-            result = await self._escalate_step(
+            return await self._escalate_step(
                 case, email,
                 reason_code=_REASON_VENDOR_NOT_FOUND,
                 summary=summary,
                 extracted_fields=extracted,
                 extraction_confidence=confidence_f,
                 include_escalate=False,
+                escalation_template="manager.escalation.vendor_not_found",
+                preserve_case_status=True,
             )
-            # Reject-only path: notify sender immediately
-            await self._send_rejection_to_sender(
-                case, email,
-                reason=(
-                    f"Your document cannot be processed as {vendor_name_str} is not "
-                    f"set up in our system. Please contact accounts to register the vendor."
-                ),
-            )
-            case.status = "case_rejected"
-            await self._session.flush()
-            return result
 
         if vendor_status == "inactive" and not overrides.get("override_vendor_inactive"):
             summary = (

@@ -53,6 +53,21 @@ def test_render_missing_fields_escalation_includes_request_info():
     assert "https://example.test/request-info" in html
 
 
+def test_render_vendor_not_found_escalation_reject_only():
+    from app.services.mail_template_renderer import render_vendor_not_found_escalation
+
+    plain, html = render_vendor_not_found_escalation(
+        {
+            "case_number": "CAS-1",
+            "summary": "No subaccount",
+            "reject_url": "https://example.test/reject",
+        }
+    )
+    assert "https://example.test/reject" in plain
+    assert "Approve:" not in plain
+    assert "Retry button" in plain
+
+
 def test_render_manager_escalation_includes_action_urls():
     plain, html = render_manager_escalation(
         {
