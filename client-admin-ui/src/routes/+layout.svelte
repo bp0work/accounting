@@ -47,6 +47,7 @@
         <a href="/binding-authority">Binding Authority</a>
         <a href="/policies">Travel &amp; Entertainment</a>
         <a href="/regulatory-policies">Regulatory Policies</a>
+        <a href="/accounting-calendar">Accounting Calendar</a>
         <UserMenu links={userMenuLinks} onLogout={logout} />
       </nav>
     {/if}

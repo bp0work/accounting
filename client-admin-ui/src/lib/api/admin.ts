@@ -254,3 +254,37 @@ export function generateAccountingPeriods(body?: {
   );
 }
 
+export type GlCutoffReminder = {
+  id: string;
+  tenant_id: string;
+  email: string;
+  display_name?: string | null;
+  notify_7_days: boolean;
+  notify_3_days: boolean;
+  notify_1_day: boolean;
+  notify_on_date: boolean;
+  is_active: boolean;
+};
+
+export function listGlCutoffReminders() {
+  return apiFetch<GlCutoffReminder[]>('/admin/gl-cutoff-reminders');
+}
+
+export function createGlCutoffReminder(body: Record<string, unknown>) {
+  return apiFetch<GlCutoffReminder>('/admin/gl-cutoff-reminders', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function patchGlCutoffReminder(id: string, body: Record<string, unknown>) {
+  return apiFetch<GlCutoffReminder>(`/admin/gl-cutoff-reminders/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteGlCutoffReminder(id: string) {
+  return apiFetch<void>(`/admin/gl-cutoff-reminders/${id}`, { method: 'DELETE' });
+}
+

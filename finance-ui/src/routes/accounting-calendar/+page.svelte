@@ -6,18 +6,9 @@
   import { ensureValidAccessToken } from '$lib/api/client';
   import {
     listAccountingPeriods,
-    generateAccountingPeriods,
     approveTrialBalance,
     closeGlPeriod,
     reopenGlPeriod,
-    getAccountingSettings,
-    patchAccountingSettings,
-    listGlCutoffReminders,
-    createGlCutoffReminder,
-    patchGlCutoffReminder,
-    deleteGlCutoffReminder,
-    type AccountingSettings,
-    type GlCutoffReminder,
   } from '$lib/api/finance-setup';
 
   const MONTHS = [
@@ -25,27 +16,10 @@
     'July', 'August', 'September', 'October', 'November', 'December',
   ];
 
-  let settings: AccountingSettings = {
-    accounting_fye_month: 12,
-    trial_balance_frequency: 'monthly',
-    audit_frequency: 'annual',
-    gl_cutoff_working_days: 3,
-  };
   let periods: Array<Record<string, unknown>> = [];
-  let reminders: GlCutoffReminder[] = [];
   let msg = '';
   let error = '';
-  let loading = false;
-  let showAddRecipient = false;
-  let newRecipient = {
-    display_name: '',
-    email: '',
-    notify_7_days: true,
-    notify_3_days: true,
-    notify_1_day: true,
-    notify_on_date: true,
-    is_active: true,
-  };
+  let loading = true;
   let closeTarget: Record<string, unknown> | null = null;
   let reopenTarget: Record<string, unknown> | null = null;
   let closeForm = {
@@ -58,14 +32,9 @@
 
   onMount(async () => {
     if (!(await ensureValidAccessToken())) return;
-    await refreshAll();
-  });
-
-  async function refreshAll() {
-    settings = await getAccountingSettings();
     await refresh();
-    reminders = await listGlCutoffReminders();
-  }
+    loading = false;
+  });
 
   async function refresh() {
     periods = await listAccountingPeriods();
@@ -76,30 +45,6 @@
       const bm = Number(b.period_month);
       return ay !== by ? by - ay : bm - am;
     });
-  }
-
-  async function saveSettings() {
-    error = '';
-    try {
-      settings = await patchAccountingSettings(settings);
-      msg = 'Settings saved.';
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Save failed';
-    }
-  }
-
-  async function gen() {
-    loading = true;
-    error = '';
-    try {
-      await generateAccountingPeriods(13);
-      msg = 'Generated periods for current month and the next 12 months.';
-      await refresh();
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Generate failed';
-    } finally {
-      loading = false;
-    }
   }
 
   async function approve(id: string) {
@@ -157,36 +102,6 @@
     }
   }
 
-  async function addRecipient() {
-    await createGlCutoffReminder(newRecipient);
-    showAddRecipient = false;
-    newRecipient = {
-      display_name: '',
-      email: '',
-      notify_7_days: true,
-      notify_3_days: true,
-      notify_1_day: true,
-      notify_on_date: true,
-      is_active: true,
-    };
-    reminders = await listGlCutoffReminders();
-    msg = 'Recipient added.';
-  }
-
-  async function toggleReminder(r: GlCutoffReminder, field: keyof GlCutoffReminder) {
-    const val = r[field];
-    if (typeof val !== 'boolean') return;
-    await patchGlCutoffReminder(r.id, { [field]: !val });
-    reminders = await listGlCutoffReminders();
-  }
-
-  async function removeRecipient(r: GlCutoffReminder) {
-    if (!confirm(`Remove reminder recipient ${r.email}?`)) return;
-    await deleteGlCutoffReminder(r.id);
-    reminders = await listGlCutoffReminders();
-    msg = 'Recipient removed.';
-  }
-
   function periodLabel(p: Record<string, unknown>) {
     const m = Number(p.period_month);
     const y = Number(p.period_year);
@@ -204,40 +119,9 @@
 {#if error}<p class="err">{error}</p>{/if}
 {#if msg}<p class="ok">{msg}</p>{/if}
 
-<section class="card">
-  <h2>Calendar settings</h2>
-  <div class="grid">
-    <label>Financial year end month
-      <select bind:value={settings.accounting_fye_month}>
-        {#each MONTHS as name, i}
-          <option value={i + 1}>{name}</option>
-        {/each}
-      </select>
-    </label>
-    <label>Trial balance review frequency
-      <select bind:value={settings.trial_balance_frequency}>
-        <option value="monthly">Monthly</option>
-        <option value="weekly">Weekly</option>
-      </select>
-    </label>
-    <label>Audit frequency
-      <select bind:value={settings.audit_frequency}>
-        <option value="annual">Annual only</option>
-        <option value="semi_annual">Semi-annual</option>
-        <option value="quarterly">Quarterly</option>
-      </select>
-    </label>
-    <label>GL cutoff working days
-      <input type="number" min="1" max="30" bind:value={settings.gl_cutoff_working_days} />
-    </label>
-  </div>
-  <button type="button" on:click={saveSettings}>Save settings</button>
-</section>
-
-<button type="button" class="gen-btn" on:click={gen} disabled={loading}>
-  {loading ? 'Generating…' : 'Generate periods (current + next 12 months)'}
-</button>
-
+{#if loading}
+  <p class="hint">Loading periods…</p>
+{:else}
 <table>
   <thead>
     <tr>
@@ -274,53 +158,9 @@
   </tbody>
 </table>
 {#if periods.length === 0}
-  <p class="hint">No periods yet — save settings, then generate periods.</p>
+  <p class="hint">No periods yet. Generate them from Client Admin → Accounting Calendar.</p>
 {/if}
-
-<section class="card recipients">
-  <h2>GL cutoff reminder recipients</h2>
-  <p class="hint">Daily cron emails at 7 / 3 / 1 days before cutoff and on cutoff date (08:00 SGT).</p>
-  {#if reminders.length === 0 && !showAddRecipient}
-    <p class="warn">No reminder recipients configured. Add recipients to receive GL cutoff notifications.</p>
-  {/if}
-  {#if reminders.length > 0}
-    <table class="compact">
-      <thead>
-        <tr>
-          <th>Name</th><th>Email</th><th>7d</th><th>3d</th><th>1d</th><th>On date</th><th>Active</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each reminders as r}
-          <tr>
-            <td>{r.display_name || '—'}</td>
-            <td>{r.email}</td>
-            <td><input type="checkbox" checked={r.notify_7_days} on:change={() => toggleReminder(r, 'notify_7_days')} /></td>
-            <td><input type="checkbox" checked={r.notify_3_days} on:change={() => toggleReminder(r, 'notify_3_days')} /></td>
-            <td><input type="checkbox" checked={r.notify_1_day} on:change={() => toggleReminder(r, 'notify_1_day')} /></td>
-            <td><input type="checkbox" checked={r.notify_on_date} on:change={() => toggleReminder(r, 'notify_on_date')} /></td>
-            <td><input type="checkbox" checked={r.is_active} on:change={() => toggleReminder(r, 'is_active')} /></td>
-            <td><button type="button" class="danger" on:click={() => removeRecipient(r)}>Delete</button></td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-  {#if showAddRecipient}
-    <div class="add-form">
-      <label>Display name <input bind:value={newRecipient.display_name} /></label>
-      <label>Email <input type="email" bind:value={newRecipient.email} required /></label>
-      <label><input type="checkbox" bind:checked={newRecipient.notify_7_days} /> 7 days before</label>
-      <label><input type="checkbox" bind:checked={newRecipient.notify_3_days} /> 3 days before</label>
-      <label><input type="checkbox" bind:checked={newRecipient.notify_1_day} /> 1 day before</label>
-      <label><input type="checkbox" bind:checked={newRecipient.notify_on_date} /> On cutoff date</label>
-      <button type="button" on:click={addRecipient}>Save recipient</button>
-      <button type="button" class="muted" on:click={() => (showAddRecipient = false)}>Cancel</button>
-    </div>
-  {:else}
-    <button type="button" on:click={() => (showAddRecipient = true)}>Add recipient</button>
-  {/if}
-</section>
+{/if}
 
 {#if reopenTarget}
   <div class="modal-backdrop" role="presentation">
@@ -363,13 +203,10 @@
 <style>
   .card { background: #fff; border: 1px solid #e2e8f0; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; }
   h2 { margin: 0 0 0.75rem; font-size: 1rem; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }
   label { display: block; font-size: 0.875rem; }
-  input, select { width: 100%; padding: 0.4rem; box-sizing: border-box; margin-top: 0.25rem; }
-  .gen-btn { margin-bottom: 0.75rem; }
+  input { width: 100%; padding: 0.4rem; box-sizing: border-box; margin-top: 0.25rem; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; }
-  table.compact { font-size: 0.85rem; }
   .badge { font-size: 0.75rem; padding: 0.15rem 0.45rem; border-radius: 4px; }
   .badge.monthly { background: #dcfce7; color: #166534; }
   .badge.audit { background: #dbeafe; color: #1e40af; }
@@ -379,15 +216,11 @@
   .status-review { color: #854d0e; }
   .status-closed { color: #64748b; }
   .hint { color: #64748b; font-size: 0.875rem; }
-  .warn { color: #b45309; }
   .err { color: #b91c1c; }
   .ok { color: #15803d; }
-  .danger { color: #b91c1c; }
-  .muted { background: #f1f5f9; }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal { max-width: 420px; width: 90%; }
   .modal-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
   .reopen { font-size: 1.1rem; padding: 0.25rem 0.5rem; cursor: pointer; background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; }
-  .recipients { margin-top: 1.5rem; }
-  .add-form { margin-top: 0.75rem; }
+  .muted { background: #f1f5f9; }
 </style>
