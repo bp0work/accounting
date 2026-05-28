@@ -1,6 +1,6 @@
 {
   "name": "client-admin-ui",
-  "version": "0.14.13-mailboxes-nav-cleanup",
+  "version": "0.14.14-nav-trim",
   "private": true,
   "type": "module",
   "scripts": {
