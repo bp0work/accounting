@@ -61,6 +61,15 @@ api_router = APIRouter(prefix="/api")
 api_router.include_router(health.router)
 api_router.include_router(metrics.router)
 api_router.include_router(auth.router)
+# Admin routers must be registered BEFORE mail.router and mail_actions.router.
+# admin.router carries literal paths like /mail/configuration and
+# /mail/configuration/{mailbox_id}; mail.router defines /mail/{email_id} with
+# a UUID-typed path parameter that would otherwise match "configuration" first
+# (Starlette resolves routes in declaration order, not by specificity) and
+# fail UUID validation with 422 Unprocessable Entity before reaching the admin
+# handler. Same reasoning for mail_actions.router (/mail/escalations/...).
+api_router.include_router(admin.router)
+api_router.include_router(admin_counterparty.router)
 api_router.include_router(mail.router)
 api_router.include_router(cases.router)
 api_router.include_router(reconciliation.router)
@@ -71,8 +80,6 @@ api_router.include_router(audit.router)
 api_router.include_router(expense_claims.router)
 api_router.include_router(internal_jobs.router)
 api_router.include_router(mail_actions.router)
-api_router.include_router(admin.router)
-api_router.include_router(admin_counterparty.router)
 app.include_router(api_router)
 
 
