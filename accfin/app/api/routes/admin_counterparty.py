@@ -31,6 +31,7 @@ from app.schemas.client_admin import (
     TenantTaxCodeUpdate,
 )
 from app.services.counterparty_intake import has_open_balance_for_subaccount
+from app.services.counterparty_type import normalize_counterparty_type
 
 router = APIRouter(tags=["Client Admin"])
 
@@ -135,7 +136,9 @@ async def create_counterparty(
                 code="DUPLICATE_COUNTERPARTY_CODE",
                 message="Counterparty code already exists",
             )
-    row = Counterparty(**body.model_dump())
+    data = body.model_dump()
+    data["type"] = normalize_counterparty_type(data["type"])
+    row = Counterparty(**data)
     session.add(row)
     await session.commit()
     await session.refresh(row)
@@ -153,6 +156,8 @@ async def patch_counterparty(
     if row is None:
         raise AppHTTPException(status_code=404, code="NOT_FOUND", message="Counterparty not found")
     data = body.model_dump(exclude_unset=True)
+    if "type" in data and data["type"] is not None:
+        data["type"] = normalize_counterparty_type(data["type"])
     if "code" in data and data["code"]:
         dup = await session.scalar(
             select(func.count())

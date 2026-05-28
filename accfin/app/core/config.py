@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.27-case-status-display"
+        return "0.14.28-counterparty-vendor-fix"
 
     @property
     def edge_public_base_url(self) -> str:
