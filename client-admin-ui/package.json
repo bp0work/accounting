@@ -1,6 +1,6 @@
 {
   "name": "client-admin-ui",
-  "version": "0.14.14-nav-trim",
+  "version": "0.14.15-regulatory-policies-split",
   "private": true,
   "type": "module",
   "scripts": {
