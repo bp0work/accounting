@@ -37,6 +37,10 @@ def client_vendor_name(case: Case) -> str | None:
 
 def processing_stage(case: Case) -> str:
     meta = case.workflow_metadata or {}
+    if case.status in EXCEPTION_STATUSES:
+        stage = meta.get("current_stage")
+        if not stage or stage in ("classification", "intake"):
+            return "exception"
     stage = meta.get("current_stage")
     if isinstance(stage, str) and stage:
         if stage in ("classification", "intake"):

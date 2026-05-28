@@ -36,6 +36,17 @@ def test_processing_stage_from_status():
     assert processing_stage(case) == "classified"
 
 
+def test_processing_stage_on_hold_hermes_not_classified():
+    case = _case(
+        status="on_hold",
+        workflow_metadata={
+            "current_stage": "classification",
+            "reason_code": "HERMES_TIMEOUT",
+        },
+    )
+    assert processing_stage(case) == "exception"
+
+
 def test_status_reason_for_manual_review():
     case = _case(status="manual_review", workflow_metadata={"reason": "Empty extraction"})
     assert status_reason(case) == "Empty extraction"
