@@ -616,7 +616,13 @@ class APWorkerService:
         # ── Step 7: Document type routing + journal ───────────────────
         amount = Decimal(str(inv.total_amount or "0"))
         tax = Decimal(str(getattr(inv, "tax_amount", None) or "0"))
-        document_type = extracted.get("document_type", "invoice").lower()
+        document_type = (
+            str(extracted.get("document_type", "invoice"))
+            .strip()
+            .lower()
+            .replace("-", "_")
+            .replace(" ", "_")
+        )
 
         # GL period check before posting
         posting_date = getattr(inv, "invoice_date", None) or date.today()
@@ -649,8 +655,10 @@ class APWorkerService:
         )
         apply_binding_sla(case, tier, thresholds)
 
-        # Credit notes and debit notes always require ACC approval (minimum tier 2)
-        if document_type in ("credit_note", "debit_note"):
+        is_credit_or_debit_note = document_type in ("credit_note", "debit_note")
+        # Step 3a routing precedence:
+        # credit/debit notes must always go through approval, regardless of amount.
+        if is_credit_or_debit_note:
             tier = max(tier, 2)
 
         # Resolve trade creditors account
@@ -674,7 +682,7 @@ class APWorkerService:
         case.risk_flags = risk_flags
         case.current_approval_tier = tier if tier >= 2 else None
 
-        if tier == 1:
+        if not is_credit_or_debit_note and tier == 1:
             # Auto-post
             journal_id = await self._create_journal(
                 case, inv, amount, tax,
@@ -755,7 +763,7 @@ class APWorkerService:
         )
         currency = getattr(inv, "currency", None) or "SGD"
 
-        if document_type in ("credit_note", "debit_note"):
+        if is_credit_or_debit_note:
             doc_label = "Credit note" if document_type == "credit_note" else "Debit note"
             ba_summary = (
                 f"{doc_label} received from {vendor_name_str} for "
