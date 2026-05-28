@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.13.12-api-prefix-routing",
+  "version": "0.14.15-notif-prefs-redesign",
   "private": true,
   "type": "module",
   "scripts": {
