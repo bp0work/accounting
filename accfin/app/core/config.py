@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.26-ollama-keepalive"
+        return "0.14.27-case-status-display"
 
     @property
     def edge_public_base_url(self) -> str:
