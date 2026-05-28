@@ -86,7 +86,7 @@
           <tr>
             <th>Case</th>
             <th>Type</th>
-            <th>Group</th>
+            <th>State</th>
             <th>Status</th>
             <th>Last activity</th>
           </tr>
@@ -115,7 +115,7 @@
             <tr>
               <th>Case</th>
               <th>Type</th>
-              <th>Group</th>
+              <th>State</th>
               <th>Status</th>
             </tr>
           </thead>

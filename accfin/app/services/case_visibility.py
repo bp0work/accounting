@@ -6,21 +6,18 @@ from datetime import datetime
 
 from app.models.case import Case
 
-EXCEPTION_STATUSES = frozenset({"exception", "manual_review", "on_hold", "rejected"})
 REJECTED_STATUSES = frozenset({"rejected", "case_rejected"})
+ATTENTION_STATUSES = frozenset({"exception", "manual_review", "on_hold"})
 AP_CASE_TYPES = frozenset({"ap_invoice", "ap_po_validation", "ap_payment_proposal"})
 AR_CASE_TYPES = frozenset({"ar_invoice", "ar_payment_advice", "ar_statement"})
 
-# High-level buckets for finance UI (group → human-readable status).
+# Finance UI "State" column — five buckets (machine id → display label).
 STATUS_GROUP_LABELS: dict[str, str] = {
-    "intake": "Intake",
-    "queued": "Queued",
     "processing": "Processing",
-    "parsing_review": "Parsing review",
-    "approval": "Approval",
-    "complete": "Complete",
     "attention": "Needs attention",
+    "approval": "Awaiting approval",
     "rejected": "Rejected",
+    "completed": "Completed",
 }
 
 _STATUS_DISPLAY_LABELS: dict[str, str] = {
@@ -101,16 +98,12 @@ def client_vendor_name(case: Case) -> str | None:
 
 
 def case_status_group(case: Case) -> str:
-    """Machine id for UI grouping — derived from authoritative ``case.status``."""
+    """Machine id for Finance UI State column — derived from ``case.status``."""
     status = case.status
-    if status == "inbound":
-        return "intake"
-    if status == "classified":
-        return "queued"
-    if status in ("processing", "validation", "journal_entry_created"):
-        return "processing"
-    if status == "pending_confirmation":
-        return "parsing_review"
+    if status in REJECTED_STATUSES:
+        return "rejected"
+    if status in ATTENTION_STATUSES:
+        return "attention"
     if status in ("pending_approval", "approved", "journal_pending_approval"):
         return "approval"
     if status in (
@@ -120,11 +113,16 @@ def case_status_group(case: Case) -> str:
         "journal_posted",
         "validation_completed",
     ):
-        return "complete"
-    if status in EXCEPTION_STATUSES:
-        return "attention"
-    if status in REJECTED_STATUSES:
-        return "rejected"
+        return "completed"
+    if status in (
+        "inbound",
+        "classified",
+        "processing",
+        "validation",
+        "journal_entry_created",
+        "pending_confirmation",
+    ):
+        return "processing"
     return "processing"
 
 
@@ -160,7 +158,7 @@ def case_status_label(case: Case) -> str:
     if step and status in ("processing", "validation"):
         return _WORKFLOW_STEP_LABELS.get(step, step.replace("_", " ").title())
 
-    if status in EXCEPTION_STATUSES:
+    if status in ATTENTION_STATUSES:
         if step and step not in ("classification", "intake"):
             return _WORKFLOW_STEP_LABELS.get(step, step.replace("_", " ").title())
         return base
@@ -171,13 +169,9 @@ def case_status_label(case: Case) -> str:
 def processing_stage(case: Case) -> str:
     """Legacy step field — kept for API compat; aligned with group/label."""
     group = case_status_group(case)
-    if group == "intake":
-        return "intake"
-    if group == "queued":
-        return "classified"
     if group == "rejected":
         return "rejected" if case.status == "rejected" else "case_rejected"
-    if group == "complete":
+    if group == "completed":
         return "completed"
     if group == "attention":
         step = _workflow_step(case)
@@ -186,10 +180,14 @@ def processing_stage(case: Case) -> str:
         if step in ("processing", "extraction"):
             return "processing"
         return step
-    if group == "parsing_review":
-        return "parsing_confirmation"
     if group == "approval":
         return "processing"
+    if case.status == "inbound":
+        return "intake"
+    if case.status == "classified":
+        return "classified"
+    if case.status == "pending_confirmation":
+        return "parsing_confirmation"
     step = _workflow_step(case)
     if step:
         if step in ("classification", "intake"):
@@ -197,8 +195,6 @@ def processing_stage(case: Case) -> str:
         if step in ("processing", "extraction"):
             return "processing"
         return step
-    if case.status == "classified":
-        return "classified"
     if case.status in ("processing", "pending_approval", "approved"):
         return "processing"
     return case.status
@@ -212,7 +208,7 @@ def error_reason(case: Case) -> str | None:
             if val:
                 return str(val)
         return None
-    if case.status not in EXCEPTION_STATUSES and case.status != "on_hold":
+    if case.status not in ATTENTION_STATUSES and case.status != "on_hold":
         return None
     for key in ("error_message", "error_reason", "reason_code", "reason", "error_type"):
         val = meta.get(key)
