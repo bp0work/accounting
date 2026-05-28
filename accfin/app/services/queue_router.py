@@ -33,8 +33,9 @@ async def enqueue_accounts(
     gl_period_override: bool = False,
     gl_period_override_reason: str | None = None,
     gl_period_posted_by: str | None = None,
+    message_id: str | None = None,
 ) -> str:
-    message_id = str(uuid4())
+    message_id = message_id or str(uuid4())
     payload = {
         "message_id": message_id,
         "case_id": str(case_id),

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_session_factory
 from app.core.exceptions import AppHTTPException
 from app.core.state_machine import CaseStateMachine, TransitionResult
 from app.models.accounting_period import AccountingPeriod
@@ -152,7 +153,9 @@ class CaseService:
         await self._session.refresh(case)
         return result
 
-    async def _period_closed_hold_retryable(self, case) -> bool:
+    async def _period_closed_hold_retryable(
+        self, case, *, session: AsyncSession | None = None
+    ) -> bool:
         if case.status != "on_hold":
             return False
         meta = case.workflow_metadata or {}
@@ -165,7 +168,8 @@ class CaseService:
             pid = UUID(str(period_id))
         except (TypeError, ValueError):
             return False
-        period = await self._session.get(AccountingPeriod, pid)
+        db = session or self._session
+        period = await db.get(AccountingPeriod, pid)
         return period is not None and period.status != "closed"
 
     async def _transient_hermes_hold_retryable(self, case) -> bool:
@@ -176,66 +180,98 @@ class CaseService:
         return error_code in RETRYABLE_HERMES_ON_HOLD_CODES
 
     async def retry_case(self, case_id: UUID, *, user: TokenData) -> CaseRetryResponse:
-        case = await self.get_case(case_id)
-        retryable = case.status in RETRYABLE_STATUSES
-        if not retryable:
-            retryable = await self._period_closed_hold_retryable(case)
-        if not retryable:
-            retryable = await self._transient_hermes_hold_retryable(case)
-        if not retryable:
-            raise AppHTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "CASE_NOT_RETRYABLE",
-                f"Case in status '{case.status}' cannot be retried; "
-                f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))}, "
-                f"or on_hold after GL period reopen, "
-                f"or on_hold with transient Hermes errors "
-                f"({', '.join(sorted(RETRYABLE_HERMES_ON_HOLD_CODES))})",
+        """
+        Requeue a case for worker processing.
+
+        DB writes run in a dedicated session and commit before Redis enqueue
+        (same phased pattern as accounts-worker classification — no ORM use
+        across external awaits).
+        """
+        factory = get_session_factory()
+        message_id = str(uuid4())
+        previous_status: str
+        case_id_val: UUID
+        case_number: str
+        case_type: str
+        email_id: UUID | None
+        priority: str
+        stp_eligible: bool
+        confidence_score: float
+
+        async with factory() as session:
+            cases = CaseRepository(session)
+            case = await cases.get(case_id)
+            if case is None:
+                raise AppHTTPException(
+                    status.HTTP_404_NOT_FOUND, "CASE_NOT_FOUND", "Case not found"
+                )
+
+            retryable = case.status in RETRYABLE_STATUSES
+            if not retryable:
+                retryable = await self._period_closed_hold_retryable(case, session=session)
+            if not retryable:
+                retryable = await self._transient_hermes_hold_retryable(case)
+            if not retryable:
+                raise AppHTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "CASE_NOT_RETRYABLE",
+                    f"Case in status '{case.status}' cannot be retried; "
+                    f"allowed: {', '.join(sorted(RETRYABLE_STATUSES))}, "
+                    f"or on_hold after GL period reopen, "
+                    f"or on_hold with transient Hermes errors "
+                    f"({', '.join(sorted(RETRYABLE_HERMES_ON_HOLD_CODES))})",
+                )
+
+            previous_status = case.status
+            case_id_val = case.id
+            case_number = case.case_number
+            case_type = case.type
+            email_id = case.email_id
+            priority = case.priority or "medium"
+            stp_eligible = bool(case.stp_eligible)
+            confidence_score = float(case.confidence_score or 0)
+
+            meta = dict(case.workflow_metadata or {})
+            for key in ("error_message", "error_reason", "error_type", "reason_code", "reason"):
+                meta.pop(key, None)
+            meta.update(
+                {
+                    "current_stage": "processing",
+                    "reprocess_requested": True,
+                    "manual_retry": True,
+                }
             )
+            case.workflow_metadata = meta
+            case.status = "classified"
 
-        previous_status = case.status
-        meta = dict(case.workflow_metadata or {})
-        for key in ("error_message", "error_reason", "error_type", "reason_code", "reason"):
-            meta.pop(key, None)
-        meta.update(
-            {
-                "current_stage": "processing",
-                "reprocess_requested": True,
-                "manual_retry": True,
-            }
-        )
-        case.workflow_metadata = meta
-        case.status = "classified"
+            await cases.add_timeline(
+                case_id=case_id_val,
+                event_type="case_retry",
+                from_status=previous_status,
+                to_status="classified",
+                actor=str(user.user_id),
+                description="Manual retry — requeued to accounts_queue",
+                metadata={"queue_message_id": message_id},
+                actor_user_id=user.user_id,
+            )
+            await session.commit()
 
-        message_id = await enqueue_accounts(
-            case_id=case.id,
-            case_type=case.type,
-            case_number=case.case_number,
-            email_id=case.email_id,
-            priority=case.priority or "medium",
-            stp_eligible=bool(case.stp_eligible),
-            confidence_score=float(case.confidence_score or 0),
+        await enqueue_accounts(
+            case_id=case_id_val,
+            case_type=case_type,
+            case_number=case_number,
+            email_id=email_id,
+            priority=priority,
+            stp_eligible=stp_eligible,
+            confidence_score=confidence_score,
             source="case-retry",
+            message_id=message_id,
         )
-
-        await self._cases.add_timeline(
-            case_id=case.id,
-            event_type="case_retry",
-            from_status=previous_status,
-            to_status="classified",
-            actor=str(user.user_id),
-            description="Manual retry — requeued to accounts_queue",
-            metadata={"queue_message_id": message_id},
-            actor_user_id=user.user_id,
-        )
-
-        await self._session.commit()
-        await self._session.refresh(case)
 
         return CaseRetryResponse(
-            case_id=case.id,
-            case_number=case.case_number,
+            case_id=case_id_val,
+            case_number=case_number,
             message_id=message_id,
-            status=case.status,
+            status="classified",
             previous_status=previous_status,
         )
