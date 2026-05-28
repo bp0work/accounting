@@ -959,8 +959,10 @@ class APWorkerService:
     async def _route_exception(
         self, case: Case, email: Email | None, error_type: str, msg: str
     ) -> dict:
+        detail = f"{error_type}: {msg}"
         case.workflow_metadata = {
             **(case.workflow_metadata or {}),
+            "error_code": error_type,
             "error_type": error_type,
             "error_message": msg,
         }
@@ -970,8 +972,8 @@ class APWorkerService:
             case,
             email=email,
             reason_code=error_type,
-            summary="Worker processing error",
-            error_detail=msg,
+            summary=f"Worker processing error — {detail}",
+            error_detail=detail,
             actor_name="ap-worker",
         )
 
