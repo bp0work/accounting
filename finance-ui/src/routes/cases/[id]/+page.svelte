@@ -45,6 +45,7 @@
   };
 
   let teachFields: TeachFieldForm[] = [];
+  let teachFieldsKey = '';
 
   const DATE_FIELD_NAMES = new Set(['invoice_date', 'due_date', 'payment_due_date']);
 
@@ -101,15 +102,16 @@
   $: vendorName = item ? resolveVendorName(item) : '';
   $: reviewSnapshot = item ? manualReviewDetails(item) : { missing: [], confidence: null, extracted: {} };
   $: showTeachPanel =
-    item?.status === 'manual_review' && reviewSnapshot.missing.length > 0 && vendorName.length > 0;
+    (item?.status === 'manual_review' || item?.status === 'on_hold') &&
+    reviewSnapshot.missing.length > 0 &&
+    vendorName.length > 0;
   $: canRetryWithHints = showTeachPanel && savedHintFields.size > 0;
 
   $: if (item && showTeachPanel) {
     const names = reviewSnapshot.missing;
-    if (
-      teachFields.length !== names.length ||
-      teachFields.some((f, i) => f.field_name !== names[i])
-    ) {
+    const key = `${item.id}:${names.join(',')}`;
+    if (key !== teachFieldsKey) {
+      teachFieldsKey = key;
       teachFields = names.map((field_name) => ({
         field_name,
         field_label: '',
@@ -128,11 +130,18 @@
     teachMessage = '';
     savedHintFields = new Set();
     teachFields = [];
+    teachFieldsKey = '';
     try {
       [item, timeline] = await Promise.all([fetchCase(id), fetchCaseTimeline(id)]);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
     }
+  }
+
+  function setTeachRowSaving(fieldName: string, saving: boolean) {
+    teachFields = teachFields.map((r) =>
+      r.field_name === fieldName ? { ...r, saving } : r
+    );
   }
 
   async function saveHint(row: TeachFieldForm) {
@@ -142,7 +151,7 @@
       teachMessage = 'Field label on document is required.';
       return;
     }
-    row.saving = true;
+    setTeachRowSaving(row.field_name, true);
     teachMessage = '';
     error = '';
     const body: VendorExtractionHintCreate = {
@@ -157,11 +166,11 @@
     try {
       await saveVendorExtractionHint(body);
       savedHintFields = new Set([...savedHintFields, row.field_name]);
-      teachMessage = `Saved hint for ${row.field_name.replaceAll('_', ' ')}.`;
+      teachMessage = `Saved hint for ${row.field_name.replaceAll('_', ' ')}. You can retry processing with hints below.`;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not save hint';
     } finally {
-      row.saving = false;
+      setTeachRowSaving(row.field_name, false);
     }
   }
 

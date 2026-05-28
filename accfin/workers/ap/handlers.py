@@ -200,6 +200,9 @@ class APWorkerService:
         extracted_fields: dict | None = None,
         extraction_confidence: float | None = None,
         include_escalate: bool = True,
+        missing_fields: list[str] | None = None,
+        escalation_template: str = "manager.escalation.request",
+        reattach_inbound_attachments: bool = False,
     ) -> dict:
         """Escalate current validation step to ACC, set case to manual_review."""
         svc = ExecutiveMailService(self._session)
@@ -213,10 +216,12 @@ class APWorkerService:
             summary=summary,
             error_detail=summary,
             actor_name="ap-worker",
+            missing_fields=missing_fields,
             extracted_fields=extracted_fields,
             extraction_confidence=extraction_confidence,
-            escalation_template="manager.escalation.request",
+            escalation_template=escalation_template,
             include_escalate=include_escalate,
+            force_reattach_inbound=reattach_inbound_attachments,
         )
         if escalation is None:
             await self._add_timeline(
@@ -338,6 +343,9 @@ class APWorkerService:
                     summary=summary,
                     extracted_fields=extracted,
                     extraction_confidence=confidence_f,
+                    missing_fields=missing,
+                    escalation_template="manager.escalation.missing_fields",
+                    reattach_inbound_attachments=True,
                 )
 
         await self._add_timeline(
