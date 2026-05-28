@@ -5,6 +5,9 @@ from unittest.mock import MagicMock
 
 from app.models.case import Case
 from app.services.case_visibility import (
+    case_status_group,
+    case_status_group_label,
+    case_status_label,
     client_vendor_name,
     error_reason,
     processing_stage,
@@ -45,6 +48,40 @@ def test_processing_stage_on_hold_hermes_not_classified():
         },
     )
     assert processing_stage(case) == "exception"
+
+
+def test_classified_ignores_stale_processing_metadata():
+    case = _case(
+        status="classified",
+        workflow_metadata={"current_stage": "processing"},
+    )
+    assert case_status_group(case) == "queued"
+    assert case_status_label(case) == "Waiting for worker"
+    assert processing_stage(case) == "classified"
+
+
+def test_case_rejected_ignores_stale_processing_metadata():
+    case = _case(
+        status="case_rejected",
+        workflow_metadata={
+            "current_stage": "processing",
+            "error_reason": "Duplicate invoice",
+        },
+    )
+    assert case_status_group(case) == "rejected"
+    assert case_status_group_label(case) == "Rejected"
+    assert case_status_label(case) == "Case rejected"
+    assert processing_stage(case) == "case_rejected"
+    assert error_reason(case) == "Duplicate invoice"
+
+
+def test_processing_uses_parsing_step_when_active():
+    case = _case(
+        status="processing",
+        workflow_metadata={"current_stage": "parsing"},
+    )
+    assert case_status_group(case) == "processing"
+    assert case_status_label(case) == "Parsing document"
 
 
 def test_status_reason_for_manual_review():

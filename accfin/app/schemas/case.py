@@ -32,6 +32,9 @@ class CaseResponse(BaseModel):
     processing_time_minutes: int | None = None
     is_overdue: bool = False
     processing_stage: str | None = None
+    status_group: str | None = None
+    status_group_label: str | None = None
+    status_label: str | None = None
     error_reason: str | None = None
     status_reason: str | None = None
     last_activity_at: datetime | None = None
