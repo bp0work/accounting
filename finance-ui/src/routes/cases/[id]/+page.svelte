@@ -113,21 +113,34 @@
     : '';
 
   const retryableStatuses = new Set(['exception', 'manual_review']);
+  const transientHermesStatuses = new Set(['on_hold', 'exception', 'manual_review']);
   const transientHermesCodes = new Set(['HERMES_TIMEOUT', 'HERMES_UNAVAILABLE']);
 
-  function isTransientHermesHold(caseItem: CaseItem): boolean {
-    if (caseItem.status !== 'on_hold') return false;
+  /** Hermes timeout/unavailable — match metadata codes or API error_reason text. */
+  function transientHermesCode(caseItem: CaseItem): string | null {
     const meta = caseItem.workflow_metadata ?? {};
     for (const key of ['error_code', 'error_type', 'reason_code'] as const) {
       const code = String(meta[key] ?? '')
         .trim()
         .toUpperCase();
-      if (transientHermesCodes.has(code)) return true;
+      if (transientHermesCodes.has(code)) return code;
     }
-    return false;
+    const err = String(caseItem.error_reason ?? '').toUpperCase();
+    if (err.includes('HERMES_TIMEOUT')) return 'HERMES_TIMEOUT';
+    if (err.includes('HERMES_UNAVAILABLE')) return 'HERMES_UNAVAILABLE';
+    return null;
   }
 
-  $: canRetryTransientHermes = item ? isTransientHermesHold(item) : false;
+  function isTransientHermesCase(caseItem: CaseItem): boolean {
+    if (!transientHermesStatuses.has(caseItem.status)) return false;
+    return transientHermesCode(caseItem) !== null;
+  }
+
+  $: canRetryTransientHermes = item ? isTransientHermesCase(item) : false;
+  $: showStandardRetry =
+    item &&
+    (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes) &&
+    (!canRetryWithHints || canRetryTransientHermes);
 
   $: id = $page.params.id;
 
@@ -551,6 +564,13 @@
             <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
               {retrying ? 'Requeuing…' : 'Retry with hints'}
             </button>
+          {:else if canRetryTransientHermes}
+            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
+              {retrying ? 'Requeuing…' : 'Retry processing'}
+            </button>
+            <p class="hint">
+              Hermes timed out or was temporarily unavailable. Retry requeues this case after Ollama is healthy.
+            </p>
           {/if}
         </section>
       {/if}
@@ -676,7 +696,7 @@
       </button>
       <p class="hint">This case is blocked because the posting date falls in a closed GL period.</p>
     {/if}
-    {#if (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes) && !canRetryWithHints}
+    {#if showStandardRetry}
       <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
         {retrying ? 'Requeuing…' : 'Retry processing'}
       </button>
