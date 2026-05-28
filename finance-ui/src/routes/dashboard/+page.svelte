@@ -5,6 +5,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchDashboard, listCases, type CaseDashboard, type CaseItem } from '$lib/api/cases';
+  import {
+    isExcludedFromRecentCases,
+    processingAgentLabel,
+  } from '$lib/case-labels';
 
   let data: CaseDashboard | null = null;
   let recentCases: CaseItem[] = [];
@@ -14,7 +18,8 @@
     try {
       const [dash, cases] = await Promise.all([fetchDashboard(), listCases(50)]);
       data = dash;
-      recentCases = cases.data;
+      const overdueIds = new Set(dash.overdue_cases.map((c) => c.id));
+      recentCases = cases.data.filter((c) => !isExcludedFromRecentCases(c, overdueIds));
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load dashboard';
     }
@@ -32,7 +37,14 @@
   }
 
   function formatActionBy(c: CaseItem) {
-    return c.action_by?.trim() ? c.action_by : '—';
+    const state = c.status_group_label ?? '';
+    if (state === 'Rejected' || state === 'Completed') return '—';
+    const fromApi = c.action_by?.trim();
+    if (fromApi) return fromApi;
+    if (state === 'Processing' || c.status_group === 'processing') {
+      return processingAgentLabel(c.type);
+    }
+    return '—';
   }
 </script>
 
