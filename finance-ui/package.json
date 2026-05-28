@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.25-parsing-confirmation",
+  "version": "0.14.31-dashboard-columns",
   "private": true,
   "type": "module",
   "scripts": {
