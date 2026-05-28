@@ -185,6 +185,7 @@
             <th></th>
             <th>Case</th>
             <th>Document Type</th>
+            <th>State</th>
             <th>Status</th>
             <th>Submitted By</th>
             <th>Client / Vendor</th>
@@ -198,7 +199,8 @@
               <td class="indicator">{item.is_overdue ? '⚠' : '·'}</td>
               <td><a href={`/cases/${item.id}`}>{item.case_number}</a></td>
               <td>{documentTypeLabel(item.type)}</td>
-              <td>{item.status}</td>
+              <td>{item.status_group_label || '—'}</td>
+              <td>{item.status_label || item.status}</td>
               <td>{item.from_address || '—'}</td>
               <td>{clientVendorColumnValue(item)}</td>
               <td>{formatCaseAmount(item)}</td>

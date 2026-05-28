@@ -55,7 +55,8 @@ def test_classified_ignores_stale_processing_metadata():
         status="classified",
         workflow_metadata={"current_stage": "processing"},
     )
-    assert case_status_group(case) == "queued"
+    assert case_status_group(case) == "processing"
+    assert case_status_group_label(case) == "Processing"
     assert case_status_label(case) == "Waiting for worker"
     assert processing_stage(case) == "classified"
 
@@ -121,6 +122,30 @@ def test_client_vendor_name_ap_uses_extracted_vendor():
         client_vendor_name(case)
         == "Accounting and Corporate Regulatory Authority"
     )
+
+
+def test_pending_confirmation_state_is_processing():
+    case = _case(status="pending_confirmation", workflow_metadata={})
+    assert case_status_group(case) == "processing"
+    assert case_status_group_label(case) == "Processing"
+
+
+def test_pending_approval_state_is_awaiting_approval():
+    case = _case(status="pending_approval", workflow_metadata={})
+    assert case_status_group(case) == "approval"
+    assert case_status_group_label(case) == "Awaiting approval"
+
+
+def test_posted_state_is_completed():
+    case = _case(status="posted", workflow_metadata={})
+    assert case_status_group(case) == "completed"
+    assert case_status_group_label(case) == "Completed"
+
+
+def test_rejected_status_not_grouped_as_attention():
+    case = _case(status="rejected", workflow_metadata={})
+    assert case_status_group(case) == "rejected"
+    assert case_status_group_label(case) == "Rejected"
 
 
 def test_client_vendor_name_ap_falls_back_to_counterparty():

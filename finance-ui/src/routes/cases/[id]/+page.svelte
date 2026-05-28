@@ -840,18 +840,15 @@
     font-weight: 600;
     text-transform: none;
   }
-  .status-group-intake,
-  .status-group-queued {
+  .status-group-processing {
     background: #e0f2fe;
     color: #0369a1;
   }
-  .status-group-processing,
-  .status-group-parsing_review,
   .status-group-approval {
     background: #fef9c3;
     color: #854d0e;
   }
-  .status-group-complete {
+  .status-group-completed {
     background: #dcfce7;
     color: #166534;
   }

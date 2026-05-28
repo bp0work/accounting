@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.30-ap-retry-resume-point"
+        return "0.14.32-case-state-labels"
 
     @property
     def edge_public_base_url(self) -> str:

@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.31-dashboard-columns",
+  "version": "0.14.32-case-state-labels",
   "private": true,
   "type": "module",
   "scripts": {
