@@ -13,6 +13,10 @@
     type CaseItem,
     type TimelineEntry,
   } from '$lib/api/cases';
+  import {
+    saveVendorExtractionHint,
+    type VendorExtractionHintCreate,
+  } from '$lib/api/vendor-hints';
   import { clientVendorColumnValue } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { sessionUser } from '$lib/stores/session';
@@ -29,6 +33,20 @@
   let showOverrideModal = false;
   let overrideReason = '';
   let overrideSubmitting = false;
+  let savedHintFields = new Set<string>();
+  let teachMessage = '';
+
+  type TeachFieldForm = {
+    field_name: string;
+    field_label: string;
+    example_value: string;
+    date_format: string;
+    saving: boolean;
+  };
+
+  let teachFields: TeachFieldForm[] = [];
+
+  const DATE_FIELD_NAMES = new Set(['invoice_date', 'due_date', 'payment_due_date']);
 
   const overrideRoles = new Set(['cfo', 'finance_manager']);
   const tier2Roles = new Set(['accounts_clerk', 'finance_officer']);
@@ -70,15 +88,80 @@
 
   $: id = $page.params.id;
 
+  function resolveVendorName(caseItem: CaseItem): string {
+    const meta = caseItem.workflow_metadata ?? {};
+    const extracted = meta.extracted_fields;
+    if (extracted && typeof extracted === 'object' && !Array.isArray(extracted)) {
+      const vendor = (extracted as Record<string, unknown>).vendor_name;
+      if (vendor != null && String(vendor).trim()) return String(vendor).trim();
+    }
+    return (caseItem.counterparty_name ?? caseItem.client_vendor_name ?? '').trim();
+  }
+
+  $: vendorName = item ? resolveVendorName(item) : '';
+  $: reviewSnapshot = item ? manualReviewDetails(item) : { missing: [], confidence: null, extracted: {} };
+  $: showTeachPanel =
+    item?.status === 'manual_review' && reviewSnapshot.missing.length > 0 && vendorName.length > 0;
+  $: canRetryWithHints = showTeachPanel && savedHintFields.size > 0;
+
+  $: if (item && showTeachPanel) {
+    const names = reviewSnapshot.missing;
+    if (
+      teachFields.length !== names.length ||
+      teachFields.some((f, i) => f.field_name !== names[i])
+    ) {
+      teachFields = names.map((field_name) => ({
+        field_name,
+        field_label: '',
+        example_value: '',
+        date_format: '',
+        saving: false,
+      }));
+    }
+  }
+
   onMount(load);
 
   async function load() {
     error = '';
     retryMessage = '';
+    teachMessage = '';
+    savedHintFields = new Set();
+    teachFields = [];
     try {
       [item, timeline] = await Promise.all([fetchCase(id), fetchCaseTimeline(id)]);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
+    }
+  }
+
+  async function saveHint(row: TeachFieldForm) {
+    if (!item || !vendorName || row.saving) return;
+    const field_label = row.field_label.trim();
+    if (!field_label) {
+      teachMessage = 'Field label on document is required.';
+      return;
+    }
+    row.saving = true;
+    teachMessage = '';
+    error = '';
+    const body: VendorExtractionHintCreate = {
+      vendor_name: vendorName,
+      field_name: row.field_name,
+      field_label,
+      example_value: row.example_value.trim() || null,
+      date_format: DATE_FIELD_NAMES.has(row.field_name)
+        ? row.date_format.trim() || null
+        : null,
+    };
+    try {
+      await saveVendorExtractionHint(body);
+      savedHintFields = new Set([...savedHintFields, row.field_name]);
+      teachMessage = `Saved hint for ${row.field_name.replaceAll('_', ' ')}.`;
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not save hint';
+    } finally {
+      row.saving = false;
     }
   }
 
@@ -287,6 +370,62 @@
           {/if}
         </section>
       {/if}
+      {#if showTeachPanel}
+        <section class="teach-box">
+          <h2>Teach the Agent</h2>
+          <p class="hint">
+            Document vendor: <strong>{vendorName}</strong>. Tell the extractor how each missing
+            field appears on this vendor&apos;s documents.
+          </p>
+          {#each teachFields as row}
+            <div class="teach-field">
+              <h3>{row.field_name.replaceAll('_', ' ')}</h3>
+              <label>
+                Field label on document
+                <input
+                  type="text"
+                  bind:value={row.field_label}
+                  placeholder="e.g. Date and time"
+                />
+              </label>
+              <label>
+                Example value
+                <input
+                  type="text"
+                  bind:value={row.example_value}
+                  placeholder="e.g. 24 Apr 2025 07:42 PM"
+                />
+              </label>
+              {#if DATE_FIELD_NAMES.has(row.field_name)}
+                <label>
+                  Date format
+                  <input
+                    type="text"
+                    bind:value={row.date_format}
+                    placeholder="e.g. DD Mon YYYY HH:MM AM/PM"
+                  />
+                </label>
+              {/if}
+              <button
+                type="button"
+                class="save-hint"
+                disabled={row.saving}
+                onclick={() => saveHint(row)}
+              >
+                {row.saving ? 'Saving…' : 'Save hint'}
+              </button>
+            </div>
+          {/each}
+          {#if teachMessage}
+            <p class="hint success">{teachMessage}</p>
+          {/if}
+          {#if canRetryWithHints}
+            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
+              {retrying ? 'Requeuing…' : 'Retry with hints'}
+            </button>
+          {/if}
+        </section>
+      {/if}
     {/if}
     <p>{item.subject}</p>
     <p>Client / Vendor: {clientVendorColumnValue(item)}</p>
@@ -304,7 +443,7 @@
       </button>
       <p class="hint">This case is blocked because the posting date falls in a closed GL period.</p>
     {/if}
-    {#if retryableStatuses.has(item.status) || canRetryAfterReopen}
+    {#if (retryableStatuses.has(item.status) || canRetryAfterReopen) && !canRetryWithHints}
       <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
         {retrying ? 'Requeuing…' : 'Retry processing'}
       </button>
@@ -534,6 +673,55 @@
   .review-box h2 {
     margin: 0 0 0.5rem;
     font-size: 1rem;
+  }
+  .teach-box {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+  }
+  .teach-box h2 {
+    margin-top: 0;
+    font-size: 1rem;
+  }
+  .teach-field {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #dbeafe;
+  }
+  .teach-field h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.95rem;
+    text-transform: capitalize;
+  }
+  .teach-field label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+  }
+  .teach-field input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.25rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+  }
+  .save-hint {
+    margin-top: 0.25rem;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid #2563eb;
+    border-radius: 6px;
+    background: #fff;
+    color: #1d4ed8;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .save-hint:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
   .review-box ul {
     margin: 0.25rem 0 0.75rem;

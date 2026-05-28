@@ -20,6 +20,7 @@ from app.api.routes import (
     metrics,
     notifications,
     reconciliation,
+    vendor_extraction_hints,
 )
 from app.core.metrics import HTTP_LATENCY, HTTP_REQUESTS
 from app.core.config import get_settings
@@ -72,6 +73,7 @@ api_router.include_router(admin.router)
 api_router.include_router(admin_counterparty.router)
 api_router.include_router(mail.router)
 api_router.include_router(cases.router)
+api_router.include_router(vendor_extraction_hints.router)
 api_router.include_router(reconciliation.router)
 api_router.include_router(approvals.router)
 api_router.include_router(notifications.router)

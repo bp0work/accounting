@@ -13,6 +13,8 @@ from agents.hermes.extract import (
     extract_payment_advice_stub,
 )
 from agents.hermes.ollama_client import EXTRACTION_MODEL, OllamaError, generate_json
+from app.constants.tenant import TENANT_MMLOGISTIX
+from app.core.database import get_session_factory
 from app.schemas.hermes import (
     ExtractInvoiceRequest,
     ExtractInvoiceResponse,
@@ -23,6 +25,7 @@ from app.schemas.hermes import (
     InvoiceAllocation,
     InvoiceLineItem,
 )
+from app.services.vendor_extraction_hints import load_hints_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +213,22 @@ def _build_document_text(request: ExtractInvoiceRequest) -> str:
     return "\n\n".join(parts)
 
 
+async def _vendor_hints_block(request: ExtractInvoiceRequest) -> str:
+    vendor = (request.vendor_name_for_hints or request.supplier_hint or "").strip()
+    if not vendor:
+        return ""
+    tenant_id = request.tenant_id or TENANT_MMLOGISTIX
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            return await load_hints_prompt_block(
+                session, tenant_id=tenant_id, vendor_name=vendor
+            )
+    except Exception:
+        logger.warning("Could not load vendor extraction hints for %s", vendor, exc_info=True)
+        return ""
+
+
 async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceResponse:
     document_text = _build_document_text(request)
     if not document_text.strip():
@@ -217,7 +236,8 @@ async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceR
 
     role = (request.document_role or "ap").lower()
     template = _AR_INVOICE_PROMPT if role == "ar" else _AP_INVOICE_PROMPT
-    prompt = template.format(
+    hints_block = await _vendor_hints_block(request) if role == "ap" else ""
+    prompt = hints_block + template.format(
         document_text=document_text[:12000],
         currency_hint=request.currency_hint or "SGD",
         supplier_hint=request.supplier_hint or "unknown",
