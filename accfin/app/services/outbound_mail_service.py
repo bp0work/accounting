@@ -33,7 +33,11 @@ PREFERRED_DAILY_LOG_SENDERS = (
 )
 
 MANAGER_ESCALATION_TEMPLATES = frozenset(
-    {"manager.escalation.request", "manager.escalation.missing_fields"}
+    {
+        "manager.escalation.request",
+        "manager.escalation.missing_fields",
+        "manager.escalation.vendor_not_found",
+    }
 )
 
 
@@ -212,6 +216,10 @@ class OutboundMailService:
             }
             if template_key == "manager.escalation.missing_fields":
                 body_plain, body_html = templates.render_missing_fields_escalation(
+                    render_ctx, signature=signature
+                )
+            elif template_key == "manager.escalation.vendor_not_found":
+                body_plain, body_html = templates.render_vendor_not_found_escalation(
                     render_ctx, signature=signature
                 )
             else:
@@ -411,6 +419,11 @@ class OutboundMailService:
                 ctx, signature=signature
             )
             subject = f"[{case.case_number}] Action required — missing invoice fields"
+        elif template_key == "manager.escalation.vendor_not_found":
+            body_plain, body_html = templates.render_vendor_not_found_escalation(
+                ctx, signature=signature
+            )
+            subject = f"[{case.case_number}] Action required — vendor not set up"
         else:
             body_plain, body_html = templates.render_manager_escalation(ctx, signature=signature)
             subject = f"[{case.case_number}] Action required — manager review"
