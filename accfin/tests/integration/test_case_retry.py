@@ -53,6 +53,43 @@ async def test_case_retry_requeues_manual_review(
 
 
 @pytest.mark.integration
+async def test_case_retry_requeues_on_hold_hermes_timeout(
+    db_session, async_client: AsyncClient, auth_headers
+) -> None:
+    """Escalated AP failures keep reason_code on_hold — retry must still work."""
+    case = Case(
+        case_number=f"CAS-HERMES-HOLD-{uuid4().hex[:8]}",
+        type="ap_invoice",
+        status="on_hold",
+        subject="Hermes timeout on hold",
+        workflow_metadata={
+            "current_stage": "classification",
+            "reason_code": "HERMES_TIMEOUT",
+            "error_code": "HERMES_TIMEOUT",
+            "error_reason": "Worker processing error — HERMES_TIMEOUT: Read timed out",
+            "escalation_pending": True,
+        },
+    )
+    db_session.add(case)
+    await db_session.commit()
+
+    response = await async_client.post(
+        f"/api/cases/{case.id}/retry",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["previous_status"] == "on_hold"
+    assert body["status"] == "classified"
+
+    await db_session.refresh(case)
+    assert case.status == "classified"
+    assert case.workflow_metadata.get("manual_retry") is True
+    assert "reason_code" not in case.workflow_metadata
+    assert "error_code" not in case.workflow_metadata
+
+
+@pytest.mark.integration
 async def test_case_retry_rejects_non_retryable_status(
     db_session, async_client: AsyncClient, auth_headers
 ) -> None:

@@ -51,12 +51,18 @@ async def _period_closed_hold_retryable(session: AsyncSession, case: Case) -> bo
     return period is not None and period.status != "closed"
 
 
+def _transient_hermes_code(meta: dict) -> str | None:
+    for key in ("error_code", "error_type", "reason_code"):
+        code = str(meta.get(key) or "").strip().upper()
+        if code in RETRYABLE_HERMES_ON_HOLD_CODES:
+            return code
+    return None
+
+
 def _transient_hermes_hold_retryable(case: Case) -> bool:
     if case.status != "on_hold":
         return False
-    meta = case.workflow_metadata or {}
-    error_code = str(meta.get("error_code") or "").strip().upper()
-    return error_code in RETRYABLE_HERMES_ON_HOLD_CODES
+    return _transient_hermes_code(case.workflow_metadata or {}) is not None
 
 
 async def _persist_case_retry(case_id: UUID, user: TokenData) -> _CaseRetrySnapshot:
@@ -90,7 +96,14 @@ async def _persist_case_retry(case_id: UUID, user: TokenData) -> _CaseRetrySnaps
 
         previous_status = case.status
         meta = dict(case.workflow_metadata or {})
-        for key in ("error_message", "error_reason", "error_type", "reason_code", "reason"):
+        for key in (
+            "error_code",
+            "error_message",
+            "error_reason",
+            "error_type",
+            "reason_code",
+            "reason",
+        ):
             meta.pop(key, None)
         meta.update(
             {

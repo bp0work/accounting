@@ -113,6 +113,21 @@
     : '';
 
   const retryableStatuses = new Set(['exception', 'manual_review']);
+  const transientHermesCodes = new Set(['HERMES_TIMEOUT', 'HERMES_UNAVAILABLE']);
+
+  function isTransientHermesHold(caseItem: CaseItem): boolean {
+    if (caseItem.status !== 'on_hold') return false;
+    const meta = caseItem.workflow_metadata ?? {};
+    for (const key of ['error_code', 'error_type', 'reason_code'] as const) {
+      const code = String(meta[key] ?? '')
+        .trim()
+        .toUpperCase();
+      if (transientHermesCodes.has(code)) return true;
+    }
+    return false;
+  }
+
+  $: canRetryTransientHermes = item ? isTransientHermesHold(item) : false;
 
   $: id = $page.params.id;
 
@@ -661,12 +676,16 @@
       </button>
       <p class="hint">This case is blocked because the posting date falls in a closed GL period.</p>
     {/if}
-    {#if (retryableStatuses.has(item.status) || canRetryAfterReopen) && !canRetryWithHints}
+    {#if (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes) && !canRetryWithHints}
       <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
         {retrying ? 'Requeuing…' : 'Retry processing'}
       </button>
       {#if canRetryAfterReopen}
         <p class="hint">The GL period for this posting date has been reopened — you can reprocess without an override.</p>
+      {:else if canRetryTransientHermes}
+        <p class="hint">
+          Hermes timed out or was temporarily unavailable. Retry requeues this case; ensure Hermes and Ollama are healthy on the server.
+        </p>
       {/if}
     {/if}
     {#if retryMessage}
