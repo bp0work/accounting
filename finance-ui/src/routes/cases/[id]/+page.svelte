@@ -28,7 +28,7 @@
     saveVendorExtractionHint,
     type VendorExtractionHintCreate,
   } from '$lib/api/vendor-hints';
-  import { submittedByDisplay } from '$lib/case-labels';
+  import { extractedFieldLabel, submittedByDisplay } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { sessionUser } from '$lib/stores/session';
 
@@ -661,7 +661,7 @@
             <p><strong>Extracted:</strong></p>
             <dl class="extracted">
               {#each Object.entries(review.extracted) as [key, value]}
-                <dt>{key.replaceAll('_', ' ')}</dt>
+                <dt>{extractedFieldLabel(key)}</dt>
                 <dd>{value ?? '—'}</dd>
               {/each}
             </dl>
@@ -812,7 +812,7 @@
             </label>
             <label class="toggle-row">
               <input type="checkbox" bind:checked={parsingForm.sender_validated} />
-              Validated by sender
+              Document validated
             </label>
           {/if}
           <div class="confirm-actions">

@@ -26,6 +26,19 @@ def test_validation_accepts_old_validated_date() -> None:
     assert result["failure_reason"] is None
 
 
+def test_validation_accepts_month_name_formats() -> None:
+    for phrase in (
+        "validated 24 Apr 2025",
+        "validated 24 April 2025",
+        "validated 24/04/2025",
+        "validated 24-04-2025",
+    ):
+        result = extract_sender_validation(subject=phrase, body="")
+        assert result["sender_validated"] is True, phrase
+        assert result["validation_date"] == "2025-04-24", phrase
+        assert result["failure_reason"] is None, phrase
+
+
 def test_validation_rejects_wrong_date_format() -> None:
     result = extract_sender_validation(
         subject="validated 2026-05-28",
@@ -33,7 +46,7 @@ def test_validation_rejects_wrong_date_format() -> None:
     )
     assert result["sender_validated"] is False
     assert result["validation_date"] is None
-    assert "validated dd/mm/yyyy" in str(result["failure_reason"])
+    assert "validated" in str(result["failure_reason"]).lower()
 
 
 def test_validation_rejects_when_keyword_without_date() -> None:
@@ -43,7 +56,7 @@ def test_validation_rejects_when_keyword_without_date() -> None:
     )
     assert result["sender_validated"] is False
     assert result["validation_date"] is None
-    assert "validated dd/mm/yyyy" in str(result["failure_reason"])
+    assert "validated" in str(result["failure_reason"]).lower()
 
 
 def test_resolve_ap_sgd_amount_sgd_passthrough() -> None:

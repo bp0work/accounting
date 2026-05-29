@@ -17,17 +17,39 @@ from app.models.case import Case, Counterparty
 from app.models.counterparty_master import CounterpartyAccount, PaymentTerm
 
 _VALIDATION_FAIL_REASON = (
-    "Document not validated. Please include 'validated dd/mm/yyyy' in your email "
-    "(e.g. 'validated 28/05/2026')"
+    "Document not validated. Please include 'validated' followed by a date in your email "
+    "(e.g. 'validated 24 Apr 2025', 'validated 24/04/2025', or 'validated 24-04-2025')"
 )
-_VALIDATED_DATE_PATTERN = re.compile(
-    r"\bvalidated\s+(\d{2}/\d{2}/\d{4})\b", re.IGNORECASE
+
+# Captures the date token immediately after "validated" (several accepted formats).
+_VALIDATED_DATE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bvalidated\s+(\d{1,2}/\d{1,2}/\d{4})\b", re.IGNORECASE),
+    re.compile(r"\bvalidated\s+(\d{1,2}-\d{1,2}-\d{4})\b", re.IGNORECASE),
+    re.compile(r"\bvalidated\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})\b", re.IGNORECASE),
 )
+
+
+def _parse_validated_date_token(raw: str) -> date | None:
+    token = raw.strip()
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(token, fmt).date()
+        except ValueError:
+            continue
+    for fmt in ("%d %b %Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(token, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def extract_sender_validation(subject: str | None, body: str | None) -> dict:
     """
-    Scan email subject and body for "validated" + parseable dd/mm/yyyy date.
+    Scan email subject and body for "validated" + a parseable date.
+
+    Accepted examples: validated 24 Apr 2025, validated 24 April 2025,
+    validated 24/04/2025, validated 24-04-2025.
 
     Returns dict with keys:
       sender_validated (bool), validation_date (ISO str | None), failure_reason (str | None)
@@ -40,20 +62,16 @@ def extract_sender_validation(subject: str | None, body: str | None) -> dict:
             "failure_reason": _VALIDATION_FAIL_REASON,
         }
 
-    for match in _VALIDATED_DATE_PATTERN.finditer(combined):
-        raw_date = match.group(1)
-        try:
-            d = datetime.strptime(raw_date, "%d/%m/%Y").date()
-        except ValueError:
-            continue
+    for pattern in _VALIDATED_DATE_PATTERNS:
+        for match in pattern.finditer(combined):
+            parsed = _parse_validated_date_token(match.group(1))
+            if parsed is not None:
+                return {
+                    "sender_validated": True,
+                    "validation_date": parsed.isoformat(),
+                    "failure_reason": None,
+                }
 
-        return {
-            "sender_validated": True,
-            "validation_date": d.isoformat(),
-            "failure_reason": None,
-        }
-
-    # "validated" present but required dd/mm/yyyy format absent or invalid.
     return {
         "sender_validated": False,
         "validation_date": None,

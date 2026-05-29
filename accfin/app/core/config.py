@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.42-finance-ui-manual-review-panel"
+        return "0.14.43-sender-validation-date-formats"
 
     @property
     def edge_public_base_url(self) -> str:
