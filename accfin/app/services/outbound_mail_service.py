@@ -20,6 +20,7 @@ from app.models.executive_mail import CaseEscalation, PendingOutboundEmail
 from app.models.mail import Email, EmailAttachment, MailGatewayConfig
 from app.models.tenant_profile import TenantProfile
 from app.services import mail_template_renderer as templates
+from app.services.ap_escalation_mail_labels import ap_escalation_approve_button_label
 from app.services.mail_template_renderer import TenantEmailSignature
 from app.services.smtp_mail_service import MailAttachment, SmtpMailService
 
@@ -201,6 +202,7 @@ class OutboundMailService:
         signed_via_template = False
 
         if template_key in MANAGER_ESCALATION_TEMPLATES:
+            reason_code = meta.get("reason_code")
             render_ctx = {
                 "case_number": str(meta.get("case_number", "")),
                 "summary": meta.get("summary", body_plain),
@@ -210,6 +212,10 @@ class OutboundMailService:
                 "reject_url": meta.get("reject_url", ""),
                 "escalate_url": meta.get("escalate_url", ""),
                 "request_info_url": meta.get("request_info_url", ""),
+                "approve_label": meta.get("approve_label")
+                or ap_escalation_approve_button_label(
+                    str(reason_code) if reason_code else None
+                ),
                 "missing_fields": meta.get("missing_fields") or [],
                 "extracted_fields": meta.get("extracted_fields") or {},
                 "extraction_confidence": meta.get("extraction_confidence"),
@@ -407,6 +413,7 @@ class OutboundMailService:
             "reject_url": reject_url,
             "escalate_url": escalate_url,
             "request_info_url": request_info_url,
+            "approve_label": ap_escalation_approve_button_label(escalation.reason_code),
             "missing_fields": (escalation.context or {}).get("missing_fields") or [],
             "extracted_fields": (escalation.context or {}).get("extracted_fields") or {},
             "extraction_confidence": (escalation.context or {}).get("extraction_confidence"),

@@ -78,10 +78,12 @@ def test_render_manager_escalation_includes_action_urls():
             "approve_url": "https://example.test/approve",
             "reject_url": "https://example.test/reject",
             "escalate_url": "https://example.test/escalate",
+            "approve_label": "Approve",
         }
     )
     assert "https://example.test/approve" in plain
     assert "https://example.test/approve" in html
+    assert "Approve:" in plain
 
 
 def test_build_message_sets_thread_headers():
