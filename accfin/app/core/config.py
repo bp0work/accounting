@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.41-ap-escalation-button-labels"
+        return "0.14.42-finance-ui-manual-review-panel"
 
     @property
     def edge_public_base_url(self) -> str:
