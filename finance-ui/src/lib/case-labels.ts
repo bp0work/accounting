@@ -77,6 +77,12 @@ export function isExcludedFromRecentCases(
 }
 
 /** Inbound submitter — API `submitted_by` (email from_name or from_address). */
+/** Display label for extracted / review field keys from workflow metadata. */
+export function extractedFieldLabel(fieldKey: string): string {
+  if (fieldKey === 'sender_validated') return 'Document validated';
+  return fieldKey.replaceAll('_', ' ');
+}
+
 export function submittedByDisplay(item: {
   submitted_by?: string | null;
   from_address?: string | null;
