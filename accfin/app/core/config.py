@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.40-ap-contract-stale-cache"
+        return "0.14.41-ap-escalation-button-labels"
 
     @property
     def edge_public_base_url(self) -> str:

@@ -18,6 +18,7 @@ from app.repositories.case import CaseRepository
 from app.repositories.executive_mail import CaseEscalationRepository
 from app.schemas.executive_mail import FinanceActivityLogCreate
 from app.services.finance_activity_log_service import FinanceActivityLogService
+from app.services.ap_escalation_mail_labels import ap_escalation_approve_button_label
 from app.services.outbound_mail_service import OutboundMailService
 from app.services.queue_router import enqueue_accounts
 
@@ -144,6 +145,7 @@ class ExecutiveMailService:
         else:
             subject = f"[{case.case_number}] Action required — manager review"
 
+        approve_label = ap_escalation_approve_button_label(escalation.reason_code)
         outbound = PendingOutboundEmail(
             case_id=case.id,
             email_id=email_id,
@@ -158,6 +160,8 @@ class ExecutiveMailService:
                 "template": template_key,
                 "case_number": case.case_number,
                 "escalation_id": str(escalation.id),
+                "reason_code": escalation.reason_code,
+                "approve_label": approve_label,
                 "reattach_inbound_attachments": reattach_inbound,
                 "summary": summary,
                 "error_reason": error_detail,

@@ -38,6 +38,7 @@ _AP_STEP_OVERRIDE_KEYS: dict[str, str] = {
 }
 _REASON_VENDOR_NOT_FOUND = "AP_VENDOR_NOT_FOUND"
 _REASON_CURRENCY_CONVERSION = "AP_CURRENCY_CONVERSION_REQUIRED"
+
 _EXCHANGE_RATE_COMMENT_PATTERNS = (
     re.compile(r"1\s+[A-Z]{3}\s*=\s*([\d.]+)\s*SGD", re.I),
     re.compile(r"[A-Z]{3}/SGD\s+([\d.]+)", re.I),

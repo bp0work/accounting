@@ -132,7 +132,7 @@ Summary: {{ summary }}
 {% if manager_comment %}Note from previous reviewer: {{ manager_comment }}{% endif %}
 {% if executive_mailbox %}Executive mailbox: {{ executive_mailbox }}{% endif %}
 
-Approve: {{ approve_url }}
+{{ approve_label | default('Approve') }}: {{ approve_url }}
 Reject: {{ reject_url }}
 Escalate: {{ escalate_url }}
 """
@@ -146,14 +146,14 @@ _ESCALATION_HTML = """\
 {% if manager_comment %}<p><strong>Note from previous reviewer:</strong> {{ manager_comment }}</p>{% endif %}
 {% if executive_mailbox %}<p><strong>Executive mailbox:</strong> {{ executive_mailbox }}</p>{% endif %}
 <p>
-  <a href="{{ approve_url }}" style="background:#16a34a;color:#fff;padding:8px 16px;text-decoration:none;border-radius:4px;">Approve</a>
+  <a href="{{ approve_url }}" style="background:#16a34a;color:#fff;padding:8px 16px;text-decoration:none;border-radius:4px;">{{ approve_label | default('Approve') }}</a>
   &nbsp;
   <a href="{{ reject_url }}" style="background:#dc2626;color:#fff;padding:8px 16px;text-decoration:none;border-radius:4px;">Reject</a>
   &nbsp;
   <a href="{{ escalate_url }}" style="background:#64748b;color:#fff;padding:8px 16px;text-decoration:none;border-radius:4px;">Escalate</a>
 </p>
 <p style="font-size:12px;color:#64748b;">If buttons do not work, use these links:<br>
-Approve: {{ approve_url }}<br>
+{{ approve_label | default('Approve') }}: {{ approve_url }}<br>
 Reject: {{ reject_url }}<br>
 Escalate: {{ escalate_url }}</p>
 """
