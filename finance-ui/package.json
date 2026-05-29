@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.37-ap-currency-conversion",
+  "version": "0.14.39-submitted-by-column",
   "private": true,
   "type": "module",
   "scripts": {

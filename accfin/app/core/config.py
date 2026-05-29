@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.37-ap-currency-conversion"
+        return "0.14.39-submitted-by-column"
 
     @property
     def edge_public_base_url(self) -> str:

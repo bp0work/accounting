@@ -53,6 +53,7 @@ from app.services.case_visibility import (
     case_status_group,
     case_status_group_label,
     case_status_label,
+    case_submitted_by,
     client_vendor_name,
     error_reason,
     last_activity_at,
@@ -74,29 +75,37 @@ async def _load_assignees_map(session: AsyncSession, cases: list) -> dict[UUID, 
     return {row.id: row for row in result.scalars().all()}
 
 
-async def _load_from_addresses_map(
+async def _load_email_senders_map(
     session: AsyncSession, cases: list
-) -> dict[UUID, str]:
+) -> dict[UUID, tuple[str | None, str | None]]:
     email_ids = {c.email_id for c in cases if c.email_id}
     if not email_ids:
         return {}
     result = await session.execute(
-        select(Email.id, Email.from_address).where(Email.id.in_(email_ids))
+        select(Email.id, Email.from_name, Email.from_address).where(
+            Email.id.in_(email_ids)
+        )
     )
-    return {row[0]: row[1] for row in result.all()}
+    return {row[0]: (row[1], row[2]) for row in result.all()}
 
 
-async def _load_from_address(session: AsyncSession, case) -> str | None:
+async def _load_email_sender(
+    session: AsyncSession, case
+) -> tuple[str | None, str | None]:
     if case.email_id:
         result = await session.execute(
-            select(Email.from_address).where(Email.id == case.email_id)
+            select(Email.from_name, Email.from_address).where(Email.id == case.email_id)
         )
-        addr = result.scalar_one_or_none()
-        if addr:
-            return addr
+        row = result.one_or_none()
+        if row:
+            return row[0], row[1]
     meta = case.classification_metadata or {}
-    fallback = meta.get("from_address")
-    return str(fallback) if fallback else None
+    from_name = meta.get("from_name")
+    from_address = meta.get("from_address")
+    return (
+        str(from_name) if from_name else None,
+        str(from_address) if from_address else None,
+    )
 
 
 async def _linked_gl_period_status(session: AsyncSession, case) -> str | None:
@@ -125,6 +134,7 @@ async def _pending_approval_id(session: AsyncSession, case_id: UUID) -> UUID | N
 def _case_response(
     case,
     *,
+    from_name: str | None = None,
     from_address: str | None = None,
     linked_gl_period_status: str | None = None,
     pending_approval_id: UUID | None = None,
@@ -135,10 +145,17 @@ def _case_response(
         meta = case.classification_metadata or {}
         fallback = meta.get("from_address")
         from_address = str(fallback) if fallback else None
+    if from_name is None:
+        meta = case.classification_metadata or {}
+        fallback = meta.get("from_name")
+        from_name = str(fallback) if fallback else None
     wf = case.workflow_metadata or {}
     return base.model_copy(
         update={
             "from_address": from_address,
+            "submitted_by": case_submitted_by(
+                case, from_name=from_name, from_address=from_address
+            ),
             "client_vendor_name": client_vendor_name(case),
             "completed_at": case.completed_at,
             "sla_deadline": case.sla_deadline,
@@ -203,7 +220,7 @@ async def case_dashboard(
 ) -> CaseDashboardResponse:
     repo = CaseRepository(session)
     overdue = await repo.list_overdue_cases(limit=20)
-    from_map = await _load_from_addresses_map(session, overdue)
+    sender_map = await _load_email_senders_map(session, overdue)
     assignee_map = await _load_assignees_map(session, overdue)
     return CaseDashboardResponse(
         queue_depths=await _queue_status(),
@@ -213,7 +230,8 @@ async def case_dashboard(
         overdue_cases=[
             _case_response(
                 c,
-                from_address=from_map.get(c.email_id),
+                from_name=(sender_map.get(c.email_id) or (None, None))[0],
+                from_address=(sender_map.get(c.email_id) or (None, None))[1],
                 assignee=assignee_map.get(c.assigned_to) if c.assigned_to else None,
             )
             for c in overdue
@@ -234,13 +252,14 @@ async def list_cases(
     cases = await service.list_cases(
         limit=limit, status_filter=status, date_from=date_from, date_to=date_to
     )
-    from_map = await _load_from_addresses_map(session, cases)
+    sender_map = await _load_email_senders_map(session, cases)
     assignee_map = await _load_assignees_map(session, cases)
     return CaseListResponse(
         data=[
             _case_response(
                 c,
-                from_address=from_map.get(c.email_id),
+                from_name=(sender_map.get(c.email_id) or (None, None))[0],
+                from_address=(sender_map.get(c.email_id) or (None, None))[1],
                 assignee=assignee_map.get(c.assigned_to) if c.assigned_to else None,
             )
             for c in cases
@@ -256,7 +275,7 @@ async def get_case(
 ) -> CaseResponse:
     service = CaseService(session)
     case = await service.get_case(case_id)
-    from_address = await _load_from_address(session, case)
+    from_name, from_address = await _load_email_sender(session, case)
     pending_id = await _pending_approval_id(session, case_id)
     linked_gl = await _linked_gl_period_status(session, case)
     assignee = None
@@ -269,6 +288,7 @@ async def get_case(
         assignee = result.scalar_one_or_none()
     return _case_response(
         case,
+        from_name=from_name,
         from_address=from_address,
         linked_gl_period_status=linked_gl,
         pending_approval_id=pending_id,
