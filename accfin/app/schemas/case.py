@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.journal_entry import JournalEntryApprovalDetail
+
 
 class CaseResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -46,6 +48,7 @@ class CaseResponse(BaseModel):
     current_approval_tier: int | None = None
     pending_approval_id: UUID | None = None
     binding_escalated_to_cfo: bool = False
+    journal_entry: JournalEntryApprovalDetail | None = None
 
 
 class CaseListResponse(BaseModel):
