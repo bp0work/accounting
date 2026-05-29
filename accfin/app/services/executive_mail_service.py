@@ -872,9 +872,14 @@ class ExecutiveMailService:
         if override_po_check:
             meta["override_po_check"] = True
         if ap_step_override_key:
-            overrides = dict(meta.get("ap_step_overrides") or {})
+            bucket = (
+                "exp_step_overrides"
+                if case.type == "expense_claim"
+                else "ap_step_overrides"
+            )
+            overrides = dict(meta.get(bucket) or {})
             overrides[ap_step_override_key] = True
-            meta["ap_step_overrides"] = overrides
+            meta[bucket] = overrides
         if override_gl_period:
             meta["gl_period_override"] = True
             meta["gl_period_override_reason"] = gl_period_override_reason or escalation.manager_comment or "Manager approved GL period override"

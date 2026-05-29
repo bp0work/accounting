@@ -6,6 +6,7 @@ import logging
 from datetime import date
 from typing import Any
 
+from agents.hermes.llm_extract import _EXPENSE_CLAIM_PROMPT
 from agents.hermes.ollama_client import EXTRACTION_MODEL, OllamaError, generate_json
 from app.schemas.hermes import (
     ExtractExpenseClaimRequest,
@@ -13,46 +14,9 @@ from app.schemas.hermes import (
     ExtractedExpenseLineItem,
     ExtractExpenseClaimOutput,
 )
+from workers.common.expense_validation import normalize_expense_category
 
 logger = logging.getLogger(__name__)
-
-_EXPENSE_PROMPT = """You are an expense claim extractor for mmlogistix finance.
-Extract expense claim line items from employee reimbursement invoices and receipts.
-Documents sent to the accexp mailbox are employee expense claims (NOT supplier AP invoices).
-If the document shows "Invoice No", "From:", employee name, and "Category:" (e.g. Home office expense reimbursement),
-extract as expense claim line items — map the total to amount_claimed and category from the document.
-Categories MUST be one of: meals, transport, accommodation, entertainment, other, office_supplies.
-
-Return ONLY valid JSON:
-{{
-  "confidence_score": float,
-  "claim_period_from": "YYYY-MM-DD"|null,
-  "claim_period_to": "YYYY-MM-DD"|null,
-  "purpose": string|null,
-  "currency": string,
-  "line_items": [
-    {{
-      "line_number": int,
-      "expense_date": "YYYY-MM-DD"|null,
-      "category": string,
-      "description": string,
-      "merchant": string|null,
-      "currency": string,
-      "amount_claimed": string,
-      "confidence": float
-    }}
-  ],
-  "missing_fields": [string],
-  "warnings": [string]
-}}
-
-Claimant hint: {claimant_hint}
-Department hint: {department_hint}
-Allowed categories: {categories}
-
-SOURCE TEXT:
-{source_text}
-"""
 
 
 def _parse_date(value: Any) -> date | None:
@@ -78,6 +42,56 @@ def _build_source_text(request: ExtractExpenseClaimRequest) -> str:
     return "\n\n".join(parts)
 
 
+def _output_from_flat(data: dict, categories: list[str]) -> ExtractExpenseClaimOutput:
+    line_items: list[ExtractedExpenseLineItem] = []
+    for idx, row in enumerate(data.get("line_items") or [], start=1):
+        if not isinstance(row, dict):
+            continue
+        category = normalize_expense_category(str(row.get("category") or "other"))
+        line_items.append(
+            ExtractedExpenseLineItem(
+                line_number=int(row.get("line_number") or idx),
+                expense_date=_parse_date(row.get("expense_date")),
+                category=category,
+                description=str(row.get("description") or ""),
+                merchant=row.get("merchant"),
+                currency=str(row.get("currency") or data.get("currency") or "SGD"),
+                amount_claimed=str(row.get("amount_claimed") or "0"),
+                confidence=float(row.get("confidence") or 0.0),
+            )
+        )
+
+    if not line_items and data.get("total_amount"):
+        category = normalize_expense_category(data.get("expense_category"))
+        line_items.append(
+            ExtractedExpenseLineItem(
+                line_number=1,
+                expense_date=_parse_date(data.get("document_date")),
+                category=category,
+                description=str(data.get("business_purpose") or data.get("purpose") or "Expense"),
+                merchant=data.get("merchant_name"),
+                currency=str(data.get("currency") or "SGD"),
+                amount_claimed=str(data.get("total_amount") or "0"),
+                confidence=float(data.get("confidence_score") or 0.85),
+            )
+        )
+
+    missing = [str(m) for m in (data.get("missing_fields") or [])]
+    if not line_items and "line_items" not in missing:
+        missing.append("line_items")
+
+    return ExtractExpenseClaimOutput(
+        confidence_score=float(data.get("confidence_score") or 0.85),
+        claim_period_from=_parse_date(data.get("claim_period_from")),
+        claim_period_to=_parse_date(data.get("claim_period_to")),
+        purpose=data.get("business_purpose") or data.get("purpose"),
+        currency=str(data.get("currency") or "SGD"),
+        line_items=line_items,
+        missing_fields=missing,
+        warnings=[str(w) for w in (data.get("warnings") or [])],
+    )
+
+
 async def extract_expense_claim_llm(
     request: ExtractExpenseClaimRequest,
 ) -> ExtractExpenseClaimResponse:
@@ -93,12 +107,14 @@ async def extract_expense_claim_llm(
 
     categories = request.expense_categories or [
         "meals",
-        "transport",
+        "travel",
         "accommodation",
         "entertainment",
+        "office_supplies",
+        "government_fees",
         "other",
     ]
-    prompt = _EXPENSE_PROMPT.format(
+    prompt = _EXPENSE_CLAIM_PROMPT.format(
         source_text=source_text[:12000],
         claimant_hint=request.claimant_hint or "unknown",
         department_hint=request.department_hint or "unknown",
@@ -110,40 +126,7 @@ async def extract_expense_claim_llm(
         logger.warning("Ollama expense extraction failed: %s", exc)
         return ExtractExpenseClaimResponse(success=False, error_message=str(exc))
 
-    line_items: list[ExtractedExpenseLineItem] = []
-    for idx, row in enumerate(data.get("line_items") or [], start=1):
-        if not isinstance(row, dict):
-            continue
-        category = str(row.get("category") or "other").lower()
-        if category not in categories:
-            category = "other"
-        line_items.append(
-            ExtractedExpenseLineItem(
-                line_number=int(row.get("line_number") or idx),
-                expense_date=_parse_date(row.get("expense_date")),
-                category=category,
-                description=str(row.get("description") or ""),
-                merchant=row.get("merchant"),
-                currency=str(row.get("currency") or data.get("currency") or "SGD"),
-                amount_claimed=str(row.get("amount_claimed") or "0"),
-                confidence=float(row.get("confidence") or 0.0),
-            )
-        )
-
-    missing = [str(m) for m in (data.get("missing_fields") or [])]
-    if not line_items and "line_items" not in missing:
-        missing.append("line_items")
-
-    output = ExtractExpenseClaimOutput(
-        confidence_score=float(data.get("confidence_score") or 0.85),
-        claim_period_from=_parse_date(data.get("claim_period_from")),
-        claim_period_to=_parse_date(data.get("claim_period_to")),
-        purpose=data.get("purpose"),
-        currency=str(data.get("currency") or "SGD"),
-        line_items=line_items,
-        missing_fields=missing,
-        warnings=[str(w) for w in (data.get("warnings") or [])],
-    )
+    output = _output_from_flat(data, categories)
     return ExtractExpenseClaimResponse(
         success=True,
         confidence_score=output.confidence_score,

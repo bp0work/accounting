@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.44-journal-entry-approval-panel"
+        return "0.14.45-expense-workflow"
 
     @property
     def edge_public_base_url(self) -> str:

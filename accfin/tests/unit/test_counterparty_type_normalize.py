@@ -14,6 +14,7 @@ def test_vendor_maps_to_supplier():
 def test_other_types_unchanged():
     assert _normalize_counterparty_type("customer") == "customer"
     assert _normalize_counterparty_type("supplier") == "supplier"
+    assert _normalize_counterparty_type("staff") == "staff"
 
 
 def test_invalid_type_raises():

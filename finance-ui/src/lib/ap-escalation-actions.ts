@@ -72,6 +72,25 @@ function contextForCode(code: string, caseItem: CaseItem): string {
       );
     case 'AP_DUPLICATE_FOUND':
       return `A possible duplicate invoice was detected. Reject if this is a duplicate submission.`;
+    case 'EXP_SUBMITTER_NOT_FOUND':
+      return (
+        'Submitter email is not registered as Staff in Counterparty Accounts. Add a Staff ' +
+        'counterparty with matching contact email, then use Retry — or Reject to notify the submitter.'
+      );
+    case 'EXP_SUBMITTER_INACTIVE':
+      return 'Staff submitter is inactive. Reactivate in Counterparty Accounts, then Resubmit — or Reject.';
+    case 'EXP_POLICY_EXCEEDED':
+      return `Expense exceeds T&E policy limits. Accept with an override reason in the comment field, or Reject.`;
+    case 'EXP_RECEIPT_INVALID':
+      return `Receipt is invalid or older than 90 days. Accept with override reason, or Reject and ask for a new receipt quoting Case ID ${caseNum}.`;
+    case 'EXP_CURRENCY_CONVERSION_REQUIRED':
+      return `Foreign currency receipt — enter exchange rate in the comment (e.g. 1 USD = 1.35 SGD) and click Apply Rate & Continue.`;
+    case 'EXP_COA_NOT_FOUND':
+      return 'Expense GL account could not be mapped. Confirm Chart of Accounts setup, then continue.';
+    case 'EXP_PARSING_INCOMPLETE':
+      return summary || `Expense parsing incomplete for case ${caseNum}. Provide details or reject.`;
+    case 'EXP_DUPLICATE':
+      return `Possible duplicate expense claim. Reject if this is a duplicate submission.`;
     case 'HERMES_TIMEOUT':
     case 'HERMES_UNAVAILABLE':
       return `Document extraction timed out or Hermes was unavailable. Retry requeues processing when Ollama is healthy.`;
@@ -138,6 +157,56 @@ export function escalationActionConfig(
         commentRequiredForReject: true,
         contextMessage,
       };
+    case 'EXP_SUBMITTER_INACTIVE':
+      return {
+        primary: { label: 'Resubmit', action: 'approve' },
+        secondary: { label: 'Reject', action: 'reject' },
+        commentRequiredForPrimary: false,
+        commentRequiredForReject: true,
+        contextMessage,
+      };
+    case 'EXP_POLICY_EXCEEDED':
+    case 'EXP_RECEIPT_INVALID':
+      return {
+        primary: { label: 'Accept & Continue', action: 'approve' },
+        secondary: { label: 'Reject', action: 'reject' },
+        commentRequiredForPrimary: true,
+        commentRequiredForReject: true,
+        contextMessage,
+      };
+    case 'EXP_CURRENCY_CONVERSION_REQUIRED':
+      return {
+        primary: { label: 'Apply Rate & Continue', action: 'approve' },
+        secondary: { label: 'Reject', action: 'reject' },
+        commentRequiredForPrimary: true,
+        commentRequiredForReject: true,
+        contextMessage,
+      };
+    case 'EXP_COA_NOT_FOUND':
+      return {
+        primary: { label: 'Confirm Account & Continue', action: 'approve' },
+        secondary: { label: 'Reject', action: 'reject' },
+        commentRequiredForPrimary: false,
+        commentRequiredForReject: true,
+        contextMessage,
+      };
+    case 'EXP_SUBMITTER_NOT_FOUND':
+    case 'EXP_DUPLICATE':
+      return {
+        primary: null,
+        secondary: { label: 'Reject', action: 'reject' },
+        commentRequiredForPrimary: false,
+        commentRequiredForReject: true,
+        contextMessage,
+      };
+    case 'EXP_PARSING_INCOMPLETE':
+      return {
+        primary: { label: 'Provide Details', action: 'request_info' },
+        secondary: { label: 'Ask sender to resubmit', action: 'reject' },
+        commentRequiredForPrimary: true,
+        commentRequiredForReject: true,
+        contextMessage,
+      };
     case 'HERMES_TIMEOUT':
     case 'HERMES_UNAVAILABLE':
       return {
@@ -164,6 +233,6 @@ export function showManualReviewPanel(caseItem: CaseItem, roleName: string | und
   const code = caseReasonCode(caseItem);
   if (code === 'HERMES_TIMEOUT' || code === 'HERMES_UNAVAILABLE') return true;
   if (hasPendingEscalation(caseItem)) return true;
-  if (code.startsWith('AP_')) return true;
+  if (code.startsWith('AP_') || code.startsWith('EXP_')) return true;
   return Boolean(caseItem.error_reason || caseItem.status_reason);
 }
