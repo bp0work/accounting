@@ -9,6 +9,7 @@ from app.services.case_visibility import (
     case_status_group,
     case_status_group_label,
     case_status_label,
+    case_submitted_by,
     client_vendor_name,
     error_reason,
     processing_stage,
@@ -194,3 +195,30 @@ def test_client_vendor_name_ap_falls_back_to_counterparty():
         workflow_metadata={},
     )
     assert client_vendor_name(case) == "Acme Pte Ltd"
+
+
+def test_submitted_by_prefers_from_name():
+    case = _case(
+        classification_metadata={"from_address": "vendor@example.com"},
+    )
+    assert (
+        case_submitted_by(
+            case,
+            from_name="Jane Vendor",
+            from_address="vendor@example.com",
+        )
+        == "Jane Vendor"
+    )
+
+
+def test_submitted_by_falls_back_to_email():
+    case = _case(classification_metadata={})
+    assert (
+        case_submitted_by(case, from_name=None, from_address="acc@example.com")
+        == "acc@example.com"
+    )
+
+
+def test_submitted_by_workflow_metadata_fallback():
+    case = _case(workflow_metadata={"submitted_by": "ops@example.com"})
+    assert case_submitted_by(case) == "ops@example.com"

@@ -8,6 +8,7 @@
   import {
     isExcludedFromRecentCases,
     processingAgentLabel,
+    submittedByDisplay,
   } from '$lib/case-labels';
 
   let data: CaseDashboard | null = null;
@@ -101,6 +102,7 @@
         <thead>
           <tr>
             <th>Case</th>
+            <th>Submitted by</th>
             <th>Type</th>
             <th>State</th>
             <th>Action by</th>
@@ -111,6 +113,7 @@
           {#each data.overdue_cases as c}
             <tr class="overdue-row">
               <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
+              <td>{submittedByDisplay(c)}</td>
               <td>{c.type}</td>
               <td>{c.status_group_label || '—'}</td>
               <td>{formatActionBy(c)}</td>
@@ -130,6 +133,7 @@
           <thead>
             <tr>
               <th>Case</th>
+              <th>Submitted by</th>
               <th>Type</th>
               <th>State</th>
               <th>Action by</th>
@@ -139,6 +143,7 @@
             {#each recentCases as c}
               <tr>
                 <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
+                <td>{submittedByDisplay(c)}</td>
                 <td>{c.type}</td>
                 <td>{c.status_group_label || '—'}</td>
                 <td>{formatActionBy(c)}</td>

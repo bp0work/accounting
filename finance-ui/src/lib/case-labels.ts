@@ -76,6 +76,15 @@ export function isExcludedFromRecentCases(
   return Date.now() - new Date(ts).getTime() > MS_24H;
 }
 
+/** Inbound submitter — API `submitted_by` (email from_name or from_address). */
+export function submittedByDisplay(item: {
+  submitted_by?: string | null;
+  from_address?: string | null;
+}): string {
+  const label = item.submitted_by?.trim() || item.from_address?.trim();
+  return label || '—';
+}
+
 export function clientVendorColumnValue(item: {
   type: string;
   client_vendor_name?: string | null;

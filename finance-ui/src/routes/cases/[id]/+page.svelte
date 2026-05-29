@@ -20,7 +20,7 @@
     saveVendorExtractionHint,
     type VendorExtractionHintCreate,
   } from '$lib/api/vendor-hints';
-  import { clientVendorColumnValue } from '$lib/case-labels';
+  import { submittedByDisplay } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { sessionUser } from '$lib/stores/session';
 
@@ -712,7 +712,7 @@
       </section>
     {/if}
     <p>{item.subject}</p>
-    <p>Client / Vendor: {clientVendorColumnValue(item)}</p>
+    <p>Submitted by: {submittedByDisplay(item)}</p>
     <p>Processing time: {item.processing_time_minutes != null ? `${item.processing_time_minutes} min` : '—'}</p>
     <p>Created: {new Date(item.created_at).toLocaleString()}</p>
     {#if item.last_activity_at}

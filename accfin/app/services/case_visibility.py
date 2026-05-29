@@ -105,6 +105,31 @@ def client_vendor_name(case: Case) -> str | None:
     return case.counterparty_name
 
 
+def _non_empty_str(value: object | None) -> str | None:
+    if value is None or value == "":
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def case_submitted_by(
+    case: Case,
+    *,
+    from_name: str | None = None,
+    from_address: str | None = None,
+) -> str | None:
+    """Inbound submitter — linked email sender name, else email address."""
+    clf = case.classification_metadata or {}
+    wf = case.workflow_metadata or {}
+    name = _non_empty_str(from_name) or _non_empty_str(clf.get("from_name"))
+    address = _non_empty_str(from_address) or _non_empty_str(clf.get("from_address"))
+    if name:
+        return name
+    if address:
+        return address
+    return _non_empty_str(wf.get("submitted_by"))
+
+
 def case_status_group(case: Case) -> str:
     """Machine id for Finance UI State column — derived from ``case.status``."""
     status = case.status
