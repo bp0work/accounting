@@ -11,6 +11,11 @@
     type ApprovalItem,
   } from '$lib/api/approvals';
   import { listCases, type CaseItem } from '$lib/api/cases';
+  import {
+    canUseManualReviewActions,
+    caseReasonCode,
+    showManualReviewPanel,
+  } from '$lib/ap-escalation-actions';
   import { documentTypeLabel, clientVendorColumnValue } from '$lib/case-labels';
   import { sessionUser } from '$lib/stores/session';
 
@@ -28,6 +33,21 @@
       : role === 'accounts_clerk' || role === 'finance_officer'
         ? 'Tier 2 pending'
         : 'Pending approvals';
+
+  $: showManualReviewQueue = canUseManualReviewActions(role);
+  $: manualReviewCases = showManualReviewQueue
+    ? cases
+        .filter(
+          (c) =>
+            (c.status === 'manual_review' || c.status === 'on_hold') &&
+            showManualReviewPanel(c, role)
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.last_activity_at || b.created_at).getTime() -
+            new Date(a.last_activity_at || a.created_at).getTime()
+        )
+    : [];
 
   onMount(() => {
     void loadAll();
@@ -104,40 +124,91 @@
 {#if loading}
   <p>Loading…</p>
 {:else if tab === 'queue'}
-  <p class="subtitle">{queueLabel}</p>
-  {#if pending.length === 0}
-    <p>No pending approvals in your queue.</p>
-  {:else}
-    <div class="table-wrap card">
-      <table>
-        <thead>
-          <tr>
-            <th>Case</th>
-            <th>Type</th>
-            <th>Tier</th>
-            <th>Subject</th>
-            <th>Amount</th>
-            <th>SLA</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each pending as item}
+  <section class="queue-section">
+    <h2 class="section-heading">
+      Pending approvals
+      <span class="count-badge">{pending.length}</span>
+    </h2>
+    <p class="subtitle">{queueLabel}</p>
+    {#if pending.length === 0}
+      <p class="empty-hint">No pending approvals in your queue.</p>
+    {:else}
+      <div class="table-wrap card">
+        <table>
+          <thead>
             <tr>
-              <td><a href={`/cases/${item.case_id}`}>{item.case_number}</a></td>
-              <td>{item.case_type}</td>
-              <td>{tierLabel(item.tier)}</td>
-              <td>{item.subject || '—'}</td>
-              <td>{formatAmount(item.amount)}</td>
-              <td>
-                {item.sla_deadline ? new Date(item.sla_deadline).toLocaleString() : '—'}
-              </td>
-              <td><a href={`/approvals/${item.id}`}>Review</a></td>
+              <th>Case</th>
+              <th>Type</th>
+              <th>Tier</th>
+              <th>Subject</th>
+              <th>Amount</th>
+              <th>SLA</th>
+              <th></th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {#each pending as item}
+              <tr>
+                <td><a href={`/cases/${item.case_id}`}>{item.case_number}</a></td>
+                <td>{item.case_type}</td>
+                <td>{tierLabel(item.tier)}</td>
+                <td>{item.subject || '—'}</td>
+                <td>{formatAmount(item.amount)}</td>
+                <td>
+                  {item.sla_deadline ? new Date(item.sla_deadline).toLocaleString() : '—'}
+                </td>
+                <td><a href={`/approvals/${item.id}`}>Review</a></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+  </section>
+
+  {#if showManualReviewQueue}
+    <section class="queue-section manual-review-section">
+      <h2 class="section-heading">
+        Manual review required
+        <span class="count-badge attention">{manualReviewCases.length}</span>
+      </h2>
+      <p class="subtitle">
+        Cases awaiting action in the case detail Action Required panel (resubmit, accept, reject, or
+        retry).
+      </p>
+      {#if manualReviewCases.length === 0}
+        <p class="empty-hint">No cases need manual review right now.</p>
+      {:else}
+        <div class="table-wrap card">
+          <table>
+            <thead>
+              <tr>
+                <th>Case</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Reason</th>
+                <th>Client / Vendor</th>
+                <th>Last activity</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each manualReviewCases as item}
+                <tr class:overdue={item.is_overdue}>
+                  <td><a href={`/cases/${item.id}`}>{item.case_number}</a></td>
+                  <td>{documentTypeLabel(item.type)}</td>
+                  <td>{item.status_label || item.status}</td>
+                  <td>{caseReasonCode(item).replaceAll('_', ' ') || '—'}</td>
+                  <td>{clientVendorColumnValue(item)}</td>
+                  <td>{formatActivity(item)}</td>
+                  <td><a href={`/cases/${item.id}`}>Take action</a></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </section>
   {/if}
 {:else if tab === 'history'}
   <p class="subtitle">Completed approvals (approved or rejected).</p>
@@ -231,6 +302,41 @@
     border-color: #1d4ed8;
     color: #1e40af;
     font-weight: 600;
+  }
+  .queue-section {
+    margin-bottom: 2rem;
+  }
+  .manual-review-section {
+    padding-top: 1.25rem;
+    border-top: 1px solid #e2e8f0;
+  }
+  .section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.35rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  .count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1e40af;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+  .count-badge.attention {
+    background: #ffedd5;
+    color: #9a3412;
+  }
+  .empty-hint {
+    color: #64748b;
+    margin: 0.5rem 0 0;
   }
   .subtitle {
     color: #64748b;
