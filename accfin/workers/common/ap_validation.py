@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from sqlalchemy import select
@@ -27,7 +27,7 @@ _VALIDATED_DATE_PATTERN = re.compile(
 
 def extract_sender_validation(subject: str | None, body: str | None) -> dict:
     """
-    Scan email subject and body for "validated" + parseable date within 7 days.
+    Scan email subject and body for "validated" + parseable dd/mm/yyyy date.
 
     Returns dict with keys:
       sender_validated (bool), validation_date (ISO str | None), failure_reason (str | None)
@@ -40,22 +40,12 @@ def extract_sender_validation(subject: str | None, body: str | None) -> dict:
             "failure_reason": _VALIDATION_FAIL_REASON,
         }
 
-    today = datetime.now(UTC).date()
-    cutoff = today - timedelta(days=7)
-
     for match in _VALIDATED_DATE_PATTERN.finditer(combined):
         raw_date = match.group(1)
         try:
             d = datetime.strptime(raw_date, "%d/%m/%Y").date()
         except ValueError:
             continue
-
-        if d > today or d < cutoff:
-            return {
-                "sender_validated": False,
-                "validation_date": d.isoformat(),
-                "failure_reason": _VALIDATION_FAIL_REASON,
-            }
 
         return {
             "sender_validated": True,
@@ -69,6 +59,44 @@ def extract_sender_validation(subject: str | None, body: str | None) -> dict:
         "validation_date": None,
         "failure_reason": _VALIDATION_FAIL_REASON,
     }
+
+
+def resolve_ap_sgd_amount(extracted: dict) -> tuple[Decimal, dict, bool]:
+    """Convert invoice total to SGD for GL posting.
+
+    Returns ``(sgd_amount, updated_extracted, needs_escalation)``.
+    """
+    fields = dict(extracted)
+    currency = str(fields.get("currency") or "SGD").strip().upper()
+    try:
+        total = Decimal(str(fields.get("total_amount") or "0"))
+    except (InvalidOperation, ValueError):
+        total = Decimal("0")
+
+    if currency == "SGD":
+        fields["sgd_amount"] = str(total)
+        return total, fields, False
+
+    rate_raw = fields.get("exchange_rate")
+    if rate_raw not in (None, ""):
+        try:
+            rate = Decimal(str(rate_raw))
+            if rate <= 0:
+                raise InvalidOperation("non-positive rate")
+            sgd = (total * rate).quantize(Decimal("0.01"))
+            fields.update(
+                {
+                    "foreign_currency": currency,
+                    "foreign_amount": str(total),
+                    "exchange_rate": str(rate),
+                    "sgd_amount": str(sgd),
+                }
+            )
+            return sgd, fields, False
+        except (InvalidOperation, ValueError):
+            pass
+
+    return Decimal("0"), fields, True
 
 
 async def check_duplicate_by_fields(

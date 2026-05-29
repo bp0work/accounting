@@ -84,6 +84,8 @@ class ExtractedInvoice(BaseModel):
     tax_amount: str | None = None
     tax_code: str | None = None
     currency: str = "SGD"
+    exchange_rate: str | None = None
+    sgd_amount: str | None = None
     payment_terms: str | None = None
     line_items: list[InvoiceLineItem] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)

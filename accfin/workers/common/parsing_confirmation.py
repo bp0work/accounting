@@ -73,6 +73,8 @@ def normalize_extracted_fields(raw: dict[str, Any]) -> dict[str, str | None]:
         "total_amount": str(raw.get("total_amount")).strip() if raw.get("total_amount") else None,
         "gst_amount": str(gst).strip() if gst else None,
         "currency": str(raw.get("currency") or "SGD"),
+        "exchange_rate": str(raw.get("exchange_rate")).strip() if raw.get("exchange_rate") else None,
+        "sgd_amount": str(raw.get("sgd_amount")).strip() if raw.get("sgd_amount") else None,
         "payment_terms": str(raw.get("payment_terms")).strip() if raw.get("payment_terms") else None,
         "sender_validated": sender_str,
         "invoice_number": str(doc_num).strip() if doc_num else None,

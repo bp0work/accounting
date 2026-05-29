@@ -8,6 +8,7 @@ from workers.ap.handlers import (
     _pop_resume_from_step,
     _resume_step_reached,
     _REASON_COA_NOT_FOUND,
+    _REASON_CURRENCY_CONVERSION,
     _REASON_DUPLICATE,
     _REASON_VENDOR_NOT_FOUND,
 )
@@ -16,14 +17,15 @@ from workers.ap.handlers import (
 def test_reason_to_resume_step_mapping():
     assert REASON_TO_RESUME_STEP[_REASON_VENDOR_NOT_FOUND] == "2C"
     assert REASON_TO_RESUME_STEP[_REASON_DUPLICATE] == "2B"
-    assert REASON_TO_RESUME_STEP[_REASON_COA_NOT_FOUND] == "2F"
+    assert REASON_TO_RESUME_STEP[_REASON_COA_NOT_FOUND] == "2G"
+    assert REASON_TO_RESUME_STEP[_REASON_CURRENCY_CONVERSION] == "2F"
 
 
 def test_resume_step_reached_skips_preceding():
     assert _resume_step_reached("2C", "2A") is False
     assert _resume_step_reached("2C", "2B") is False
     assert _resume_step_reached("2C", "2C") is True
-    assert _resume_step_reached("2C", "2F") is True
+    assert _resume_step_reached("2C", "2G") is True
     assert _resume_step_reached(None, "2A") is True
 
 

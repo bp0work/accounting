@@ -59,6 +59,7 @@
     total_amount: '',
     gst_amount: '',
     currency: 'SGD',
+    exchange_rate: '',
     payment_terms: '',
     sender_validated: false,
   };
@@ -180,6 +181,7 @@
         total_amount: f.total_amount != null ? String(f.total_amount) : '',
         gst_amount: String(f.gst_amount ?? f.tax_amount ?? ''),
         currency: String(f.currency ?? 'SGD'),
+        exchange_rate: f.exchange_rate != null ? String(f.exchange_rate) : '',
         payment_terms: f.payment_terms != null ? String(f.payment_terms) : '',
         sender_validated:
           String(f.sender_validated ?? 'false').toLowerCase() === 'true',
@@ -282,6 +284,10 @@
     parsingMessage = '';
     error = '';
     try {
+      if (parsingForm.currency.trim().toUpperCase() !== 'SGD' && !parsingForm.exchange_rate?.trim()) {
+        error = `Exchange rate is required when currency is ${parsingForm.currency}.`;
+        return;
+      }
       const body: ParsingConfirmationFields = {
         ...parsingForm,
         document_number: parsingForm.document_number?.trim() || null,
@@ -290,6 +296,7 @@
         vendor_name: parsingForm.vendor_name?.trim() || null,
         total_amount: parsingForm.total_amount?.trim() || null,
         gst_amount: parsingForm.gst_amount?.trim() || null,
+        exchange_rate: parsingForm.exchange_rate?.trim() || null,
         payment_terms: parsingForm.payment_terms?.trim() || null,
       };
       const result = await confirmParsing(id, body);
@@ -641,6 +648,18 @@
                 <option value="AUD">AUD</option>
               </select>
             </label>
+            {#if parsingForm.currency !== 'SGD'}
+              <label>
+                Exchange rate (1 {parsingForm.currency} = ? SGD)
+                <input
+                  type="number"
+                  step="0.000001"
+                  min="0"
+                  required
+                  bind:value={parsingForm.exchange_rate}
+                />
+              </label>
+            {/if}
             <label>
               Payment terms
               <select bind:value={parsingForm.payment_terms}>

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +37,31 @@ _AP_STEP_OVERRIDE_KEYS: dict[str, str] = {
     "AP_COA_NOT_FOUND":         "override_coa_not_found",
 }
 _REASON_VENDOR_NOT_FOUND = "AP_VENDOR_NOT_FOUND"
+_REASON_CURRENCY_CONVERSION = "AP_CURRENCY_CONVERSION_REQUIRED"
+_EXCHANGE_RATE_COMMENT_PATTERNS = (
+    re.compile(r"1\s+[A-Z]{3}\s*=\s*([\d.]+)\s*SGD", re.I),
+    re.compile(r"[A-Z]{3}/SGD\s+([\d.]+)", re.I),
+    re.compile(r"exchange\s+rate\s*:?\s*([\d.]+)", re.I),
+    re.compile(r"conversion\s+rate\s*:?\s*([\d.]+)", re.I),
+    re.compile(r"([\d.]+)"),
+)
+
+
+def _parse_exchange_rate_from_comment(comment: str | None) -> str | None:
+    text = (comment or "").strip()
+    if not text:
+        return None
+    for pattern in _EXCHANGE_RATE_COMMENT_PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        try:
+            rate = Decimal(match.group(1))
+            if rate > 0:
+                return str(rate)
+        except (InvalidOperation, ValueError, IndexError):
+            continue
+    return None
 _VENDOR_NOT_FOUND_REJECTION = (
     "Your document cannot be processed as {vendor_name} is not set up in our system. "
     "Please contact accounts to register the vendor."
@@ -208,6 +235,15 @@ class EscalationService:
                     message = "Approved. Journal entry posted and submitter notified."
                 else:
                     ap_override_key = _AP_STEP_OVERRIDE_KEYS.get(str(reason_code))
+                    if str(reason_code) == _REASON_CURRENCY_CONVERSION:
+                        rate = _parse_exchange_rate_from_comment(trimmed_comment)
+                        if rate:
+                            meta = dict(case.workflow_metadata or {})
+                            extracted = dict(meta.get("extracted_fields") or {})
+                            extracted["exchange_rate"] = rate
+                            meta["extracted_fields"] = extracted
+                            meta["resume_from_step"] = "2F"
+                            case.workflow_metadata = meta
                     period_closed = reason_code == "PERIOD_CLOSED"
                     await self._executive_mail.resume_after_manager_approve(
                         case=case,
