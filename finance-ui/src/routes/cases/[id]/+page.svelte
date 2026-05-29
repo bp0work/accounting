@@ -95,14 +95,18 @@
   $: role = ($sessionUser?.role_name ?? '').toLowerCase();
   $: bindingTier = item?.current_approval_tier ?? null;
   $: bindingEscalated = Boolean(item?.binding_escalated_to_cfo);
+  const journalApprovalStatuses = new Set(['pending_approval', 'journal_pending_approval']);
+  $: awaitingJournalApproval =
+    !!item && journalApprovalStatuses.has(item.status);
+  $: journalApproval = item?.journal_entry ?? null;
   $: showAccApprovalActions =
-    item?.status === 'pending_approval' &&
+    awaitingJournalApproval &&
     tier2Roles.has(role) &&
     bindingTier === 2 &&
     !bindingEscalated &&
     !!item?.pending_approval_id;
   $: showCfoApprovalActions =
-    item?.status === 'pending_approval' &&
+    awaitingJournalApproval &&
     executiveRoles.has(role) &&
     bindingTier != null &&
     bindingTier >= 2 &&
@@ -883,15 +887,61 @@
     {#if approvalMessage}
       <p class="hint success">{approvalMessage}</p>
     {/if}
-    {#if item.status === 'pending_approval' && bindingTier != null}
+    {#if awaitingJournalApproval}
       <section class="approval-box">
-        <h2>Binding authority approval</h2>
-        <p>
-          Tier {bindingTier}
-          {#if bindingEscalated}
-            · escalated to CFO
-          {/if}
-        </p>
+        <h2>Journal entry approval</h2>
+        {#if bindingEscalated}
+          <p class="hint">Escalated to CFO for final approval.</p>
+        {/if}
+        {#if journalApproval}
+          <dl class="extracted journal-approval-fields">
+            {#if journalApproval.vendor}
+              <dt>Vendor</dt>
+              <dd>{journalApproval.vendor}</dd>
+            {/if}
+            {#if journalApproval.invoice_number}
+              <dt>Invoice number</dt>
+              <dd>{journalApproval.invoice_number}</dd>
+            {/if}
+            {#if journalApproval.invoice_date}
+              <dt>Invoice date</dt>
+              <dd>{journalApproval.invoice_date}</dd>
+            {/if}
+            {#if journalApproval.document_type}
+              <dt>Document type</dt>
+              <dd>{journalApproval.document_type}</dd>
+            {/if}
+            {#if journalApproval.amount_sgd}
+              <dt>Amount (SGD)</dt>
+              <dd>{journalApproval.amount_sgd}</dd>
+            {/if}
+            {#if journalApproval.gst}
+              <dt>GST</dt>
+              <dd>{journalApproval.gst}</dd>
+            {/if}
+            {#if journalApproval.total}
+              <dt>Total</dt>
+              <dd>{journalApproval.total}</dd>
+            {/if}
+            {#if journalApproval.debit_account}
+              <dt>Debit account</dt>
+              <dd>{journalApproval.debit_account}</dd>
+            {/if}
+            {#if journalApproval.credit_account}
+              <dt>Credit account</dt>
+              <dd>{journalApproval.credit_account}</dd>
+            {/if}
+            {#if journalApproval.approval_tier_label}
+              <dt>Approval tier</dt>
+              <dd>{journalApproval.approval_tier_label}</dd>
+            {:else if bindingTier != null}
+              <dt>Approval tier</dt>
+              <dd>Tier {bindingTier}</dd>
+            {/if}
+          </dl>
+        {:else if bindingTier != null}
+          <p>Tier {bindingTier}</p>
+        {/if}
         {#if showAccApprovalActions || showCfoApprovalActions}
           <label>
             Note (optional for approve / escalate)

@@ -49,6 +49,7 @@ from app.services.parsing_confirmation_service import (
 )
 from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
+from app.services.case_journal_approval import build_journal_entry_approval_detail
 from app.services.case_retry import execute_case_retry
 from app.services.escalation_service import EscalationService
 from app.services.case_service import CaseService
@@ -136,7 +137,8 @@ async def _pending_approval_id(session: AsyncSession, case_id: UUID) -> UUID | N
     return result.scalar_one_or_none()
 
 
-def _case_response(
+async def _case_response(
+    session: AsyncSession,
     case,
     *,
     from_name: str | None = None,
@@ -144,6 +146,7 @@ def _case_response(
     linked_gl_period_status: str | None = None,
     pending_approval_id: UUID | None = None,
     assignee: User | None = None,
+    include_journal_entry: bool = False,
 ) -> CaseResponse:
     base = CaseResponse.model_validate(case)
     if from_address is None:
@@ -155,6 +158,11 @@ def _case_response(
         fallback = meta.get("from_name")
         from_name = str(fallback) if fallback else None
     wf = case.workflow_metadata or {}
+    journal_entry = (
+        await build_journal_entry_approval_detail(session, case)
+        if include_journal_entry
+        else None
+    )
     return base.model_copy(
         update={
             "from_address": from_address,
@@ -180,6 +188,7 @@ def _case_response(
             "current_approval_tier": case.current_approval_tier,
             "pending_approval_id": pending_approval_id,
             "binding_escalated_to_cfo": bool(wf.get("binding_escalated_to_cfo")),
+            "journal_entry": journal_entry,
         }
     )
 
@@ -233,7 +242,8 @@ async def case_dashboard(
         average_processing_time_minutes=await repo.average_processing_minutes_completed(),
         overdue_count=len(overdue),
         overdue_cases=[
-            _case_response(
+            await _case_response(
+                session,
                 c,
                 from_name=(sender_map.get(c.email_id) or (None, None))[0],
                 from_address=(sender_map.get(c.email_id) or (None, None))[1],
@@ -259,17 +269,18 @@ async def list_cases(
     )
     sender_map = await _load_email_senders_map(session, cases)
     assignee_map = await _load_assignees_map(session, cases)
-    return CaseListResponse(
-        data=[
-            _case_response(
+    rows: list[CaseResponse] = []
+    for c in cases:
+        rows.append(
+            await _case_response(
+                session,
                 c,
                 from_name=(sender_map.get(c.email_id) or (None, None))[0],
                 from_address=(sender_map.get(c.email_id) or (None, None))[1],
                 assignee=assignee_map.get(c.assigned_to) if c.assigned_to else None,
             )
-            for c in cases
-        ]
-    )
+        )
+    return CaseListResponse(data=rows)
 
 
 @router.get("/cases/{case_id}", response_model=CaseResponse)
@@ -291,13 +302,15 @@ async def get_case(
             .options(selectinload(User.role))
         )
         assignee = result.scalar_one_or_none()
-    return _case_response(
+    return await _case_response(
+        session,
         case,
         from_name=from_name,
         from_address=from_address,
         linked_gl_period_status=linked_gl,
         pending_approval_id=pending_id,
         assignee=assignee,
+        include_journal_entry=True,
     )
 
 

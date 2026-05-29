@@ -31,6 +31,22 @@ export type CaseItem = {
   current_approval_tier?: number | null;
   pending_approval_id?: string | null;
   binding_escalated_to_cfo?: boolean;
+  journal_entry?: JournalEntryApprovalDetail | null;
+};
+
+export type JournalEntryApprovalDetail = {
+  vendor?: string | null;
+  invoice_number?: string | null;
+  invoice_date?: string | null;
+  document_type?: string | null;
+  amount_sgd?: string | null;
+  gst?: string | null;
+  total?: string | null;
+  debit_account?: string | null;
+  credit_account?: string | null;
+  approval_tier_label?: string | null;
+  journal_entry_id?: string | null;
+  entry_number?: string | null;
 };
 
 export type TimelineEntry = {
