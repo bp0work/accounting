@@ -126,11 +126,14 @@ export type ParsingConfirmationFields = {
   document_date?: string | null;
   due_date?: string | null;
   vendor_name?: string | null;
+  merchant_name?: string | null;
   total_amount?: string | null;
   gst_amount?: string | null;
   currency: string;
   exchange_rate?: string | null;
   payment_terms?: string | null;
+  expense_category?: string | null;
+  business_purpose?: string | null;
   sender_validated: boolean;
 };
 

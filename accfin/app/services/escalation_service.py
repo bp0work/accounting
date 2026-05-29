@@ -38,8 +38,19 @@ _AP_STEP_OVERRIDE_KEYS: dict[str, str] = {
     "AP_SENDER_NOT_VALIDATED":  "override_sender_validation",
     "AP_COA_NOT_FOUND":         "override_coa_not_found",
 }
+_EXP_STEP_OVERRIDE_KEYS: dict[str, str] = {
+    "EXP_PARSING_INCOMPLETE": "override_parsing",
+    "EXP_DUPLICATE": "override_duplicate",
+    "EXP_SUBMITTER_INACTIVE": "override_submitter",
+    "EXP_POLICY_EXCEEDED": "override_policy",
+    "EXP_RECEIPT_INVALID": "override_receipt",
+    "EXP_COA_NOT_FOUND": "override_coa",
+}
+_STEP_OVERRIDE_KEYS: dict[str, str] = {**_AP_STEP_OVERRIDE_KEYS, **_EXP_STEP_OVERRIDE_KEYS}
 _REASON_VENDOR_NOT_FOUND = "AP_VENDOR_NOT_FOUND"
+_REASON_EXP_SUBMITTER_NOT_FOUND = "EXP_SUBMITTER_NOT_FOUND"
 _REASON_CURRENCY_CONVERSION = "AP_CURRENCY_CONVERSION_REQUIRED"
+_REASON_EXP_CURRENCY = "EXP_CURRENCY_CONVERSION_REQUIRED"
 
 _EXCHANGE_RATE_COMMENT_PATTERNS = (
     re.compile(r"1\s+[A-Z]{3}\s*=\s*([\d.]+)\s*SGD", re.I),
@@ -168,12 +179,15 @@ class EscalationService:
         if row.response_token_hash != token_hash:
             raise AppHTTPException(400, "INVALID_ESCALATION_TOKEN", "Token does not match escalation")
 
-        if str(row.reason_code or "") == _REASON_VENDOR_NOT_FOUND and action != "reject":
+        if str(row.reason_code or "") in (
+            _REASON_VENDOR_NOT_FOUND,
+            _REASON_EXP_SUBMITTER_NOT_FOUND,
+        ) and action != "reject":
             raise AppHTTPException(
                 422,
-                "VENDOR_NOT_FOUND_REJECT_ONLY",
-                "Vendor not set up — only Reject is available from this email. "
-                "Use Retry in Finance UI after registering the vendor.",
+                "ESCALATION_REJECT_ONLY",
+                "Only Reject is available for this escalation. Register staff or vendor in "
+                "Counterparty Accounts, then retry from Finance UI if applicable.",
             )
 
         case = await self._cases.get(row.case_id)
@@ -230,12 +244,14 @@ class EscalationService:
         if row.response_token_hash != token_hash:
             raise AppHTTPException(400, "INVALID_ESCALATION_TOKEN", "Token does not match escalation")
 
-        if str(row.reason_code or "") == _REASON_VENDOR_NOT_FOUND and action != "reject":
+        if str(row.reason_code or "") in (
+            _REASON_VENDOR_NOT_FOUND,
+            _REASON_EXP_SUBMITTER_NOT_FOUND,
+        ) and action != "reject":
             raise AppHTTPException(
                 422,
-                "VENDOR_NOT_FOUND_REJECT_ONLY",
-                "Vendor not set up — only Reject is available from this email. "
-                "Use Retry in Finance UI after registering the vendor.",
+                "ESCALATION_REJECT_ONLY",
+                "Only Reject is available for this escalation.",
             )
 
         if row.status != "pending":
@@ -260,12 +276,15 @@ class EscalationService:
 
         if action == "approve":
             reason_code_pre = row.reason_code or ""
-            if str(reason_code_pre) == _REASON_VENDOR_NOT_FOUND:
+            if str(reason_code_pre) in (
+                _REASON_VENDOR_NOT_FOUND,
+                _REASON_EXP_SUBMITTER_NOT_FOUND,
+            ):
                 raise AppHTTPException(
                     422,
-                    "VENDOR_NOT_FOUND_NO_APPROVE",
-                    "Vendor not set up — use Reject to notify the sender, or Retry in Finance UI "
-                    "after registering the vendor. Approve is not available for this escalation.",
+                    "ESCALATION_REJECT_ONLY",
+                    "Approve is not available — use Reject to notify the submitter, or register "
+                    "staff/vendor in Counterparty Accounts and retry from Finance UI.",
                 )
             row.status = "approved"
             row.responded_at = now
@@ -289,8 +308,11 @@ class EscalationService:
                     case.workflow_metadata = meta
                     message = "Approved. Journal entry posted and submitter notified."
                 else:
-                    ap_override_key = _AP_STEP_OVERRIDE_KEYS.get(str(reason_code))
-                    if str(reason_code) == _REASON_CURRENCY_CONVERSION:
+                    step_override_key = _STEP_OVERRIDE_KEYS.get(str(reason_code))
+                    if str(reason_code) in (
+                        _REASON_CURRENCY_CONVERSION,
+                        _REASON_EXP_CURRENCY,
+                    ):
                         rate = _parse_exchange_rate_from_comment(trimmed_comment)
                         if rate:
                             meta = dict(case.workflow_metadata or {})
@@ -309,7 +331,7 @@ class EscalationService:
                         gl_period_override_reason=trimmed_comment
                         or "Manager approved GL period override",
                         gl_period_posted_by=responder,
-                        ap_step_override_key=ap_override_key,
+                        ap_step_override_key=step_override_key,
                     )
                     message = "Approved. Case requeued for processing and submitter notified."
 
@@ -330,11 +352,14 @@ class EscalationService:
                     )
                     message = "Rejected. Submitter has been notified."
                 else:
-                    is_ap_step = str(reason_code) in _AP_STEP_OVERRIDE_KEYS
-                    is_vendor_not_found = str(reason_code) == _REASON_VENDOR_NOT_FOUND
+                    is_workflow_step = str(reason_code) in _STEP_OVERRIDE_KEYS
+                    is_reject_only = str(reason_code) in (
+                        _REASON_VENDOR_NOT_FOUND,
+                        _REASON_EXP_SUBMITTER_NOT_FOUND,
+                    )
                     case.status = (
                         "case_rejected"
-                        if is_ap_step or is_vendor_not_found
+                        if is_workflow_step or is_reject_only
                         else "rejected"
                     )
                     meta = dict(case.workflow_metadata or {})
@@ -346,18 +371,25 @@ class EscalationService:
 
                     email = await self._resolve_email(row, case)
                     error_reason = (row.context or {}).get("error_reason") or row.summary
-                    if is_vendor_not_found:
-                        ctx = row.context or {}
-                        extracted = ctx.get("extracted_fields") or {}
-                        vendor_name = (
-                            meta.get("vendor_name")
-                            or extracted.get("vendor_name")
-                            or case.counterparty_name
-                            or "the vendor"
-                        )
-                        error_reason = _VENDOR_NOT_FOUND_REJECTION.format(
-                            vendor_name=str(vendor_name)
-                        )
+                    if is_reject_only:
+                        if str(reason_code) == _REASON_EXP_SUBMITTER_NOT_FOUND:
+                            error_reason = (
+                                "Your expense claim cannot be processed because your email "
+                                "is not registered as staff. Please contact accounts to be "
+                                "added as a Staff counterparty before resubmitting."
+                            )
+                        else:
+                            ctx = row.context or {}
+                            extracted = ctx.get("extracted_fields") or {}
+                            vendor_name = (
+                                meta.get("vendor_name")
+                                or extracted.get("vendor_name")
+                                or case.counterparty_name
+                                or "the vendor"
+                            )
+                            error_reason = _VENDOR_NOT_FOUND_REJECTION.format(
+                                vendor_name=str(vendor_name)
+                            )
                     elif reason_code == "AP_SENDER_NOT_VALIDATED":
                         error_reason = _SENDER_VALIDATION_RESUBMIT_TEMPLATE.format(
                             case_number=case.case_number

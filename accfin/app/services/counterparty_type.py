@@ -7,7 +7,9 @@ from fastapi import status
 from app.core.exceptions import AppHTTPException
 
 # `counterparty_type_check` in migration `011` — allows supplier, not vendor.
-_COUNTERPARTY_DB_TYPES = frozenset({"customer", "supplier", "employee", "bank", "other"})
+_COUNTERPARTY_DB_TYPES = frozenset(
+    {"customer", "supplier", "employee", "bank", "other", "staff"}
+)
 
 
 def normalize_counterparty_type(type_value: str) -> str:
@@ -21,7 +23,7 @@ def normalize_counterparty_type(type_value: str) -> str:
             code="INVALID_COUNTERPARTY_TYPE",
             message=(
                 f"Invalid counterparty type '{type_value}'. "
-                "Allowed: customer, vendor, supplier, employee, bank, other."
+                "Allowed: customer, vendor, supplier, employee, staff, bank, other."
             ),
         )
     return normalized

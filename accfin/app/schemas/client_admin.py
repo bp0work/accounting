@@ -377,7 +377,10 @@ class CounterpartyResponse(BaseModel):
 class CounterpartyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     code: str | None = Field(default=None, max_length=50)
-    type: str = Field(default="vendor", pattern="^(customer|vendor|supplier|employee|bank|other)$")
+    type: str = Field(
+        default="vendor",
+        pattern="^(customer|vendor|supplier|employee|staff|bank|other)$",
+    )
     contact_email: str | None = None
     contact_phone: str | None = None
     address: str | None = None
@@ -393,7 +396,10 @@ class CounterpartyCreate(BaseModel):
 class CounterpartyUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     code: str | None = Field(default=None, max_length=50)
-    type: str | None = Field(default=None, pattern="^(customer|vendor|supplier|employee|bank|other)$")
+    type: str | None = Field(
+        default=None,
+        pattern="^(customer|vendor|supplier|employee|staff|bank|other)$",
+    )
     contact_email: str | None = None
     contact_phone: str | None = None
     address: str | None = None

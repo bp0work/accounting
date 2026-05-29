@@ -37,6 +37,7 @@
   let cpContractExpiryDate = $state('');
   let cpSupplierOwner = $state('');
   let cpContractWarningDays = $state(30);
+  let cpContactEmail = $state('');
 
   let saCounterpartyId = $state('');
   let saCode = $state('');
@@ -119,6 +120,7 @@
         name,
         type: isVendor ? 'vendor' : cpType,
         code: cpCode || null,
+        contact_email: cpContactEmail.trim() || null,
         ...contractFields,
       });
       cpName = '';
@@ -129,6 +131,7 @@
       cpContractExpiryDate = '';
       cpSupplierOwner = '';
       cpContractWarningDays = 30;
+      cpContactEmail = '';
       msg = 'Counterparty created';
       await loadAll();
     } catch (e) {
@@ -139,6 +142,7 @@
   function displayCounterpartyType(value: unknown): string {
     const t = String(value ?? '').toLowerCase();
     if (t === 'supplier') return 'vendor';
+    if (t === 'staff') return 'Staff';
     return t || '—';
   }
 
@@ -396,8 +400,14 @@
       <select bind:value={cpType}>
         <option value="customer">Customer</option>
         <option value="vendor">Vendor</option>
+        <option value="staff">Staff</option>
       </select>
       <input bind:value={cpCode} placeholder="Code (optional)" />
+      <input
+        bind:value={cpContactEmail}
+        type="email"
+        placeholder="Contact email (required for staff)"
+      />
       <button type="button" disabled={!cpName.trim()} onclick={addCounterparty}>
         Add counterparty
       </button>

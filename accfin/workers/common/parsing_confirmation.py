@@ -64,7 +64,7 @@ def normalize_extracted_fields(raw: dict[str, Any]) -> dict[str, str | None]:
         sender_str = (
             "true" if str(sender).strip().lower() in ("true", "1", "yes") else "false"
         )
-    return {
+    out = {
         "document_type": str(raw.get("document_type") or "invoice"),
         "document_number": str(doc_num).strip() if doc_num else None,
         "document_date": str(doc_date).strip() if doc_date else None,
@@ -81,6 +81,14 @@ def normalize_extracted_fields(raw: dict[str, Any]) -> dict[str, str | None]:
         "invoice_date": str(doc_date).strip() if doc_date else None,
         "tax_amount": str(gst).strip() if gst else None,
     }
+    merchant = raw.get("merchant_name")
+    if merchant is not None and str(merchant).strip():
+        out["merchant_name"] = str(merchant).strip()
+    for key in ("expense_category", "business_purpose"):
+        val = raw.get(key)
+        if val is not None and str(val).strip():
+            out[key] = str(val).strip()
+    return out
 
 
 def extracted_fields_to_invoice(fields: dict[str, Any]) -> ExtractedInvoice:
@@ -125,6 +133,11 @@ def expense_claim_to_confirmation_fields(claim: Any) -> dict[str, str | None]:
             "sender_validated": "false",
         }
     )
+
+
+def expense_fields_to_confirmation(extracted: dict) -> dict[str, str | None]:
+    """Expense claim fields for Finance UI parsing confirmation."""
+    return normalize_extracted_fields(dict(extracted))
 
 
 async def mailbox_for_case(

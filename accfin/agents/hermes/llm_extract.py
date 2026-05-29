@@ -378,3 +378,53 @@ async def extract_payment_advice_llm(
         model_used=EXTRACTION_MODEL,
         output=extracted,
     )
+
+
+# Expense claim extraction — accexp mailbox (`0.14.45-expense-workflow`).
+# Used by agents.hermes.expense_extract.extract_expense_claim_llm.
+_EXPENSE_CLAIM_PROMPT = """You are an expense claim extractor for mmlogistix finance.
+Extract fields from employee reimbursement receipts, invoices, and credit card statements.
+Documents sent to the accexp mailbox are employee expense claims (NOT supplier AP invoices).
+
+Return ONLY valid JSON:
+{{
+  "confidence_score": float,
+  "document_type": "receipt"|"invoice"|"credit_card_statement",
+  "document_date": "YYYY-MM-DD"|null,
+  "document_number": string|null,
+  "merchant_name": string,
+  "total_amount": string,
+  "currency": string,
+  "gst_amount": string|null,
+  "expense_category": "meals"|"travel"|"accommodation"|"office_supplies"|"government_fees"|"entertainment"|"other",
+  "business_purpose": string,
+  "exchange_rate": string|null,
+  "claim_period_from": "YYYY-MM-DD"|null,
+  "claim_period_to": "YYYY-MM-DD"|null,
+  "purpose": string|null,
+  "line_items": [
+    {{
+      "line_number": int,
+      "expense_date": "YYYY-MM-DD"|null,
+      "category": string,
+      "description": string,
+      "merchant": string|null,
+      "currency": string,
+      "amount_claimed": string,
+      "confidence": float
+    }}
+  ],
+  "missing_fields": [string],
+  "warnings": [string]
+}}
+
+expense_category MUST be one of: meals, travel, accommodation, office_supplies, government_fees, entertainment, other.
+Map transport/taxi to travel. merchant_name is the vendor who issued the receipt (not the employee).
+
+Claimant hint: {claimant_hint}
+Department hint: {department_hint}
+Allowed categories: {categories}
+
+SOURCE TEXT:
+{source_text}
+"""

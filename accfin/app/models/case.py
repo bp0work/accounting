@@ -23,6 +23,8 @@ from app.models.base import Base, TimestampMixin
 
 
 class Counterparty(Base, TimestampMixin):
+    """Master counterparty — types include customer, supplier, staff, employee, bank, other."""
+
     __tablename__ = "counterparty"
 
     id: Mapped[uuid.UUID] = mapped_column(

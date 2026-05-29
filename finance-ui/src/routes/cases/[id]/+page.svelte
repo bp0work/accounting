@@ -67,11 +67,14 @@
     document_date: '',
     due_date: '',
     vendor_name: '',
+    merchant_name: '',
     total_amount: '',
     gst_amount: '',
     currency: 'SGD',
     exchange_rate: '',
     payment_terms: '',
+    expense_category: 'other',
+    business_purpose: '',
     sender_validated: false,
   };
 
@@ -188,7 +191,9 @@
   $: showCounterpartyLink =
     reasonCode === 'AP_CONTRACT_MISSING' ||
     reasonCode === 'AP_VENDOR_INACTIVE' ||
-    reasonCode === 'AP_VENDOR_NOT_FOUND';
+    reasonCode === 'AP_VENDOR_NOT_FOUND' ||
+    reasonCode === 'EXP_SUBMITTER_NOT_FOUND' ||
+    reasonCode === 'EXP_SUBMITTER_INACTIVE';
 
   $: if (item?.status === 'pending_confirmation') {
     const raw = item.workflow_metadata?.extracted_fields;
@@ -197,16 +202,24 @@
       parsingFormKey = key;
       const f = raw as Record<string, unknown>;
       parsingForm = {
-        document_type: String(f.document_type ?? 'invoice'),
+        document_type: String(f.document_type ?? (isExpenseConfirm ? 'receipt' : 'invoice')),
         document_number: f.document_number != null ? String(f.document_number) : '',
         document_date: String(f.document_date ?? f.invoice_date ?? ''),
         due_date: f.due_date != null ? String(f.due_date) : '',
         vendor_name: f.vendor_name != null ? String(f.vendor_name) : '',
+        merchant_name:
+          f.merchant_name != null
+            ? String(f.merchant_name)
+            : f.vendor_name != null
+              ? String(f.vendor_name)
+              : '',
         total_amount: f.total_amount != null ? String(f.total_amount) : '',
         gst_amount: String(f.gst_amount ?? f.tax_amount ?? ''),
         currency: String(f.currency ?? 'SGD'),
         exchange_rate: f.exchange_rate != null ? String(f.exchange_rate) : '',
         payment_terms: f.payment_terms != null ? String(f.payment_terms) : '',
+        expense_category: f.expense_category != null ? String(f.expense_category) : 'other',
+        business_purpose: f.business_purpose != null ? String(f.business_purpose) : '',
         sender_validated:
           String(f.sender_validated ?? 'false').toLowerCase() === 'true',
       };
@@ -318,10 +331,13 @@
         document_date: parsingForm.document_date?.trim() || null,
         due_date: parsingForm.due_date?.trim() || null,
         vendor_name: parsingForm.vendor_name?.trim() || null,
+        merchant_name: parsingForm.merchant_name?.trim() || parsingForm.vendor_name?.trim() || null,
         total_amount: parsingForm.total_amount?.trim() || null,
         gst_amount: parsingForm.gst_amount?.trim() || null,
         exchange_rate: parsingForm.exchange_rate?.trim() || null,
         payment_terms: parsingForm.payment_terms?.trim() || null,
+        expense_category: parsingForm.expense_category?.trim() || null,
+        business_purpose: parsingForm.business_purpose?.trim() || null,
       };
       const result = await confirmParsing(caseId, body);
       parsingMessage = `Parsing confirmed (${result.correction_count} correction(s)) — case requeued.`;
@@ -455,6 +471,9 @@
       parsing_awaiting_confirmation: 'Awaiting parsing confirmation',
       parsing_confirmed: 'Parsing confirmed',
       parsing_rejected: 'Parsing rejected',
+      submitter_verified: 'Submitter verified',
+      policy_checked: 'Policy checked',
+      receipt_validated: 'Receipt validated',
       journal_linked: 'Journal posted',
       approval_requested: 'Approval requested',
     };
@@ -765,16 +784,85 @@
               <input type="date" bind:value={parsingForm.due_date} />
             </label>
           {:else}
-            <p class="hint">Expense claim — confirm totals and claimant below.</p>
+            <label>
+              Document type
+              <select bind:value={parsingForm.document_type}>
+                <option value="receipt">Receipt</option>
+                <option value="invoice">Invoice</option>
+                <option value="credit_card_statement">Credit card statement</option>
+              </select>
+            </label>
+            <label>
+              Document number (optional)
+              <input type="text" bind:value={parsingForm.document_number} />
+            </label>
+            <label>
+              Document date
+              <input type="date" bind:value={parsingForm.document_date} />
+            </label>
+            <label>
+              Merchant name
+              <input type="text" bind:value={parsingForm.merchant_name} />
+            </label>
+            <label>
+              Expense category
+              <select bind:value={parsingForm.expense_category}>
+                <option value="meals">Meals</option>
+                <option value="travel">Travel</option>
+                <option value="accommodation">Accommodation</option>
+                <option value="office_supplies">Office supplies</option>
+                <option value="government_fees">Government fees</option>
+                <option value="entertainment">Entertainment</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>
+              Business purpose
+              <textarea rows="2" bind:value={parsingForm.business_purpose}></textarea>
+            </label>
           {/if}
-          <label>
-            {isExpenseConfirm ? 'Claimant' : 'Vendor name'}
-            <input type="text" bind:value={parsingForm.vendor_name} />
-          </label>
+          {#if !isExpenseConfirm}
+            <label>
+              Vendor name
+              <input type="text" bind:value={parsingForm.vendor_name} />
+            </label>
+          {/if}
           <label>
             Total amount
             <input type="number" step="0.01" bind:value={parsingForm.total_amount} />
           </label>
+          {#if isExpenseConfirm}
+            <label>
+              GST amount
+              <input type="number" step="0.01" bind:value={parsingForm.gst_amount} />
+            </label>
+            <label>
+              Currency
+              <select bind:value={parsingForm.currency}>
+                <option value="SGD">SGD</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="AUD">AUD</option>
+              </select>
+            </label>
+            {#if parsingForm.currency !== 'SGD'}
+              <label>
+                Exchange rate (1 {parsingForm.currency} = ? SGD)
+                <input
+                  type="number"
+                  step="0.000001"
+                  min="0"
+                  required
+                  bind:value={parsingForm.exchange_rate}
+                />
+              </label>
+            {/if}
+            <label class="toggle-row">
+              <input type="checkbox" bind:checked={parsingForm.sender_validated} />
+              Document validated
+            </label>
+          {/if}
           {#if !isExpenseConfirm}
             <label>
               GST amount
