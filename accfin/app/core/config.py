@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.34-dashboard-action-by"
+        return "0.14.37-ap-currency-conversion"
 
     @property
     def edge_public_base_url(self) -> str:

@@ -60,6 +60,8 @@ Return ONLY valid JSON matching this schema:
   "tax_code": string|null,
   "total_amount": string|null,
   "currency": string,
+  "exchange_rate": string|null,
+  "sgd_amount": string|null,
   "payment_terms": string|null,
   "line_items": [{{"description": string, "quantity": string|null, "unit_price": string|null, "amount": string|null}}],
   "missing_fields": [string],
@@ -67,6 +69,9 @@ Return ONLY valid JSON matching this schema:
   "confidence_score": float
 }}
 Use amounts as decimal strings without currency symbols. Currency default {currency_hint}.
+If currency is SGD, set sgd_amount equal to total_amount; if foreign currency, extract exchange_rate
+from the email body when the sender states a conversion (e.g. "1 USD = 1.35 SGD", "USD/SGD 1.35",
+"exchange rate: 1.35", "conversion rate: 1.35") and leave sgd_amount null for worker calculation.
 Do not copy the supplier hint as vendor_name unless the document confirms that entity issued the invoice.
 Supplier hint (context only): {supplier_hint}
 
@@ -131,6 +136,13 @@ _PAID_RECEIPT_RE = re.compile(
     re.I,
 )
 
+_EXCHANGE_RATE_PATTERNS = (
+    re.compile(r"1\s+([A-Z]{3})\s*=\s*([\d.]+)\s*SGD", re.I),
+    re.compile(r"([A-Z]{3})/SGD\s+([\d.]+)", re.I),
+    re.compile(r"exchange\s+rate\s*:?\s*([\d.]+)", re.I),
+    re.compile(r"conversion\s+rate\s*:?\s*([\d.]+)", re.I),
+)
+
 
 def _normalize_ap_due_date(
     invoice_date: date | None,
@@ -149,6 +161,22 @@ def _optional_str(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _extract_exchange_rate_from_text(document_text: str, currency: str) -> str | None:
+    for pattern in _EXCHANGE_RATE_PATTERNS:
+        match = pattern.search(document_text)
+        if not match:
+            continue
+        groups = match.groups()
+        if len(groups) == 2:
+            found_currency, rate = groups
+            if found_currency.upper() != currency.upper():
+                continue
+            return _normalize_amount(rate)
+        if len(groups) == 1:
+            return _normalize_amount(groups[0])
+    return None
 
 
 def _parse_date(value: Any) -> date | None:
@@ -259,6 +287,17 @@ async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceR
     if role != "ap":
         vendor_name = vendor_name or request.supplier_hint
         customer_name = customer_name or request.customer_hint
+    currency = str(data.get("currency") or request.currency_hint or "SGD").strip().upper()
+    total_amount = _normalize_amount(data.get("total_amount"))
+    exchange_rate = _normalize_amount(data.get("exchange_rate"))
+    sgd_amount = _normalize_amount(data.get("sgd_amount"))
+    if role == "ap":
+        if not exchange_rate and currency != "SGD":
+            exchange_rate = _extract_exchange_rate_from_text(document_text, currency)
+        if currency == "SGD" and total_amount:
+            sgd_amount = total_amount
+        elif currency != "SGD":
+            sgd_amount = None
     extracted = ExtractedInvoice(
         invoice_number=_optional_str(data.get("invoice_number")),
         invoice_date=invoice_date,
@@ -269,8 +308,10 @@ async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceR
         subtotal=_normalize_amount(data.get("subtotal")),
         tax_amount=_normalize_amount(data.get("tax_amount")),
         tax_code=_optional_str(data.get("tax_code")),
-        total_amount=_normalize_amount(data.get("total_amount")),
-        currency=str(data.get("currency") or request.currency_hint or "SGD"),
+        total_amount=total_amount,
+        currency=currency,
+        exchange_rate=exchange_rate,
+        sgd_amount=sgd_amount,
         payment_terms=data.get("payment_terms"),
         line_items=line_items,
         warnings=[str(w) for w in (data.get("warnings") or [])],
@@ -282,7 +323,7 @@ async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceR
     return ExtractInvoiceResponse(
         confidence_score=round(confidence, 2),
         model_used=EXTRACTION_MODEL,
-        prompt_version="ar_invoice_extract-v1" if role == "ar" else "ap_invoice_extract-v2",
+        prompt_version="ar_invoice_extract-v1" if role == "ar" else "ap_invoice_extract-v3",
         output=extracted,
     )
 

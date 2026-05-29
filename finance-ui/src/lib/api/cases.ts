@@ -93,6 +93,7 @@ export type ParsingConfirmationFields = {
   total_amount?: string | null;
   gst_amount?: string | null;
   currency: string;
+  exchange_rate?: string | null;
   payment_terms?: string | null;
   sender_validated: boolean;
 };

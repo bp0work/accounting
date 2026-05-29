@@ -49,6 +49,7 @@ from workers.common.ap_validation import (
     get_payment_term,
     lookup_vendor,
     payment_terms_match,
+    resolve_ap_sgd_amount,
 )
 from workers.common.binding_authority_escalation import route_binding_authority_escalation
 from workers.common.gl_period_check import ensure_gl_period_allows_posting
@@ -78,6 +79,7 @@ _REASON_VENDOR_NOT_FOUND = "AP_VENDOR_NOT_FOUND"
 _REASON_PAYMENT_TERMS    = "AP_PAYMENT_TERMS_MISMATCH"
 _REASON_CONTRACT         = "AP_CONTRACT_MISSING"
 _REASON_SENDER_VALIDATION = "AP_SENDER_NOT_VALIDATED"
+_REASON_CURRENCY_CONVERSION = "AP_CURRENCY_CONVERSION_REQUIRED"
 _REASON_COA_NOT_FOUND    = "AP_COA_NOT_FOUND"
 
 # Mapping from reason code → workflow_metadata key set on approve
@@ -92,7 +94,7 @@ AP_OVERRIDE_KEYS: dict[str, str] = {
 }
 
 # AP Process step ids for manual-retry resume (stored on escalation → cleared on worker pickup).
-_RESUME_STEP_ORDER: tuple[str, ...] = ("2A", "2B", "2C", "2D", "2E", "2F")
+_RESUME_STEP_ORDER: tuple[str, ...] = ("2A", "2B", "2C", "2D", "2E", "2F", "2G")
 REASON_TO_RESUME_STEP: dict[str, str] = {
     _REASON_PARSING: "2A",
     _REASON_DUPLICATE: "2B",
@@ -101,7 +103,8 @@ REASON_TO_RESUME_STEP: dict[str, str] = {
     _REASON_PAYMENT_TERMS: "2D",
     _REASON_CONTRACT: "2E",
     _REASON_SENDER_VALIDATION: "2E",
-    _REASON_COA_NOT_FOUND: "2F",
+    _REASON_CURRENCY_CONVERSION: "2F",
+    _REASON_COA_NOT_FOUND: "2G",
 }
 
 
@@ -464,7 +467,7 @@ class APWorkerService:
                 )
                 if sender_val is not None:
                     confirm_fields["sender_validated"] = (
-                        "true" if sender_val else "false"
+                        "true" if sender_val.get("sender_validated") else "false"
                     )
                 return await pause_for_parsing_confirmation(
                     self._session,
@@ -705,7 +708,7 @@ class APWorkerService:
             )
             summary = (
                 f"Sender has not validated this document. "
-                f"The email must include 'validated dd/mm/yyyy' with a date in the last 7 days. "
+                f"The email must include 'validated dd/mm/yyyy' with a parseable date. "
                 f"Reason: {failure_reason}. "
                 f"Please advise: a) reject and ask sender to resubmit with validation, "
                 f"or b) accept with override."
@@ -742,9 +745,61 @@ class APWorkerService:
             meta_extraction["validation_date"] = sender_val.get("validation_date")
             _update_meta(case, {"extraction": meta_extraction})
 
-        # ── Step 6: COA mapping ───────────────────────────────────────
-        expense_code = ""
+        # ── Step 2F: Currency conversion ───────────────────────────────
+        sgd_amount = Decimal(str(extracted.get("total_amount") or inv.total_amount or "0"))
         if _resume_step_reached(resume_from, "2F"):
+            sgd_amount, extracted, needs_fx = resolve_ap_sgd_amount(extracted)
+            if needs_fx:
+                currency_code = str(extracted.get("currency") or getattr(inv, "currency", None) or "SGD").upper()
+                foreign_total = extracted.get("total_amount") or inv.total_amount or "0"
+                summary = (
+                    f"Invoice is in {currency_code} (amount: {foreign_total} {currency_code}). "
+                    f"Please provide the exchange rate (1 {currency_code} = ? SGD) to proceed."
+                )
+                _update_meta(case, {
+                    "error_type": _REASON_CURRENCY_CONVERSION,
+                    "reason_code": _REASON_CURRENCY_CONVERSION,
+                })
+                await self._add_timeline(
+                    case, "currency_conversion_required",
+                    from_status="processing", to_status="manual_review",
+                    description=summary,
+                )
+                return await self._escalate_step(
+                    case, email,
+                    reason_code=_REASON_CURRENCY_CONVERSION,
+                    summary=summary,
+                    extracted_fields=extracted,
+                    extraction_confidence=confidence_f,
+                )
+
+            fx_meta = {
+                k: extracted[k]
+                for k in (
+                    "foreign_currency",
+                    "foreign_amount",
+                    "exchange_rate",
+                    "sgd_amount",
+                )
+                if k in extracted
+            }
+            if fx_meta:
+                _update_meta(case, {"currency_conversion": fx_meta})
+            _update_meta(case, {"extracted_fields": extracted})
+            await self._add_timeline(
+                case, "currency_converted",
+                description=f"SGD amount {sgd_amount:,.2f} ({extracted.get('currency', 'SGD')})",
+            )
+        elif extracted.get("sgd_amount"):
+            sgd_amount = Decimal(str(extracted["sgd_amount"]))
+
+        # ── Step 2G: COA mapping ───────────────────────────────────────
+        expense_code = str((case.workflow_metadata or {}).get("expense_account_code") or "")
+        expense_account = None
+        if expense_code:
+            expense_account = await self._ledger.get_account_by_code(expense_code)
+
+        if _resume_step_reached(resume_from, "2G"):
             coa_override_code: str | None = overrides.get("coa_account_code")
             po = None
             if inv.po_reference:
@@ -783,10 +838,17 @@ class APWorkerService:
                 case, "coa_mapped",
                 description=f"Expense account {expense_code} resolved",
             )
+            _update_meta(case, {"expense_account_code": expense_code})
+
+        if expense_account is None:
+            return await self._route_exception(
+                case, email, "COA_NOT_RESOLVED", "Expense GL account not resolved before journal step"
+            )
 
         # ── Step 7: Document type routing + journal ───────────────────
-        amount = Decimal(str(inv.total_amount or "0"))
-        tax = Decimal(str(getattr(inv, "tax_amount", None) or "0"))
+        amount = sgd_amount
+        tax_raw = extracted.get("gst_amount") or extracted.get("tax_amount") or getattr(inv, "tax_amount", None)
+        tax = Decimal(str(tax_raw or "0"))
         document_type = (
             str(extracted.get("document_type", "invoice"))
             .strip()
@@ -849,7 +911,7 @@ class APWorkerService:
             )
 
         case.amount_value = amount
-        case.amount_currency = getattr(inv, "currency", None) or "SGD"
+        case.amount_currency = "SGD"
         case.risk_flags = risk_flags
         case.current_approval_tier = tier if tier >= 2 else None
 
@@ -930,9 +992,9 @@ class APWorkerService:
         # Create approval record + escalation email
         await self._approvals.request_approval(
             case_id=case.id, tier=tier, amount_value=amount,
-            amount_currency=getattr(inv, "currency", None) or "SGD",
+            amount_currency="SGD",
         )
-        currency = getattr(inv, "currency", None) or "SGD"
+        currency = str(extracted.get("foreign_currency") or extracted.get("currency") or "SGD")
 
         if is_credit_or_debit_note:
             doc_label = "Credit note" if document_type == "credit_note" else "Debit note"

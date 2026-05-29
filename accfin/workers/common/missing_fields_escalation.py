@@ -22,6 +22,8 @@ def invoice_extracted_fields(inv: Any) -> dict[str, str | None]:
         "total_amount": inv.total_amount,
         "tax_amount": inv.tax_amount,
         "currency": inv.currency,
+        "exchange_rate": getattr(inv, "exchange_rate", None),
+        "sgd_amount": getattr(inv, "sgd_amount", None),
         "po_reference": inv.po_reference,
     }
 
