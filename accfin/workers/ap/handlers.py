@@ -345,6 +345,49 @@ class APWorkerService:
             )
         return counterparty, subaccount
 
+    async def _reload_vendor_for_contract_check(
+        self,
+        case: Case,
+        counterparty: Counterparty | None,
+        subaccount: CounterpartyAccount | None,
+        vendor_name_str: str,
+        *,
+        uen: str | None,
+    ) -> tuple[Counterparty | None, CounterpartyAccount | None]:
+        """Fresh DB read before step 2E contract validation (resume after contract UI update)."""
+        if counterparty is not None:
+            self._session.expire(counterparty)
+        if subaccount is not None:
+            self._session.expire(subaccount)
+
+        counterparty, subaccount, _vendor_status = await lookup_vendor(
+            self._session, vendor_name_str, uen=uen
+        )
+        if counterparty is None and case.counterparty_id:
+            counterparty = await self._session.get(Counterparty, case.counterparty_id)
+        if subaccount is None and case.counterparty_account_id:
+            subaccount = await self._session.get(
+                CounterpartyAccount, case.counterparty_account_id
+            )
+
+        if counterparty is not None:
+            await self._session.refresh(counterparty)
+            logger.info(
+                "AP step 2E counterparty %s (%s): has_contract=%s contract_expiry_date=%s case=%s",
+                counterparty.id,
+                counterparty.name,
+                counterparty.has_contract,
+                counterparty.contract_expiry_date,
+                case.case_number,
+            )
+        else:
+            logger.warning(
+                "AP step 2E: no counterparty loaded for contract check (vendor=%r case=%s)",
+                vendor_name_str,
+                case.case_number,
+            )
+        return counterparty, subaccount
+
     def _load_invoice_from_metadata(
         self, case: Case, email: Email | None
     ) -> tuple[object, dict, float, dict]:
@@ -667,6 +710,17 @@ class APWorkerService:
 
         # ── Step 5a/5b: Contract + sender validation ─────────────────
         if _resume_step_reached(resume_from, "2E"):
+            if resume_from == "2E":
+                uen = getattr(inv, "vendor_uen", None) or getattr(
+                    inv, "registration_number", None
+                )
+                counterparty, subaccount = await self._reload_vendor_for_contract_check(
+                    case,
+                    counterparty,
+                    subaccount,
+                    vendor_name_str,
+                    uen=uen,
+                )
             today = date.today()
             contract_valid = bool(
                 counterparty
