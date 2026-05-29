@@ -115,6 +115,10 @@ export function createCounterparty(body: Record<string, unknown>) {
   return apiFetch('/counterparties', { method: 'POST', body: JSON.stringify(body) });
 }
 
+export function patchCounterparty(id: string, body: Record<string, unknown>) {
+  return apiFetch(`/counterparties/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
 export function listCounterpartyAccounts(counterpartyId?: string, q?: string) {
   const params = new URLSearchParams();
   if (counterpartyId) params.set('counterparty_id', counterpartyId);
