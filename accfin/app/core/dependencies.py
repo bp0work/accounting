@@ -62,6 +62,24 @@ def require_finance_setup_access():
     return _check
 
 
+MANUAL_REVIEW_ESCALATION_ROLES = frozenset({"accounts_clerk", "finance_manager", "cfo"})
+
+
+def require_manual_review_escalation():
+    """Finance UI — respond to manager escalations on manual_review / on_hold cases."""
+
+    async def _check(user: TokenData = Depends(require_permission("cases:write"))) -> TokenData:
+        if user.role not in MANUAL_REVIEW_ESCALATION_ROLES:
+            raise AppHTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "INSUFFICIENT_PERMISSION",
+                "Accounts Clerk, Finance Manager, or CFO access is required.",
+            )
+        return user
+
+    return _check
+
+
 def require_gl_posting_override():
     """CFO, Finance Manager, or Client Admin — retroactive GL period posting."""
 

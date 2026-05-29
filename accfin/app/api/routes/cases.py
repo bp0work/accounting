@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.database import get_db_session
-from app.core.dependencies import require_permission
+from app.core.dependencies import require_manual_review_escalation, require_permission
 from app.core.exceptions import AppHTTPException
 from app.core.redis_client import get_redis
 from app.models.accounting_period import AccountingPeriod
@@ -33,6 +33,10 @@ from app.schemas.case import (
     QueueStatusResponse,
     TimelineEntryResponse,
 )
+from app.schemas.executive_mail import (
+    CaseEscalationRespondRequest,
+    EscalationRespondResult,
+)
 from app.schemas.parsing_confirmation import (
     ConfirmParsingRequest,
     ConfirmParsingResponse,
@@ -46,6 +50,7 @@ from app.services.parsing_confirmation_service import (
 from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
 from app.services.case_retry import execute_case_retry
+from app.services.escalation_service import EscalationService
 from app.services.case_service import CaseService
 from app.services.timeline_actor import resolve_timeline_actor_display
 from app.services.case_visibility import (
@@ -313,6 +318,26 @@ async def transition_case_status(
         to_status=result.to_state.value if result.to_state else None,
         trigger=body.trigger,
         guard_failed=result.guard_failed,
+    )
+
+
+@router.post("/cases/{case_id}/escalation-respond", response_model=EscalationRespondResult)
+async def case_escalation_respond(
+    case_id: UUID,
+    body: CaseEscalationRespondRequest,
+    user: TokenData = Depends(require_manual_review_escalation()),
+    session: AsyncSession = Depends(get_db_session),
+) -> EscalationRespondResult:
+    users = await session.execute(select(User).where(User.id == user.user_id))
+    db_user = users.scalar_one_or_none()
+    responder = db_user.email if db_user else f"user:{user.user_id}"
+
+    service = EscalationService(session)
+    return await service.respond_for_case(
+        case_id,
+        action=body.action,
+        comment=body.comment,
+        responder_email=responder,
     )
 
 

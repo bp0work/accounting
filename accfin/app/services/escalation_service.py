@@ -7,7 +7,9 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import status
 
 from app.core.exceptions import AppHTTPException
 from app.core.mail_action_token import (
@@ -92,6 +94,58 @@ class EscalationService:
             code = str(exc)
             raise AppHTTPException(400, code, "Invalid or expired escalation token") from exc
         return hash_token(wire_token)
+
+    async def _pending_for_case(self, case_id: UUID) -> CaseEscalation | None:
+        result = await self._session.execute(
+            select(CaseEscalation)
+            .where(CaseEscalation.case_id == case_id, CaseEscalation.status == "pending")
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def respond_for_case(
+        self,
+        case_id: UUID,
+        *,
+        action: str,
+        comment: str | None,
+        responder_email: str,
+    ) -> EscalationRespondResult:
+        """Authenticated Finance UI respond — uses stored wire token from escalation context."""
+        case = await self._cases.get(case_id)
+        if case is None:
+            raise AppHTTPException(status.HTTP_404_NOT_FOUND, "CASE_NOT_FOUND", "Case not found")
+        if case.status not in ("manual_review", "on_hold"):
+            raise AppHTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "CASE_NOT_AWAITING_REVIEW",
+                "Case is not in manual review or on hold",
+            )
+
+        row = await self._pending_for_case(case_id)
+        if row is None:
+            raise AppHTTPException(
+                status.HTTP_404_NOT_FOUND,
+                "NO_PENDING_ESCALATION",
+                "No pending escalation for this case",
+            )
+
+        notification = (row.context or {}).get("notification") or {}
+        wire = notification.get("wire_token")
+        if not wire:
+            raise AppHTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "ESCALATION_TOKEN_MISSING",
+                "Escalation is missing an action token; use the email link or contact support",
+            )
+
+        return await self.respond(
+            row.id,
+            action=action,
+            wire_token=str(wire),
+            comment=comment,
+            responder_email=responder_email,
+        )
 
     async def get_respond_context(
         self,

@@ -85,6 +85,25 @@ export function retryCase(caseId: string) {
   return apiFetch<CaseRetryResult>(`/cases/${caseId}/retry`, { method: 'POST' });
 }
 
+export type EscalationRespondResult = {
+  escalation_id: string;
+  case_id: string;
+  action: string;
+  status: string;
+  message?: string | null;
+  manager_comment?: string | null;
+};
+
+export function respondToCaseEscalation(
+  caseId: string,
+  body: { action: 'approve' | 'reject' | 'request_info'; comment?: string | null }
+) {
+  return apiFetch<EscalationRespondResult>(`/cases/${caseId}/escalation-respond`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export type ParsingConfirmationFields = {
   document_type: string;
   document_number?: string | null;

@@ -25,6 +25,11 @@ class FinanceDailyLogJobResponse(BaseModel):
     message: str | None = None
 
 
+class CaseEscalationRespondRequest(BaseModel):
+    action: str = Field(pattern="^(approve|reject|request_info)$")
+    comment: str | None = Field(default=None, max_length=4000)
+
+
 class EscalationRespondResult(BaseModel):
     escalation_id: UUID
     case_id: UUID

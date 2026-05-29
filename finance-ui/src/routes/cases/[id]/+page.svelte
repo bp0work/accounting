@@ -9,6 +9,7 @@
     fetchCase,
     fetchCaseTimeline,
     retryCase,
+    respondToCaseEscalation,
     confirmParsing,
     rejectParsing,
     overrideGlPeriodPost,
@@ -16,6 +17,13 @@
     type ParsingConfirmationFields,
     type TimelineEntry,
   } from '$lib/api/cases';
+  import {
+    caseReasonCode,
+    escalationActionConfig,
+    hasPendingEscalation,
+    showManualReviewPanel,
+    type EscalationUiAction,
+  } from '$lib/ap-escalation-actions';
   import {
     saveVendorExtractionHint,
     type VendorExtractionHintCreate,
@@ -41,6 +49,9 @@
   let parsingBusy = false;
   let parsingMessage = '';
   let rejectParsingReason = '';
+  let escalationComment = '';
+  let manualActionBusy = false;
+  let manualActionMessage = '';
 
   const confirmParsingRoles = new Set([
     'accounts_clerk',
@@ -143,7 +154,7 @@
     (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes) &&
     (!canRetryWithHints || canRetryTransientHermes);
 
-  $: id = $page.params.id;
+  $: caseId = $page.params.id ?? '';
 
   function resolveVendorName(caseItem: CaseItem): string {
     const meta = caseItem.workflow_metadata ?? {};
@@ -165,6 +176,15 @@
   $: canConfirmParsing =
     item?.status === 'pending_confirmation' && confirmParsingRoles.has(role);
   $: isExpenseConfirm = item?.type === 'expense_claim';
+
+  $: reasonCode = item ? caseReasonCode(item) : '';
+  $: showActionRequiredPanel = item ? showManualReviewPanel(item, role) : false;
+  $: manualActionConfig = item && showActionRequiredPanel ? escalationActionConfig(reasonCode, item) : null;
+  $: pendingEscalation = item ? hasPendingEscalation(item) : false;
+  $: showCounterpartyLink =
+    reasonCode === 'AP_CONTRACT_MISSING' ||
+    reasonCode === 'AP_VENDOR_INACTIVE' ||
+    reasonCode === 'AP_VENDOR_NOT_FOUND';
 
   $: if (item?.status === 'pending_confirmation') {
     const raw = item.workflow_metadata?.extracted_fields;
@@ -214,7 +234,7 @@
     teachFields = [];
     teachFieldsKey = '';
     try {
-      [item, timeline] = await Promise.all([fetchCase(id), fetchCaseTimeline(id)]);
+      [item, timeline] = await Promise.all([fetchCase(caseId), fetchCaseTimeline(caseId)]);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
     }
@@ -266,7 +286,7 @@
     overrideSubmitting = true;
     error = '';
     try {
-      const result = await overrideGlPeriodPost(glPeriodId, id, reason);
+      const result = await overrideGlPeriodPost(glPeriodId, caseId, reason);
       retryMessage = `Override authorized — case requeued (${result.status}).`;
       showOverrideModal = false;
       overrideReason = '';
@@ -299,7 +319,7 @@
         exchange_rate: parsingForm.exchange_rate?.trim() || null,
         payment_terms: parsingForm.payment_terms?.trim() || null,
       };
-      const result = await confirmParsing(id, body);
+      const result = await confirmParsing(caseId, body);
       parsingMessage = `Parsing confirmed (${result.correction_count} correction(s)) — case requeued.`;
       await load();
     } catch (e) {
@@ -320,7 +340,7 @@
     parsingMessage = '';
     error = '';
     try {
-      await rejectParsing(id, reason);
+      await rejectParsing(caseId, reason);
       parsingMessage = 'Parsing rejected — submitter notified.';
       rejectParsingReason = '';
       await load();
@@ -337,13 +357,55 @@
     retryMessage = '';
     error = '';
     try {
-      const result = await retryCase(id);
+      const result = await retryCase(caseId);
       retryMessage = `Requeued as ${result.status} (was ${result.previous_status}).`;
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Retry failed';
     } finally {
       retrying = false;
+    }
+  }
+
+  async function runManualAction(action: EscalationUiAction, label: string) {
+    if (!item || manualActionBusy || !manualActionConfig) return;
+    if (action === 'retry') {
+      await handleRetry();
+      return;
+    }
+    const comment = escalationComment.trim();
+    if (action === 'approve' && manualActionConfig.commentRequiredForPrimary && !comment) {
+      error = `A comment or value is required for ${label}.`;
+      return;
+    }
+    if (action === 'request_info' && manualActionConfig.commentRequiredForPrimary && !comment) {
+      error = 'Please provide the missing details or instructions.';
+      return;
+    }
+    if (action === 'reject' && manualActionConfig.commentRequiredForReject && !comment) {
+      error = 'Rejection reason is required.';
+      return;
+    }
+    if (!pendingEscalation) {
+      error = 'No pending escalation for this case — use Retry if the issue was fixed in setup.';
+      return;
+    }
+
+    manualActionBusy = true;
+    manualActionMessage = '';
+    error = '';
+    try {
+      const result = await respondToCaseEscalation(caseId, {
+        action: action as 'approve' | 'reject' | 'request_info',
+        comment: comment || null,
+      });
+      manualActionMessage = result.message ?? `${label} recorded.`;
+      escalationComment = '';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Action failed';
+    } finally {
+      manualActionBusy = false;
     }
   }
 
@@ -502,6 +564,82 @@
     </p>
     {#if item.status_reason && !item.error_reason}
       <p class="hint">{item.status_reason}</p>
+    {/if}
+    {#if showActionRequiredPanel && manualActionConfig}
+      <section class="action-required-box">
+        <h2>Action required</h2>
+        {#if reasonCode}
+          <p class="reason-code"><strong>Reason:</strong> {reasonCode.replaceAll('_', ' ')}</p>
+        {/if}
+        <p class="action-context">{manualActionConfig.contextMessage}</p>
+        {#if showCounterpartyLink}
+          <p class="hint">
+            <a href="/counterparty-accounts">Open Counterparty Accounts</a>
+          </p>
+        {/if}
+        {#if manualActionConfig.primary?.action === 'retry' || manualActionConfig.primary || manualActionConfig.secondary}
+          {#if manualActionConfig.commentRequiredForPrimary || manualActionConfig.commentRequiredForReject}
+            <label class="escalation-comment">
+              {manualActionConfig.commentRequiredForPrimary && reasonCode === 'AP_CURRENCY_CONVERSION_REQUIRED'
+                ? 'Exchange rate or override reason'
+                : 'Comment'}
+              <textarea
+                bind:value={escalationComment}
+                rows="3"
+                placeholder={manualActionConfig.commentRequiredForPrimary
+                  ? 'Required for primary action'
+                  : 'Required for reject'}
+              ></textarea>
+            </label>
+          {:else}
+            <label class="escalation-comment">
+              Comment (optional)
+              <textarea
+                bind:value={escalationComment}
+                rows="2"
+                placeholder="Optional note for the audit log"
+              ></textarea>
+            </label>
+          {/if}
+        {/if}
+        <div class="manual-action-buttons">
+          {#if manualActionConfig.primary}
+            <button
+              type="button"
+              class="approve"
+              disabled={manualActionBusy || retrying}
+              aria-busy={manualActionBusy || retrying}
+              onclick={() =>
+                runManualAction(manualActionConfig.primary!.action, manualActionConfig.primary!.label)}
+            >
+              {manualActionBusy ? 'Working…' : manualActionConfig.primary.label}
+            </button>
+          {/if}
+          {#if manualActionConfig.secondary}
+            <button
+              type="button"
+              class={manualActionConfig.secondary.action === 'reject' ? 'reject' : 'secondary'}
+              disabled={manualActionBusy || retrying}
+              aria-busy={manualActionBusy || retrying}
+              onclick={() =>
+                runManualAction(
+                  manualActionConfig.secondary!.action,
+                  manualActionConfig.secondary!.label
+                )}
+            >
+              {manualActionConfig.secondary.label}
+            </button>
+          {/if}
+        </div>
+        {#if !pendingEscalation && manualActionConfig.primary?.action !== 'retry'}
+          <p class="hint">
+            Email escalation is not pending — fix setup in Finance, then use Retry processing below.
+          </p>
+        {/if}
+        {#if manualActionMessage}
+          <p class="hint success">{manualActionMessage}</p>
+        {/if}
+      </section>
     {/if}
     {#if item.status === 'manual_review' || item.status === 'on_hold'}
       {@const review = manualReviewDetails(item)}
@@ -988,6 +1126,53 @@
     margin-top: 0.25rem;
     font-family: ui-monospace, monospace;
     font-size: 0.8rem;
+  }
+  .action-required-box {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 2px solid #f97316;
+    border-radius: 8px;
+    background: #fff7ed;
+  }
+  .action-required-box h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.05rem;
+    color: #9a3412;
+  }
+  .reason-code {
+    font-size: 0.85rem;
+    color: #7c2d12;
+    margin: 0 0 0.5rem;
+  }
+  .action-context {
+    margin: 0 0 0.75rem;
+    line-height: 1.45;
+  }
+  .escalation-comment {
+    display: block;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+  }
+  .escalation-comment textarea {
+    display: block;
+    width: 100%;
+    max-width: 480px;
+    margin-top: 0.35rem;
+    box-sizing: border-box;
+  }
+  .manual-action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .manual-action-buttons .secondary {
+    padding: 0.5rem 1rem;
+    border: 1px solid #64748b;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #334155;
+    font-weight: 600;
+    cursor: pointer;
   }
   .review-box {
     margin-top: 1rem;
