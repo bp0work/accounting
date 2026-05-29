@@ -13,6 +13,7 @@
     listCounterpartyAccounts,
     listPaymentTerms,
     listTaxCodes,
+    patchCounterparty,
     patchCounterpartyAccount,
   } from '$lib/api/finance-setup';
 
@@ -48,6 +49,14 @@
   let editTermId = $state('');
   let editCreditLimit = $state('');
   let editCreditCurrency = $state('SGD');
+
+  let editingCpId = $state<string | null>(null);
+  let editCpHasContract = $state(false);
+  let editCpContractReference = $state('');
+  let editCpContractStartDate = $state('');
+  let editCpContractExpiryDate = $state('');
+  let editCpSupplierOwner = $state('');
+  let editCpContractWarningDays = $state(30);
 
   let termCode = $state('');
   let termLabel = $state('');
@@ -88,17 +97,29 @@
       return;
     }
     try {
-      const isVendor = cpType === 'vendor' || cpType === 'supplier';
+      const isVendor = isVendorType(cpType);
+      const contractFields = isVendor
+        ? vendorContractPayload(
+            cpHasContract,
+            cpContractReference,
+            cpContractStartDate,
+            cpContractExpiryDate,
+            cpSupplierOwner,
+            cpContractWarningDays
+          )
+        : {
+            has_contract: false,
+            contract_reference: null,
+            contract_start_date: null,
+            contract_expiry_date: null,
+            supplier_owner: null,
+            contract_warning_days: 30,
+          };
       await createCounterparty({
         name,
         type: isVendor ? 'vendor' : cpType,
         code: cpCode || null,
-        has_contract: isVendor ? cpHasContract : false,
-        contract_reference: isVendor && cpContractReference.trim() ? cpContractReference.trim() : null,
-        contract_start_date: isVendor && cpContractStartDate ? cpContractStartDate : null,
-        contract_expiry_date: isVendor && cpContractExpiryDate ? cpContractExpiryDate : null,
-        supplier_owner: isVendor && cpSupplierOwner.trim() ? cpSupplierOwner.trim() : null,
-        contract_warning_days: isVendor ? cpContractWarningDays : 30,
+        ...contractFields,
       });
       cpName = '';
       cpCode = '';
@@ -119,6 +140,54 @@
     const t = String(value ?? '').toLowerCase();
     if (t === 'supplier') return 'vendor';
     return t || '—';
+  }
+
+  function isVendorType(value: unknown): boolean {
+    const t = String(value ?? '').toLowerCase();
+    return t === 'vendor' || t === 'supplier';
+  }
+
+  /** Set has_contract when checkbox is on or any contract field is filled. */
+  function vendorContractPayload(
+    hasContractCheckbox: boolean,
+    reference: string,
+    startDate: string,
+    expiryDate: string,
+    supplierOwner: string,
+    warningDays: number
+  ) {
+    const contract_reference = reference.trim() || null;
+    const contract_start_date = startDate || null;
+    const contract_expiry_date = expiryDate || null;
+    const hasAny = Boolean(contract_reference || contract_start_date || contract_expiry_date);
+    const has_contract = hasContractCheckbox || hasAny;
+    return {
+      has_contract,
+      contract_reference: has_contract ? contract_reference : null,
+      contract_start_date: has_contract ? contract_start_date : null,
+      contract_expiry_date: has_contract ? contract_expiry_date : null,
+      supplier_owner: supplierOwner.trim() || null,
+      contract_warning_days: warningDays,
+    };
+  }
+
+  function counterpartyById(id: unknown): Record<string, unknown> | undefined {
+    return counterparties.find((cp) => String(cp.id) === String(id));
+  }
+
+  function formatContractDate(value: unknown): string {
+    if (!value) return '—';
+    const d = String(value).slice(0, 10);
+    return d || '—';
+  }
+
+  function formatContractSummary(cp: Record<string, unknown> | undefined): string {
+    if (!cp || !isVendorType(cp.type)) return '—';
+    if (!cp.has_contract && !cp.contract_reference && !cp.contract_expiry_date) return '—';
+    const ref = cp.contract_reference ? String(cp.contract_reference) : '—';
+    const start = formatContractDate(cp.contract_start_date);
+    const end = formatContractDate(cp.contract_expiry_date);
+    return `${ref} · ${start} → ${end}`;
   }
 
   function contractExpiringSoon(cp: Record<string, unknown>): boolean {
@@ -221,6 +290,51 @@
     }
   }
 
+  function startEditCounterparty(cp: Record<string, unknown>) {
+    editingCpId = String(cp.id);
+    editCpHasContract = Boolean(cp.has_contract);
+    editCpContractReference = cp.contract_reference ? String(cp.contract_reference) : '';
+    editCpContractStartDate = cp.contract_start_date
+      ? String(cp.contract_start_date).slice(0, 10)
+      : '';
+    editCpContractExpiryDate = cp.contract_expiry_date
+      ? String(cp.contract_expiry_date).slice(0, 10)
+      : '';
+    editCpSupplierOwner = cp.supplier_owner ? String(cp.supplier_owner) : '';
+    editCpContractWarningDays = Number(cp.contract_warning_days ?? 30);
+    error = '';
+    msg = '';
+  }
+
+  function cancelEditCounterparty() {
+    editingCpId = null;
+  }
+
+  async function saveEditCounterparty(id: string) {
+    error = '';
+    msg = '';
+    const cp = counterpartyById(id);
+    if (!cp || !isVendorType(cp.type)) {
+      error = 'Contract fields apply to vendors only';
+      return;
+    }
+    try {
+      await patchCounterparty(id, vendorContractPayload(
+        editCpHasContract,
+        editCpContractReference,
+        editCpContractStartDate,
+        editCpContractExpiryDate,
+        editCpSupplierOwner,
+        editCpContractWarningDays
+      ));
+      editingCpId = null;
+      msg = 'Counterparty contract saved';
+      await loadAll();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Save failed';
+    }
+  }
+
   async function addTerm() {
     error = '';
     msg = '';
@@ -307,12 +421,48 @@
         />
       </div>
     {/if}
-    <ul>
+    <ul class="cp-list">
       {#each counterparties as cp}
-        <li>
-          {cp.name} ({displayCounterpartyType(cp.type)}) — {cp.code ?? 'no code'}
-          {#if contractExpiringSoon(cp)}
-            <span class="warn" title="Contract expiring soon">⚠️</span>
+        <li class:editing={editingCpId === String(cp.id)}>
+          <div class="cp-row">
+            <span>
+              {cp.name} ({displayCounterpartyType(cp.type)}) — {cp.code ?? 'no code'}
+              {#if isVendorType(cp.type) && (cp.has_contract || cp.contract_reference)}
+                <span class="contract-inline">
+                  — {formatContractSummary(cp)}
+                </span>
+              {/if}
+              {#if contractExpiringSoon(cp)}
+                <span class="warn" title="Contract expiring soon">⚠️</span>
+              {/if}
+            </span>
+            {#if isVendorType(cp.type)}
+              {#if editingCpId === String(cp.id)}
+                <button type="button" onclick={() => saveEditCounterparty(String(cp.id))}>Save contract</button>
+                <button type="button" class="secondary" onclick={cancelEditCounterparty}>Cancel</button>
+              {:else}
+                <button type="button" onclick={() => startEditCounterparty(cp)}>Edit contract</button>
+              {/if}
+            {/if}
+          </div>
+          {#if editingCpId === String(cp.id) && isVendorType(cp.type)}
+            <div class="row wrap vendor-contract cp-edit">
+              <label class="inline">
+                <input type="checkbox" bind:checked={editCpHasContract} />
+                Contract in place
+              </label>
+              <input bind:value={editCpContractReference} placeholder="Contract reference" maxlength="255" />
+              <input type="date" bind:value={editCpContractStartDate} title="Contract start date" />
+              <input type="date" bind:value={editCpContractExpiryDate} title="Contract expiry date" />
+              <input bind:value={editCpSupplierOwner} placeholder="Vendor owner (optional)" />
+              <input
+                type="number"
+                min="0"
+                bind:value={editCpContractWarningDays}
+                title="Days before expiry to show warning"
+                placeholder="Warning days"
+              />
+            </div>
           {/if}
         </li>
       {/each}
@@ -350,16 +500,48 @@
       </select>
       <button type="button" onclick={addSubaccount}>Add subaccount</button>
     </div>
+    {#if saCounterpartyId}
+      {@const selectedCp = counterpartyById(saCounterpartyId)}
+      {#if selectedCp && isVendorType(selectedCp.type)}
+        <p class="contract-panel">
+          <strong>Contract ({selectedCp.name}):</strong>
+          {#if selectedCp.has_contract || selectedCp.contract_reference || selectedCp.contract_expiry_date}
+            Ref {selectedCp.contract_reference ?? '—'} · Start {formatContractDate(selectedCp.contract_start_date)}
+            · Expiry {formatContractDate(selectedCp.contract_expiry_date)}
+            {#if selectedCp.supplier_owner}
+              · Owner {selectedCp.supplier_owner}
+            {/if}
+          {:else}
+            No contract on file — use <strong>Edit contract</strong> in Parent counterparties.
+          {/if}
+        </p>
+      {/if}
+    {/if}
     <table>
       <thead>
-        <tr><th>Code</th><th>Name</th><th>Parent</th><th>Terms</th><th>Credit limit</th><th>Active</th><th></th></tr>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Parent</th>
+          <th>Contract ref</th>
+          <th>Contract start</th>
+          <th>Contract expiry</th>
+          <th>Terms</th>
+          <th>Credit limit</th>
+          <th>Active</th>
+          <th></th>
+        </tr>
       </thead>
       <tbody>
         {#each subaccounts as row}
+          {@const parentCp = counterpartyById(row.counterparty_id)}
           <tr class:editing={editingId === String(row.id)}>
             <td>{row.account_code}</td>
             <td>{row.display_name}</td>
             <td>{row.counterparty_name}</td>
+            <td>{parentCp?.contract_reference ?? '—'}</td>
+            <td>{formatContractDate(parentCp?.contract_start_date)}</td>
+            <td>{formatContractDate(parentCp?.contract_expiry_date)}</td>
             <td>
               {#if editingId === String(row.id)}
                 <select bind:value={editTermId} class="cell-input">
@@ -496,4 +678,18 @@
   .warn { margin-left: 0.5rem; }
   .vendor-contract input { min-width: 12rem; }
   label.inline { display: inline-flex; gap: 0.35rem; align-items: center; }
+  .cp-list { list-style: none; padding: 0; }
+  .cp-list li { margin-bottom: 0.75rem; padding: 0.5rem; border: 1px solid #eee; border-radius: 4px; }
+  .cp-list li.editing { background: #f0f7ff; }
+  .cp-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: space-between; }
+  .contract-inline { color: #555; font-size: 0.9rem; }
+  .cp-edit { margin-top: 0.5rem; }
+  .contract-panel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+  }
 </style>
