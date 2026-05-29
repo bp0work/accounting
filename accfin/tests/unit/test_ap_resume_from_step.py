@@ -18,6 +18,7 @@ def test_reason_to_resume_step_mapping():
     assert REASON_TO_RESUME_STEP[_REASON_VENDOR_NOT_FOUND] == "2C"
     assert REASON_TO_RESUME_STEP[_REASON_DUPLICATE] == "2B"
     assert REASON_TO_RESUME_STEP[_REASON_COA_NOT_FOUND] == "2G"
+    assert REASON_TO_RESUME_STEP[_REASON_CURRENCY_CONVERSION] == "2F"
 
 
 def test_resume_step_reached_skips_preceding():
