@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.62-line-items-lazy-load"
+        return "0.14.63-line-items-set-committed"
 
     @property
     def edge_public_base_url(self) -> str:
