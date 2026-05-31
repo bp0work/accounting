@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.46-case-type-expense-claim-enum"
+        return "0.14.47-expense-extract-unwrap"
 
     @property
     def edge_public_base_url(self) -> str:
