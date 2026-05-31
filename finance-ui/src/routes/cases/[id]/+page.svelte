@@ -21,6 +21,8 @@
     caseReasonCode,
     escalationActionConfig,
     hasPendingEscalation,
+    manualActionButtonClass,
+    normalizeEscalationDisplayCopy,
     showManualReviewPanel,
     type EscalationUiAction,
   } from '$lib/ap-escalation-actions';
@@ -717,7 +719,7 @@
   >
     {#if item.is_overdue}<p class="badge warn">Overdue — past SLA threshold</p>{/if}
     {#if item.error_reason}
-      <p class="badge error">Error: {item.error_reason}</p>
+      <p class="badge error">Error: {normalizeEscalationDisplayCopy(item.error_reason)}</p>
     {/if}
     <p><strong>{item.case_number}</strong> · {item.type}</p>
     <p class="case-state" title="System status: {item.status}">
@@ -728,7 +730,7 @@
       <strong class="status-label">{item.status_label ?? item.status}</strong>
     </p>
     {#if item.status_reason && !item.error_reason}
-      <p class="hint">{item.status_reason}</p>
+      <p class="hint">{normalizeEscalationDisplayCopy(item.status_reason)}</p>
     {/if}
     {#if showActionRequiredPanel && manualActionConfig}
       <section class="action-required-box">
@@ -772,7 +774,7 @@
             {@const primaryAction = manualActionConfig.primary.action}
             <button
               type="button"
-              class={primaryAction === 'retry' ? 'retry' : 'approve'}
+              class={manualActionButtonClass(primaryAction, manualActionConfig)}
               disabled={manualLoadingAction !== null || retrying}
               aria-busy={manualLoadingAction === primaryAction ||
                 (primaryAction === 'retry' && retrying)}
@@ -787,7 +789,7 @@
           {#if manualActionConfig.retry}
             <button
               type="button"
-              class="retry"
+              class={manualActionButtonClass('retry', manualActionConfig)}
               disabled={manualLoadingAction !== null || retrying}
               aria-busy={manualLoadingAction === 'retry'}
               onclick={() => runManualAction('retry', manualActionConfig.retry!.label)}
@@ -799,7 +801,7 @@
             {@const secondaryAction = manualActionConfig.secondary.action}
             <button
               type="button"
-              class={manualActionConfig.secondary.action === 'reject' ? 'reject' : 'secondary'}
+              class={manualActionButtonClass(secondaryAction, manualActionConfig)}
               disabled={manualLoadingAction !== null || retrying}
               aria-busy={manualLoadingAction === secondaryAction}
               onclick={() =>
@@ -1521,6 +1523,10 @@
     color: #334155;
     font-weight: 600;
     cursor: pointer;
+  }
+  .manual-action-buttons .secondary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
   .review-box {
     margin-top: 1rem;

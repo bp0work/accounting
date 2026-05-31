@@ -20,6 +20,32 @@ function withSetupRetry(
   return { ...config, retry: { label: 'Retry' } };
 }
 
+/** Normalize legacy worker/API copy (Staff → Employee) for Finance UI display. */
+export function normalizeEscalationDisplayCopy(text: string): string {
+  return text
+    .replace(/\bregistered as staff\b/gi, 'registered as an employee')
+    .replace(/type:\s*Staff\b/g, 'type: Employee')
+    .replace(/\bStaff counterparty\b/g, 'Employee counterparty')
+    .replace(/\bStaff submitter\b/g, 'Employee submitter')
+    .replace(/\bStaff member\b/g, 'Employee');
+}
+
+/** Button class for escalation panel actions — Retry/Reject peers share neutral secondary styling. */
+export function manualActionButtonClass(
+  action: EscalationUiAction,
+  config: EscalationActionConfig
+): string {
+  const peerRetryReject =
+    config.primary?.action === 'retry' && config.secondary?.action === 'reject';
+  if (peerRetryReject && (action === 'retry' || action === 'reject')) {
+    return 'secondary';
+  }
+  if (action === 'retry') return 'secondary';
+  if (action === 'reject') return 'reject';
+  if (action === 'approve' || action === 'request_info') return 'approve';
+  return 'secondary';
+}
+
 const MANUAL_REVIEW_ROLES = new Set(['accounts_clerk', 'finance_manager', 'cfo']);
 
 export function canUseManualReviewActions(roleName: string | undefined | null): boolean {
@@ -56,7 +82,9 @@ function vendorLabel(caseItem: CaseItem): string {
 function contextForCode(code: string, caseItem: CaseItem): string {
   const vendor = vendorLabel(caseItem);
   const caseNum = caseItem.case_number;
-  const summary = String(caseItem.status_reason ?? caseItem.error_reason ?? '').trim();
+  const summary = normalizeEscalationDisplayCopy(
+    String(caseItem.status_reason ?? caseItem.error_reason ?? '').trim()
+  );
 
   switch (code) {
     case 'AP_CONTRACT_MISSING':
@@ -82,8 +110,9 @@ function contextForCode(code: string, caseItem: CaseItem): string {
       return `A possible duplicate invoice was detected. Use Override & Continue if this is not a duplicate, or Reject if it is.`;
     case 'EXP_SUBMITTER_NOT_FOUND':
       return (
-        'Submitter email is not registered as an Employee in Counterparty Accounts. Add an Employee ' +
-        'counterparty with matching contact email, then use Retry — or Reject to notify the submitter.'
+        summary ||
+        'Submitter email is not registered as an employee. Add an employee counterparty (type: Employee) ' +
+          'with contact email in Counterparty Accounts, then use Retry — or Reject to notify the submitter.'
       );
     case 'EXP_SUBMITTER_INACTIVE':
       return 'Employee submitter is inactive. Reactivate in Counterparty Accounts, then use Retry — or Reject.';
@@ -103,7 +132,7 @@ function contextForCode(code: string, caseItem: CaseItem): string {
     case 'HERMES_UNAVAILABLE':
       return `Document extraction timed out or Hermes was unavailable. Retry requeues processing when Ollama is healthy.`;
     default:
-      return summary || `Action required for case ${caseNum}.`;
+      return normalizeEscalationDisplayCopy(summary) || `Action required for case ${caseNum}.`;
   }
 }
 
