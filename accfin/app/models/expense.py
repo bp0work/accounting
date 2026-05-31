@@ -62,8 +62,8 @@ class ExpenseClaim(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("cases.id", ondelete="RESTRICT"), nullable=False
     )
     case_number: Mapped[str] = mapped_column(String(20), nullable=False)
-    claimant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    claimant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     claimant_name: Mapped[str] = mapped_column(String(200), nullable=False)
     submission_date: Mapped[date] = mapped_column(Date, nullable=False)

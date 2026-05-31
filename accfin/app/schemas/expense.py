@@ -80,7 +80,7 @@ class ExpenseClaimDetail(BaseModel):
     id: UUID
     case_id: UUID
     case_number: str
-    claimant_user_id: UUID
+    claimant_user_id: UUID | None = None
     category: str | None = None
     merchant: str | None = None
     amount_value: str

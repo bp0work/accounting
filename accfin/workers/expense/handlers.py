@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.clients.hermes import HermesClient, HermesError
 from app.models.case import Case, Counterparty
+from app.models.user import User
 from app.models.expense import ExpenseClaim, ExpenseLineItem
 from app.models.mail import Email, EmailAttachment
 from app.repositories.case import CaseRepository
@@ -401,7 +402,7 @@ class ExpenseWorkerService:
             metadata={"expense_account_code": expense_account.account_code if expense_account else None},
         )
 
-        claim = await self._ensure_claim(case, extracted, staff)
+        claim = await self._ensure_claim(case, extracted, staff, email)
         sgd_amount = Decimal(str(extracted.get("sgd_amount") or extracted.get("total_amount") or "0"))
         try:
             tax = Decimal(str(extracted.get("tax_amount") or "0"))
@@ -584,19 +585,40 @@ class ExpenseWorkerService:
         fields["expense_category"] = normalize_expense_category(flat.get("expense_category"))
         return fields, float(extraction.confidence_score or 0.85)
 
+    async def _resolve_claimant_user_id(
+        self,
+        staff: Counterparty | None,
+        email: Email | None,
+    ) -> UUID | None:
+        """Match submitter email to a platform user; None for email-only claimants."""
+        lookup = ""
+        if staff and (staff.contact_email or "").strip():
+            lookup = staff.contact_email.strip().lower()
+        elif email and (email.from_address or "").strip():
+            lookup = email.from_address.strip().lower()
+        if not lookup:
+            return None
+        result = await self._session.execute(
+            select(User.id).where(User.email.ilike(lookup)).limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def _ensure_claim(
         self,
         case: Case,
         extracted: dict,
         staff: Counterparty | None,
+        email: Email | None,
     ) -> ExpenseClaim:
+        claimant_id = await self._resolve_claimant_user_id(staff, email)
+        claimant_name = staff.name if staff else case.counterparty_name or "Employee"
         claim = await self._expense.get_claim_by_case(case.id)
         if claim is None:
             claim = ExpenseClaim(
                 case_id=case.id,
                 case_number=case.case_number,
-                claimant_id=staff.id if staff else case.assigned_to,
-                claimant_name=staff.name if staff else case.counterparty_name or "Staff",
+                claimant_id=claimant_id,
+                claimant_name=claimant_name,
                 submission_date=date.today(),
                 claim_period_from=parse_document_date(extracted) or date.today(),
                 claim_period_to=parse_document_date(extracted) or date.today(),
@@ -607,6 +629,9 @@ class ExpenseWorkerService:
                 submitted_via="email",
             )
             await self._expense.add_claim(claim)
+        else:
+            claim.claimant_id = claimant_id
+            claim.claimant_name = claimant_name
         claim.total_claimed = Decimal(str(extracted.get("total_amount") or "0"))
         claim.currency = "SGD"
         if not claim.line_items:
