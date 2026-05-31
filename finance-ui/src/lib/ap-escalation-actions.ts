@@ -7,10 +7,18 @@ export type EscalationUiAction = 'approve' | 'reject' | 'request_info' | 'retry'
 export type EscalationActionConfig = {
   primary: { label: string; action: EscalationUiAction } | null;
   secondary: { label: string; action: EscalationUiAction } | null;
+  /** Extra Retry when primary/secondary are other actions (e.g. Provide Details + Reject). */
+  retry?: { label: string } | null;
   commentRequiredForPrimary: boolean;
   commentRequiredForReject: boolean;
   contextMessage: string;
 };
+
+function withSetupRetry(
+  config: Omit<EscalationActionConfig, 'retry'>
+): EscalationActionConfig {
+  return { ...config, retry: { label: 'Retry' } };
+}
 
 const MANUAL_REVIEW_ROLES = new Set(['accounts_clerk', 'finance_manager', 'cfo']);
 
@@ -108,13 +116,13 @@ export function escalationActionConfig(
   switch (reasonCode) {
     case 'AP_CONTRACT_MISSING':
     case 'AP_VENDOR_INACTIVE':
-      return {
+      return withSetupRetry({
         primary: { label: 'Resubmit', action: 'approve' },
         secondary: { label: 'Reject', action: 'reject' },
         commentRequiredForPrimary: false,
         commentRequiredForReject: true,
         contextMessage,
-      };
+      });
     case 'AP_PAYMENT_TERMS_MISMATCH':
     case 'AP_SENDER_NOT_VALIDATED':
       return {
@@ -125,13 +133,13 @@ export function escalationActionConfig(
         contextMessage,
       };
     case 'AP_COA_NOT_FOUND':
-      return {
+      return withSetupRetry({
         primary: { label: 'Confirm Account & Continue', action: 'approve' },
         secondary: { label: 'Reject', action: 'reject' },
         commentRequiredForPrimary: false,
         commentRequiredForReject: true,
         contextMessage,
-      };
+      });
     case 'AP_CURRENCY_CONVERSION_REQUIRED':
       return {
         primary: { label: 'Apply Rate & Continue', action: 'approve' },
@@ -142,7 +150,7 @@ export function escalationActionConfig(
       };
     case 'AP_VENDOR_NOT_FOUND':
       return {
-        primary: null,
+        primary: { label: 'Retry', action: 'retry' },
         secondary: { label: 'Reject', action: 'reject' },
         commentRequiredForPrimary: false,
         commentRequiredForReject: true,
@@ -157,13 +165,13 @@ export function escalationActionConfig(
         contextMessage,
       };
     case 'AP_PARSING_INCOMPLETE':
-      return {
+      return withSetupRetry({
         primary: { label: 'Provide Details', action: 'request_info' },
         secondary: { label: 'Ask sender to resubmit', action: 'reject' },
         commentRequiredForPrimary: true,
         commentRequiredForReject: true,
         contextMessage,
-      };
+      });
     case 'EXP_SUBMITTER_INACTIVE':
       return {
         primary: { label: 'Retry', action: 'retry' },
@@ -190,13 +198,13 @@ export function escalationActionConfig(
         contextMessage,
       };
     case 'EXP_COA_NOT_FOUND':
-      return {
+      return withSetupRetry({
         primary: { label: 'Confirm Account & Continue', action: 'approve' },
         secondary: { label: 'Reject', action: 'reject' },
         commentRequiredForPrimary: false,
         commentRequiredForReject: true,
         contextMessage,
-      };
+      });
     case 'EXP_SUBMITTER_NOT_FOUND':
       return {
         primary: { label: 'Retry', action: 'retry' },
@@ -214,13 +222,13 @@ export function escalationActionConfig(
         contextMessage,
       };
     case 'EXP_PARSING_INCOMPLETE':
-      return {
+      return withSetupRetry({
         primary: { label: 'Provide Details', action: 'request_info' },
         secondary: { label: 'Ask sender to resubmit', action: 'reject' },
         commentRequiredForPrimary: true,
         commentRequiredForReject: true,
         contextMessage,
-      };
+      });
     case 'HERMES_TIMEOUT':
     case 'HERMES_UNAVAILABLE':
       return {

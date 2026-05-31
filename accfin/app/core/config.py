@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.57-claimant-id-fix"
+        return "0.14.58-escalation-retry-panels"
 
     @property
     def edge_public_base_url(self) -> str:

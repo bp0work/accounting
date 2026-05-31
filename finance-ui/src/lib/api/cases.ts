@@ -112,7 +112,7 @@ export type EscalationRespondResult = {
 
 export function respondToCaseEscalation(
   caseId: string,
-  body: { action: 'approve' | 'reject' | 'request_info'; comment?: string | null }
+  body: { action: 'approve' | 'reject' | 'request_info' | 'retry'; comment?: string | null }
 ) {
   return apiFetch<EscalationRespondResult>(`/cases/${caseId}/escalation-respond`, {
     method: 'POST',

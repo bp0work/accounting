@@ -88,3 +88,63 @@ async def test_case_escalation_respond_forbidden_for_auditor(
         json={"action": "reject", "comment": "n/a"},
     )
     assert response.status_code == 403
+
+
+@pytest.mark.integration
+async def test_case_escalation_respond_retry(
+    db_session, async_client: AsyncClient, clerk_auth_headers: dict[str, str]
+) -> None:
+    mailbox = (await db_session.execute(select(MailGatewayConfig).limit(1))).scalar_one()
+
+    case = Case(
+        id=uuid4(),
+        case_number=f"CAS-UI-RETRY-{uuid4().hex[:8]}",
+        type="expense_claim",
+        status="manual_review",
+        subject="pytest escalation retry",
+        workflow_metadata={
+            "escalation_pending": True,
+            "reason_code": "EXP_SUBMITTER_NOT_FOUND",
+            "resume_from_step": "2C",
+        },
+    )
+    db_session.add(case)
+    await db_session.flush()
+
+    esc_id = uuid4()
+    wire, token_hash, expires = issue_escalation_token(escalation_id=esc_id, case_id=case.id)
+    escalation = CaseEscalation(
+        id=esc_id,
+        case_id=case.id,
+        originating_mailbox_id=mailbox.id,
+        target_email=mailbox.email_address,
+        status="pending",
+        reason_code="EXP_SUBMITTER_NOT_FOUND",
+        summary="Submitter not found",
+        context={"notification": {"wire_token": wire}},
+        response_token_hash=token_hash,
+        token_expires_at=expires,
+    )
+    db_session.add(escalation)
+    meta = dict(case.workflow_metadata or {})
+    meta["escalation_id"] = str(esc_id)
+    case.workflow_metadata = meta
+    await db_session.commit()
+
+    response = await async_client.post(
+        f"/api/cases/{case.id}/escalation-respond",
+        headers=clerk_auth_headers,
+        json={"action": "retry", "comment": "Employee counterparty added"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["action"] == "retry"
+    assert data["status"] == "approved"
+
+    await db_session.refresh(case)
+    await db_session.refresh(escalation)
+    assert escalation.status == "approved"
+    assert case.status == "classified"
+    assert case.workflow_metadata.get("escalation_pending") is False
+    assert case.workflow_metadata.get("resume_from_step") == "2C"
+    assert case.workflow_metadata.get("manual_retry") is True
