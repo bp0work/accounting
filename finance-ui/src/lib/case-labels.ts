@@ -76,11 +76,24 @@ export function isExcludedFromRecentCases(
   return Date.now() - new Date(ts).getTime() > MS_24H;
 }
 
+const EXTRACTED_FIELD_LABELS: Record<string, string> = {
+  document_date: 'Document date',
+  document_number: 'Document number',
+  vendor_name: 'Vendor name',
+  tax_amount: 'Tax amount',
+  invoice_date: 'Document date',
+  invoice_number: 'Document number',
+  merchant_name: 'Vendor name',
+  gst_amount: 'Tax amount',
+  sender_validated: 'Document validated',
+  gl_account_id: 'GL account',
+  exchange_rate: 'Exchange rate',
+};
+
 /** Inbound submitter — API `submitted_by` (email from_name or from_address). */
 /** Display label for extracted / review field keys from workflow metadata. */
 export function extractedFieldLabel(fieldKey: string): string {
-  if (fieldKey === 'sender_validated') return 'Document validated';
-  return fieldKey.replaceAll('_', ' ');
+  return EXTRACTED_FIELD_LABELS[fieldKey] ?? fieldKey.replaceAll('_', ' ');
 }
 
 export function submittedByDisplay(item: {
