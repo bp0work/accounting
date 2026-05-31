@@ -49,8 +49,8 @@ from workers.common.processing_failure import route_processing_failure
 logger = logging.getLogger(__name__)
 
 EXPENSE_CASE_TYPES = frozenset({"expense_claim"})
-STAFF_PAYABLE_ACCOUNT_CODE = "2110"
-GST_INPUT_ACCOUNT_CODE = "1190"
+STAFF_PAYABLE_ACCOUNT_CODE = "2040"
+GST_INPUT_ACCOUNT_CODE = "2011"
 
 _REASON_PARSING = "EXP_PARSING_INCOMPLETE"
 _REASON_DUPLICATE = "EXP_DUPLICATE"
