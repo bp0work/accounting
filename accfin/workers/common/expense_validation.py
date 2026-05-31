@@ -84,6 +84,7 @@ async def check_expense_duplicate(
         .where(
             Case.type == "expense_claim",
             Case.created_at >= cutoff,
+            Case.status.notin_(["rejected", "case_rejected", "cancelled"]),
         )
         .order_by(Case.created_at.desc())
         .limit(100)

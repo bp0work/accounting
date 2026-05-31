@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.53-expense-confirm-resume-fix"
+        return "0.14.54-duplicate-check-fix"
 
     @property
     def edge_public_base_url(self) -> str:
