@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.63-line-items-set-committed"
+        return "0.14.64-period-closed-escalation"
 
     @property
     def edge_public_base_url(self) -> str:

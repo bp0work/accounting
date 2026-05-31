@@ -110,6 +110,15 @@ class ExecutiveMailService:
         )
         return result.scalar_one_or_none()
 
+    async def cancel_pending_escalation(self, case_id: UUID) -> CaseEscalation | None:
+        """Cancel an open manager escalation so a fresh one can be created."""
+        existing = await self._pending_escalation(case_id)
+        if existing is None:
+            return None
+        existing.status = "cancelled"
+        await self._session.flush()
+        return existing
+
     async def _inbound_attachment_count(self, email_id: UUID | None) -> int:
         if email_id is None:
             return 0

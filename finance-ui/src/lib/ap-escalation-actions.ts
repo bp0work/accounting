@@ -128,6 +128,8 @@ function contextForCode(code: string, caseItem: CaseItem): string {
       return summary || `Expense parsing incomplete for case ${caseNum}. Provide details or reject.`;
     case 'EXP_DUPLICATE':
       return `Possible duplicate expense claim. Use Override & Continue if this is not a duplicate, or Reject if it is.`;
+    case 'PERIOD_CLOSED':
+      return 'Expense claim date falls in a closed GL period.';
     case 'HERMES_TIMEOUT':
     case 'HERMES_UNAVAILABLE':
       return `Document extraction timed out or Hermes was unavailable. Retry requeues processing when Ollama is healthy.`;
@@ -250,6 +252,14 @@ export function escalationActionConfig(
         commentRequiredForReject: true,
         contextMessage,
       };
+    case 'PERIOD_CLOSED':
+      return {
+        primary: { label: 'Approve', action: 'approve' },
+        secondary: { label: 'Reject', action: 'reject' },
+        commentRequiredForPrimary: false,
+        commentRequiredForReject: true,
+        contextMessage,
+      };
     case 'EXP_PARSING_INCOMPLETE':
       return withSetupRetry({
         primary: { label: 'Provide Details', action: 'request_info' },
@@ -284,6 +294,6 @@ export function showManualReviewPanel(caseItem: CaseItem, roleName: string | und
   const code = caseReasonCode(caseItem);
   if (code === 'HERMES_TIMEOUT' || code === 'HERMES_UNAVAILABLE') return true;
   if (hasPendingEscalation(caseItem)) return true;
-  if (code.startsWith('AP_') || code.startsWith('EXP_')) return true;
+  if (code.startsWith('AP_') || code.startsWith('EXP_') || code === 'PERIOD_CLOSED') return true;
   return Boolean(caseItem.error_reason || caseItem.status_reason);
 }
