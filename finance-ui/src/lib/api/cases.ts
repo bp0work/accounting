@@ -36,8 +36,8 @@ export type CaseItem = {
 
 export type JournalEntryApprovalDetail = {
   vendor?: string | null;
-  invoice_number?: string | null;
-  invoice_date?: string | null;
+  document_number?: string | null;
+  document_date?: string | null;
   document_type?: string | null;
   amount_sgd?: string | null;
   gst?: string | null;

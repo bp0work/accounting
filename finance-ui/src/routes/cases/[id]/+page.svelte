@@ -1078,13 +1078,13 @@
               <dt>Vendor</dt>
               <dd>{journalApproval.vendor}</dd>
             {/if}
-            {#if journalApproval.invoice_number}
-              <dt>Invoice number</dt>
-              <dd>{journalApproval.invoice_number}</dd>
+            {#if journalApproval.document_number}
+              <dt>Document number</dt>
+              <dd>{journalApproval.document_number}</dd>
             {/if}
-            {#if journalApproval.invoice_date}
-              <dt>Invoice date</dt>
-              <dd>{journalApproval.invoice_date}</dd>
+            {#if journalApproval.document_date}
+              <dt>Document date</dt>
+              <dd>{journalApproval.document_date}</dd>
             {/if}
             {#if journalApproval.document_type}
               <dt>Document type</dt>
