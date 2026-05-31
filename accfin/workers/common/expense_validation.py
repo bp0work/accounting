@@ -11,35 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.case import Case, Counterparty
 from app.models.expense import ExpensePolicy
+from app.utils.expense_categories import (
+    CATEGORY_EXPENSE_ACCOUNT_CODES,
+    normalize_expense_category,
+)
 from workers.common.ap_validation import extract_sender_validation, resolve_ap_sgd_amount
 
 EXPENSE_DOCUMENT_TYPES = frozenset(
     {"receipt", "invoice", "credit_card_statement", "expense_claim"}
 )
-EXPENSE_CATEGORIES = frozenset(
-    {
-        "meals",
-        "travel",
-        "transport",
-        "accommodation",
-        "office_supplies",
-        "government_fees",
-        "entertainment",
-        "other",
-    }
-)
-
-# Preferred GL codes by category (tenant may configure accounts with these codes).
-CATEGORY_EXPENSE_ACCOUNT_CODES: dict[str, str] = {
-    "meals": "5100",
-    "entertainment": "5100",
-    "travel": "5200",
-    "transport": "5200",
-    "accommodation": "5300",
-    "office_supplies": "5400",
-    "government_fees": "5500",
-    "other": "5590",
-}
 
 CATEGORY_POLICY_NAME: dict[str, str] = {
     "meals": "meal_daily_limit",
@@ -58,17 +38,6 @@ PARSING_MANDATORY_FIELDS = (
 )
 
 PARSING_OPTIONAL_FIELDS = ("business_purpose",)
-
-
-def normalize_expense_category(raw: str | None) -> str:
-    if not raw:
-        return "other"
-    key = str(raw).strip().lower().replace("-", "_").replace(" ", "_")
-    if key == "transport":
-        return "travel"
-    if key in EXPENSE_CATEGORIES:
-        return key
-    return "other"
 
 
 def expense_parsing_missing(extracted: dict) -> list[str]:

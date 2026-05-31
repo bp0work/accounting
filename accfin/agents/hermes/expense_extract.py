@@ -14,7 +14,7 @@ from app.schemas.hermes import (
     ExtractedExpenseLineItem,
     ExtractExpenseClaimOutput,
 )
-from workers.common.expense_validation import normalize_expense_category
+from app.utils.expense_categories import normalize_expense_category
 
 logger = logging.getLogger(__name__)
 
