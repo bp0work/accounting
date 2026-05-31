@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.50-coa-expense-parsing-ui",
+  "version": "0.14.51-expense-step2a-parsing-order",
   "private": true,
   "type": "module",
   "scripts": {

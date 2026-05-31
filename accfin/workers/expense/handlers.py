@@ -166,8 +166,18 @@ class ExpenseWorkerService:
 
         # ── Step 2A: Parsing ─────────────────────────────────────────
         if _resume_step_reached(resume_from, "2A") and not overrides.get("override_parsing"):
-            sender_ok = str(extracted.get("sender_validated", "false")).lower() == "true"
-            missing = expense_parsing_missing(extracted, sender_validated=sender_ok)
+            if resume_from is None and not use_stored:
+                if await requires_parsing_confirmation(self._session, case, email):
+                    return await pause_for_parsing_confirmation(
+                        self._session,
+                        case=case,
+                        email=email,
+                        extracted_fields=expense_fields_to_confirmation(extracted),
+                        extraction_confidence=confidence_f,
+                        actor_name="expense-worker",
+                    )
+
+            missing = expense_parsing_missing(extracted)
             if missing or confidence_f < 0.70:
                 missing_label = ", ".join(missing) if missing else "low extraction confidence"
                 summary = (
@@ -207,19 +217,6 @@ class ExpenseWorkerService:
                 "parsing_completed",
                 description=f"Expense parsing OK — confidence {confidence_f:.2f}",
             )
-            if (
-                resume_from is None
-                and not use_stored
-                and await requires_parsing_confirmation(self._session, case, email)
-            ):
-                return await pause_for_parsing_confirmation(
-                    self._session,
-                    case=case,
-                    email=email,
-                    extracted_fields=expense_fields_to_confirmation(extracted),
-                    extraction_confidence=confidence_f,
-                    actor_name="expense-worker",
-                )
 
         _update_meta(case, {"extracted_fields": extracted, "extraction_confidence": confidence_f})
 
