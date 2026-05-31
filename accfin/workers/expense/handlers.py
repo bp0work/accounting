@@ -603,6 +603,14 @@ class ExpenseWorkerService:
         )
         return result.scalar_one_or_none()
 
+    async def _load_claim_with_line_items(self, case_id: UUID) -> ExpenseClaim | None:
+        result = await self._session.execute(
+            select(ExpenseClaim)
+            .where(ExpenseClaim.case_id == case_id, ExpenseClaim.deleted_at.is_(None))
+            .options(selectinload(ExpenseClaim.line_items))
+        )
+        return result.scalar_one_or_none()
+
     async def _ensure_claim(
         self,
         case: Case,
@@ -612,8 +620,9 @@ class ExpenseWorkerService:
     ) -> ExpenseClaim:
         claimant_id = await self._resolve_claimant_user_id(staff, email)
         claimant_name = staff.name if staff else case.counterparty_name or "Employee"
-        claim = await self._expense.get_claim_by_case(case.id)
-        if claim is None:
+        claim = await self._load_claim_with_line_items(case.id)
+        is_new = claim is None
+        if is_new:
             claim = ExpenseClaim(
                 case_id=case.id,
                 case_number=case.case_number,
@@ -634,7 +643,7 @@ class ExpenseWorkerService:
             claim.claimant_name = claimant_name
         claim.total_claimed = Decimal(str(extracted.get("total_amount") or "0"))
         claim.currency = "SGD"
-        if not claim.line_items:
+        if is_new or not claim.line_items:
             gl_uuid = self._parse_gl_account_id(extracted.get("gl_account_id"))
             claim.line_items.append(
                 ExpenseLineItem(
