@@ -28,6 +28,7 @@
     saveVendorExtractionHint,
     type VendorExtractionHintCreate,
   } from '$lib/api/vendor-hints';
+  import { listCoaAccounts, type CoaAccountItem } from '$lib/api/coa';
   import { extractedFieldLabel, submittedByDisplay } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { sessionUser } from '$lib/stores/session';
@@ -52,6 +53,8 @@
   let escalationComment = '';
   let manualLoadingAction: EscalationUiAction | null = null;
   let manualActionMessage = '';
+  let expenseCoaAccounts: CoaAccountItem[] = [];
+  let expenseCoaLoading = false;
 
   const confirmParsingRoles = new Set([
     'accounts_clerk',
@@ -75,6 +78,7 @@
     payment_terms: '',
     expense_category: 'other',
     business_purpose: '',
+    gl_account_id: '',
     sender_validated: false,
   };
 
@@ -220,6 +224,7 @@
         payment_terms: f.payment_terms != null ? String(f.payment_terms) : '',
         expense_category: f.expense_category != null ? String(f.expense_category) : 'other',
         business_purpose: f.business_purpose != null ? String(f.business_purpose) : '',
+        gl_account_id: f.gl_account_id != null ? String(f.gl_account_id) : '',
         sender_validated:
           String(f.sender_validated ?? 'false').toLowerCase() === 'true',
       };
@@ -243,6 +248,17 @@
 
   onMount(load);
 
+  async function loadExpenseCoaAccounts() {
+    expenseCoaLoading = true;
+    try {
+      expenseCoaAccounts = await listCoaAccounts({ account_type: 'expense', is_active: true });
+    } catch {
+      expenseCoaAccounts = [];
+    } finally {
+      expenseCoaLoading = false;
+    }
+  }
+
   async function load() {
     error = '';
     retryMessage = '';
@@ -252,6 +268,11 @@
     teachFieldsKey = '';
     try {
       [item, timeline] = await Promise.all([fetchCase(caseId), fetchCaseTimeline(caseId)]);
+      if (item?.status === 'pending_confirmation' && item.type === 'expense_claim') {
+        await loadExpenseCoaAccounts();
+      } else {
+        expenseCoaAccounts = [];
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
     }
@@ -338,6 +359,7 @@
         payment_terms: parsingForm.payment_terms?.trim() || null,
         expense_category: parsingForm.expense_category?.trim() || null,
         business_purpose: parsingForm.business_purpose?.trim() || null,
+        gl_account_id: parsingForm.gl_account_id?.trim() || null,
       };
       const result = await confirmParsing(caseId, body);
       parsingMessage = `Parsing confirmed (${result.correction_count} correction(s)) — case requeued.`;
@@ -812,15 +834,14 @@
               <input type="text" bind:value={parsingForm.merchant_name} />
             </label>
             <label>
-              Expense category
-              <select bind:value={parsingForm.expense_category}>
-                <option value="meals">Meals</option>
-                <option value="travel">Travel</option>
-                <option value="accommodation">Accommodation</option>
-                <option value="office_supplies">Office supplies</option>
-                <option value="government_fees">Government fees</option>
-                <option value="entertainment">Entertainment</option>
-                <option value="other">Other</option>
+              Expense GL account
+              <select bind:value={parsingForm.gl_account_id} disabled={expenseCoaLoading}>
+                <option value="">
+                  {expenseCoaLoading ? 'Loading accounts…' : 'Select account…'}
+                </option>
+                {#each expenseCoaAccounts as acct (acct.id)}
+                  <option value={acct.id}>{acct.account_code} — {acct.account_name}</option>
+                {/each}
               </select>
             </label>
             <label>

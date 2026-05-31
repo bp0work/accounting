@@ -1,6 +1,6 @@
 # AI Finance Operations Platform — Implementation Monorepo
 
-**Release version:** `0.14.48-empty-extraction-parsing-confirm` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`).
+**Release version:** `0.14.50-coa-expense-parsing-ui` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`).
 
 Runnable code for the bp0.work finance platform. **Application code** lives here; **release-synced specification excerpts** for the current deploy are under `platform_dox/` (canonical working copies may also exist as a sibling folder next to `application/` on the operator workstation).
 

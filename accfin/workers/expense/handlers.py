@@ -380,14 +380,11 @@ class ExpenseWorkerService:
             )
 
         # ── Step 2G: COA mapping ───────────────────────────────────────
-        category = normalize_expense_category(extracted.get("expense_category"))
-        expense_code = expense_account_code_for_category(category)
-        expense_account = await self._ledger.get_account_by_code(expense_code)
-        if expense_account is None:
-            expense_account = await self._ledger.get_account_by_code("5500")
+        expense_account = await self._resolve_expense_account(extracted)
 
         if _resume_step_reached(resume_from, "2G") and not overrides.get("override_coa"):
             if expense_account is None:
+                category = normalize_expense_category(extracted.get("expense_category"))
                 summary = (
                     f"Could not map expense category {category} to a GL account. "
                     "Please configure the chart of accounts."
@@ -403,8 +400,8 @@ class ExpenseWorkerService:
         await self._add_timeline(
             case,
             "coa_mapped",
-            description=f"Expense account {expense_account.account_code if expense_account else expense_code}",
-            metadata={"expense_account_code": expense_account.account_code if expense_account else expense_code},
+            description=f"Expense account {expense_account.account_code if expense_account else 'unknown'}",
+            metadata={"expense_account_code": expense_account.account_code if expense_account else None},
         )
 
         claim = await self._ensure_claim(case, extracted, staff)
@@ -615,6 +612,7 @@ class ExpenseWorkerService:
         claim.total_claimed = Decimal(str(extracted.get("sgd_amount") or extracted.get("total_amount") or "0"))
         claim.currency = "SGD"
         if not claim.line_items:
+            gl_uuid = self._parse_gl_account_id(extracted.get("gl_account_id"))
             claim.line_items.append(
                 ExpenseLineItem(
                     line_number=1,
@@ -625,9 +623,32 @@ class ExpenseWorkerService:
                     currency="SGD",
                     amount_claimed=claim.total_claimed,
                     amount_sgd=claim.total_claimed,
+                    gl_account_id=gl_uuid,
                 )
             )
         return claim
+
+    async def _resolve_expense_account(self, extracted: dict):
+        gl_uuid = self._parse_gl_account_id(extracted.get("gl_account_id"))
+        if gl_uuid is not None:
+            account = await self._ledger.get_account_by_id(gl_uuid)
+            if account is not None:
+                return account
+        category = normalize_expense_category(extracted.get("expense_category"))
+        expense_code = expense_account_code_for_category(category)
+        account = await self._ledger.get_account_by_code(expense_code)
+        if account is None:
+            account = await self._ledger.get_account_by_code("5500")
+        return account
+
+    @staticmethod
+    def _parse_gl_account_id(raw: object | None) -> UUID | None:
+        if raw is None or str(raw).strip() == "":
+            return None
+        try:
+            return UUID(str(raw).strip())
+        except (TypeError, ValueError):
+            return None
 
     async def _create_expense_journal(
         self,

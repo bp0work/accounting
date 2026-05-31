@@ -22,6 +22,14 @@ class LedgerRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_account_by_id(self, account_id: UUID) -> CoaAccount | None:
+        result = await self._session.execute(
+            select(CoaAccount).where(
+                CoaAccount.id == account_id, CoaAccount.is_active.is_(True)
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def next_entry_number(self) -> str:
         year = datetime.now(UTC).year
         prefix = f"JE-{year}-"

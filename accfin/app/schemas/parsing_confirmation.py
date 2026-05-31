@@ -22,6 +22,7 @@ class ParsingConfirmationFields(BaseModel):
     payment_terms: str | None = None
     expense_category: str | None = None
     business_purpose: str | None = None
+    gl_account_id: UUID | None = None
     sender_validated: bool = False
 
     @model_validator(mode="after")
