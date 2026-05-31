@@ -74,11 +74,11 @@ function contextForCode(code: string, caseItem: CaseItem): string {
       return `A possible duplicate invoice was detected. Use Override & Continue if this is not a duplicate, or Reject if it is.`;
     case 'EXP_SUBMITTER_NOT_FOUND':
       return (
-        'Submitter email is not registered as Staff in Counterparty Accounts. Add a Staff ' +
+        'Submitter email is not registered as an Employee in Counterparty Accounts. Add an Employee ' +
         'counterparty with matching contact email, then use Retry — or Reject to notify the submitter.'
       );
     case 'EXP_SUBMITTER_INACTIVE':
-      return 'Staff submitter is inactive. Reactivate in Counterparty Accounts, then Resubmit — or Reject.';
+      return 'Employee submitter is inactive. Reactivate in Counterparty Accounts, then Resubmit — or Reject.';
     case 'EXP_POLICY_EXCEEDED':
       return `Expense exceeds T&E policy limits. Accept with an override reason in the comment field, or Reject.`;
     case 'EXP_RECEIPT_INVALID':

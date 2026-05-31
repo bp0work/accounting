@@ -124,7 +124,7 @@ async def lookup_staff_by_email(
     result = await session.execute(
         select(Counterparty)
         .where(
-            Counterparty.type == "staff",
+            Counterparty.type == "employee",
             Counterparty.contact_email.isnot(None),
         )
         .order_by(Counterparty.name.asc())

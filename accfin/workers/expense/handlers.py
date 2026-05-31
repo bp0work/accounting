@@ -268,8 +268,8 @@ class ExpenseWorkerService:
             staff, staff_status = await lookup_staff_by_email(self._session, sender_email)
             if staff_status == "not_found":
                 summary = (
-                    f"Submitter {sender_email} is not registered as staff. Staff must be added "
-                    "as a counterparty (type: Staff) with contact email before expense claims "
+                    f"Submitter {sender_email} is not registered as an employee. Employee must be added "
+                    "as a counterparty (type: Employee) with contact email before expense claims "
                     "can be processed."
                 )
                 return await self._escalate_step(
@@ -282,7 +282,7 @@ class ExpenseWorkerService:
                 )
             if staff_status == "inactive":
                 summary = (
-                    f"Staff member {staff.name if staff else sender_email} is inactive. "
+                    f"Employee {staff.name if staff else sender_email} is inactive. "
                     "Please advise: a) reactivate and proceed, or b) reject."
                 )
                 return await self._escalate_step(
@@ -445,7 +445,7 @@ class ExpenseWorkerService:
         gst_account = await self._ledger.get_account_by_code(GST_INPUT_ACCOUNT_CODE) if tax > 0 else None
 
         if payable_account is None:
-            return await self._route_failure(case, email, "ACCOUNT_NOT_FOUND", "Staff payable account missing")
+            return await self._route_failure(case, email, "ACCOUNT_NOT_FOUND", "Employee payable account missing")
 
         auto_post = tier <= 1
         journal_id = await self._create_expense_journal(
