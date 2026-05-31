@@ -144,8 +144,15 @@ class ExpenseWorkerService:
         else:
             extracted, confidence_f = await self._extract_from_email(case, email)
             if extracted is None:
-                return await self._route_failure(
-                    case, email, "EMPTY_EXTRACTION", "Expense extraction failed"
+                extracted = {}
+                confidence_f = 0.0
+                return await pause_for_parsing_confirmation(
+                    self._session,
+                    case=case,
+                    email=email,
+                    extracted_fields=expense_fields_to_confirmation(extracted),
+                    extraction_confidence=confidence_f,
+                    actor_name="expense-worker",
                 )
 
         sender_val = extract_sender_validation(
