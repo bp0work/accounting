@@ -55,6 +55,7 @@
   let manualActionMessage = '';
   let expenseCoaAccounts: CoaAccountItem[] = [];
   let expenseCoaLoading = false;
+  let reviewCoaAccounts: CoaAccountItem[] = [];
 
   const confirmParsingRoles = new Set([
     'accounts_clerk',
@@ -70,13 +71,11 @@
     document_date: '',
     due_date: '',
     vendor_name: '',
-    merchant_name: '',
     total_amount: '',
-    gst_amount: '',
+    tax_amount: '',
     currency: 'SGD',
     exchange_rate: '',
     payment_terms: '',
-    expense_category: 'other',
     business_purpose: '',
     gl_account_id: '',
     sender_validated: false,
@@ -94,7 +93,12 @@
   let teachFieldsKey = '';
   let teachPanelExpanded = false;
 
-  const DATE_FIELD_NAMES = new Set(['invoice_date', 'due_date', 'payment_due_date']);
+  const DATE_FIELD_NAMES = new Set([
+    'document_date',
+    'invoice_date',
+    'due_date',
+    'payment_due_date',
+  ]);
 
   const overrideRoles = new Set(['cfo', 'finance_manager']);
   const tier2Roles = new Set(['accounts_clerk', 'finance_officer']);
@@ -219,19 +223,12 @@
         document_number: f.document_number != null ? String(f.document_number) : '',
         document_date: String(f.document_date ?? f.invoice_date ?? ''),
         due_date: f.due_date != null ? String(f.due_date) : '',
-        vendor_name: f.vendor_name != null ? String(f.vendor_name) : '',
-        merchant_name:
-          f.merchant_name != null
-            ? String(f.merchant_name)
-            : f.vendor_name != null
-              ? String(f.vendor_name)
-              : '',
+        vendor_name: String(f.vendor_name ?? f.merchant_name ?? ''),
         total_amount: f.total_amount != null ? String(f.total_amount) : '',
-        gst_amount: String(f.gst_amount ?? f.tax_amount ?? ''),
+        tax_amount: String(f.tax_amount ?? f.gst_amount ?? ''),
         currency: String(f.currency ?? 'SGD'),
         exchange_rate: f.exchange_rate != null ? String(f.exchange_rate) : '',
         payment_terms: f.payment_terms != null ? String(f.payment_terms) : '',
-        expense_category: f.expense_category != null ? String(f.expense_category) : 'other',
         business_purpose: f.business_purpose != null ? String(f.business_purpose) : '',
         gl_account_id: f.gl_account_id != null ? String(f.gl_account_id) : '',
         sender_validated:
@@ -257,6 +254,14 @@
 
   onMount(load);
 
+  async function loadReviewCoaAccounts() {
+    try {
+      reviewCoaAccounts = await listCoaAccounts({ is_active: true });
+    } catch {
+      reviewCoaAccounts = [];
+    }
+  }
+
   async function loadExpenseCoaAccounts() {
     expenseCoaLoading = true;
     try {
@@ -281,6 +286,18 @@
         await loadExpenseCoaAccounts();
       } else {
         expenseCoaAccounts = [];
+      }
+      if (
+        item &&
+        (item.status === 'manual_review' || item.status === 'on_hold') &&
+        item.workflow_metadata?.extracted_fields &&
+        typeof item.workflow_metadata.extracted_fields === 'object' &&
+        !Array.isArray(item.workflow_metadata.extracted_fields) &&
+        'gl_account_id' in (item.workflow_metadata.extracted_fields as Record<string, unknown>)
+      ) {
+        await loadReviewCoaAccounts();
+      } else {
+        reviewCoaAccounts = [];
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
@@ -362,13 +379,10 @@
         document_date: trimOptional(parsingForm.document_date),
         due_date: trimOptional(parsingForm.due_date),
         vendor_name: trimOptional(parsingForm.vendor_name),
-        merchant_name:
-          trimOptional(parsingForm.merchant_name) ?? trimOptional(parsingForm.vendor_name),
         total_amount: trimOptional(parsingForm.total_amount),
-        gst_amount: trimOptional(parsingForm.gst_amount),
+        tax_amount: trimOptional(parsingForm.tax_amount),
         exchange_rate: trimOptional(parsingForm.exchange_rate),
         payment_terms: trimOptional(parsingForm.payment_terms),
-        expense_category: trimOptional(parsingForm.expense_category),
         business_purpose: trimOptional(parsingForm.business_purpose),
         gl_account_id: trimOptional(parsingForm.gl_account_id),
       };
@@ -535,6 +549,25 @@
   function formatConfidence(value: number): string {
     if (Number.isNaN(value)) return '—';
     return value.toFixed(2);
+  }
+
+  function resolveCoaAccountLabel(accountId: string): string {
+    const acct = reviewCoaAccounts.find((a) => String(a.id) === accountId);
+    return acct ? `${acct.account_code} — ${acct.account_name}` : accountId;
+  }
+
+  function showExtractedReviewField(key: string, value: string | null): boolean {
+    if (key === 'exchange_rate' || key === 'tax_amount' || key === 'gst_amount') {
+      return trimOptional(value) != null;
+    }
+    return true;
+  }
+
+  function formatExtractedReviewValue(key: string, value: string | null): string {
+    if (key === 'gl_account_id' && value) {
+      return resolveCoaAccountLabel(value);
+    }
+    return value ?? '—';
   }
 
   async function handleApprove() {
@@ -724,8 +757,10 @@
             <p><strong>Extracted:</strong></p>
             <dl class="extracted">
               {#each Object.entries(review.extracted) as [key, value]}
-                <dt>{extractedFieldLabel(key)}</dt>
-                <dd>{value ?? '—'}</dd>
+                {#if showExtractedReviewField(key, value)}
+                  <dt>{extractedFieldLabel(key)}</dt>
+                  <dd>{formatExtractedReviewValue(key, value)}</dd>
+                {/if}
               {/each}
             </dl>
           {/if}
@@ -856,8 +891,8 @@
               <input type="date" bind:value={parsingForm.document_date} />
             </label>
             <label>
-              Merchant name
-              <input type="text" bind:value={parsingForm.merchant_name} />
+              Vendor name
+              <input type="text" bind:value={parsingForm.vendor_name} />
             </label>
             <label>
               Expense GL account
@@ -887,8 +922,8 @@
           </label>
           {#if isExpenseConfirm}
             <label>
-              GST amount
-              <input type="number" step="0.01" bind:value={parsingForm.gst_amount} />
+              Tax amount
+              <input type="number" step="0.01" bind:value={parsingForm.tax_amount} />
             </label>
             <label>
               Currency
@@ -919,8 +954,8 @@
           {/if}
           {#if !isExpenseConfirm}
             <label>
-              GST amount
-              <input type="number" step="0.01" bind:value={parsingForm.gst_amount} />
+              Tax amount
+              <input type="number" step="0.01" bind:value={parsingForm.tax_amount} />
             </label>
             <label>
               Currency
@@ -1043,13 +1078,13 @@
               <dt>Vendor</dt>
               <dd>{journalApproval.vendor}</dd>
             {/if}
-            {#if journalApproval.invoice_number}
-              <dt>Invoice number</dt>
-              <dd>{journalApproval.invoice_number}</dd>
+            {#if journalApproval.document_number}
+              <dt>Document number</dt>
+              <dd>{journalApproval.document_number}</dd>
             {/if}
-            {#if journalApproval.invoice_date}
-              <dt>Invoice date</dt>
-              <dd>{journalApproval.invoice_date}</dd>
+            {#if journalApproval.document_date}
+              <dt>Document date</dt>
+              <dd>{journalApproval.document_date}</dd>
             {/if}
             {#if journalApproval.document_type}
               <dt>Document type</dt>

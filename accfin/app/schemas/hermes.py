@@ -73,8 +73,8 @@ class InvoiceLineItem(BaseModel):
 
 
 class ExtractedInvoice(BaseModel):
-    invoice_number: str | None = None
-    invoice_date: date | None = None
+    document_number: str | None = None
+    document_date: date | None = None
     due_date: date | None = None
     vendor_name: str | None = None
     customer_name: str | None = None
@@ -125,7 +125,7 @@ class ExtractInvoiceResponse(BaseModel):
 
 
 class InvoiceAllocation(BaseModel):
-    invoice_number: str
+    document_number: str
     amount_applied: str
     discount_taken: str = "0.00"
 
@@ -160,7 +160,7 @@ class ExtractPaymentAdviceResponse(BaseModel):
 class RecentCase(BaseModel):
     case_id: UUID
     case_number: str
-    invoice_number: str | None = None
+    document_number: str | None = None
     total_amount: str | None = None
     created_at: str | None = None
 
@@ -184,7 +184,7 @@ class CheckDuplicateResponse(BaseModel):
 
 class OpenInvoiceItem(BaseModel):
     case_number: str
-    invoice_number: str | None = None
+    document_number: str | None = None
     amount: str | None = None
     currency: str = "SGD"
 

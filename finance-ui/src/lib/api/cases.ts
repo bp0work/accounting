@@ -36,8 +36,8 @@ export type CaseItem = {
 
 export type JournalEntryApprovalDetail = {
   vendor?: string | null;
-  invoice_number?: string | null;
-  invoice_date?: string | null;
+  document_number?: string | null;
+  document_date?: string | null;
   document_type?: string | null;
   amount_sgd?: string | null;
   gst?: string | null;
@@ -126,13 +126,11 @@ export type ParsingConfirmationFields = {
   document_date?: string | null;
   due_date?: string | null;
   vendor_name?: string | null;
-  merchant_name?: string | null;
   total_amount?: string | null;
-  gst_amount?: string | null;
+  tax_amount?: string | null;
   currency: string;
   exchange_rate?: string | null;
   payment_terms?: string | null;
-  expense_category?: string | null;
   business_purpose?: string | null;
   gl_account_id?: string | null;
   sender_validated: boolean;

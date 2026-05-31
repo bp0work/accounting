@@ -38,4 +38,4 @@ def test_extract_stub_parses_receipt_number():
         )
     )
     assert resp.output is not None
-    assert resp.output.invoice_number == "ARN-998877"
+    assert resp.output.document_number == "ARN-998877"

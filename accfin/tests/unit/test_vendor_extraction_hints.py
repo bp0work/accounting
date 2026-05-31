@@ -11,7 +11,7 @@ def test_format_vendor_hints_prompt_includes_label_and_date_format() -> None:
         id=uuid4(),
         tenant_id=uuid4(),
         vendor_name="ACRA",
-        field_name="invoice_date",
+        field_name="document_date",
         field_label="Date and time",
         field_location="header",
         example_value="24 Apr 2025 07:42 PM",
@@ -21,6 +21,6 @@ def test_format_vendor_hints_prompt_includes_label_and_date_format() -> None:
     )
     block = format_vendor_hints_prompt([hint], vendor_name="ACRA")
     assert "For vendor ACRA" in block
-    assert "invoice_date is labelled 'Date and time'" in block
+    assert "document_date is labelled 'Date and time'" in block
     assert "24 Apr 2025 07:42 PM" in block
-    assert "Parse invoice_date using format DD Mon YYYY HH:MM AM/PM" in block
+    assert "Parse document_date using format DD Mon YYYY HH:MM AM/PM" in block

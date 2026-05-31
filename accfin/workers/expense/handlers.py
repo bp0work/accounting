@@ -230,17 +230,17 @@ class ExpenseWorkerService:
 
         # ── Step 2B: Duplicate ─────────────────────────────────────────
         if _resume_step_reached(resume_from, "2B") and not overrides.get("override_duplicate"):
-            merchant = str(extracted.get("merchant_name") or "")
+            vendor = str(extracted.get("vendor_name") or "")
             doc_num = extracted.get("document_number")
             doc_date = parse_document_date(extracted)
             try:
                 total_dec = Decimal(str(extracted.get("total_amount") or "0"))
             except Exception:
                 total_dec = None
-            if merchant:
+            if vendor:
                 is_dup, dup_num = await check_expense_duplicate(
                     self._session,
-                    merchant_name=merchant,
+                    vendor_name=vendor,
                     document_number=str(doc_num) if doc_num else None,
                     total_amount=total_dec,
                     document_date=doc_date,
@@ -404,9 +404,9 @@ class ExpenseWorkerService:
         claim = await self._ensure_claim(case, extracted, staff)
         sgd_amount = Decimal(str(extracted.get("sgd_amount") or extracted.get("total_amount") or "0"))
         try:
-            gst = Decimal(str(extracted.get("gst_amount") or "0"))
+            tax = Decimal(str(extracted.get("tax_amount") or "0"))
         except Exception:
-            gst = Decimal("0")
+            tax = Decimal("0")
 
         case.amount_value = sgd_amount
         case.amount_currency = "SGD"
@@ -442,7 +442,7 @@ class ExpenseWorkerService:
         if staff and staff.extra_metadata.get("payable_gl_code"):
             payable_code = str(staff.extra_metadata["payable_gl_code"])
         payable_account = await self._ledger.get_account_by_code(payable_code)
-        gst_account = await self._ledger.get_account_by_code(GST_INPUT_ACCOUNT_CODE) if gst > 0 else None
+        gst_account = await self._ledger.get_account_by_code(GST_INPUT_ACCOUNT_CODE) if tax > 0 else None
 
         if payable_account is None:
             return await self._route_failure(case, email, "ACCOUNT_NOT_FOUND", "Staff payable account missing")
@@ -452,7 +452,7 @@ class ExpenseWorkerService:
             case,
             claim,
             sgd_amount,
-            gst,
+            tax,
             expense_account=expense_account,
             gst_account=gst_account,
             payable_account=payable_account,
@@ -567,12 +567,12 @@ class ExpenseWorkerService:
             "document_type": "receipt",
             "document_date": str(out.line_items[0].expense_date or out.claim_period_to or ""),
             "document_number": None,
-            "merchant_name": out.line_items[0].merchant,
+            "vendor_name": out.line_items[0].merchant,
             "total_amount": str(out.line_items[0].amount_claimed),
             "currency": out.currency,
             "expense_category": out.line_items[0].category,
             "business_purpose": out.purpose,
-            "gst_amount": None,
+            "tax_amount": None,
         }
         total = sum(Decimal(li.amount_claimed or "0") for li in out.line_items)
         flat["total_amount"] = str(total)
@@ -581,6 +581,7 @@ class ExpenseWorkerService:
             email.body_text if email else None,
         )
         fields = expense_extraction_to_fields(flat, sender_val=sender_val)
+        fields["expense_category"] = normalize_expense_category(flat.get("expense_category"))
         return fields, float(extraction.confidence_score or 0.85)
 
     async def _ensure_claim(
@@ -616,7 +617,7 @@ class ExpenseWorkerService:
                     expense_date=parse_document_date(extracted) or date.today(),
                     category=normalize_expense_category(extracted.get("expense_category")),
                     description=str(extracted.get("business_purpose") or "Expense"),
-                    merchant=extracted.get("merchant_name"),
+                    merchant=extracted.get("vendor_name"),
                     currency="SGD",
                     amount_claimed=claim.total_claimed,
                     amount_sgd=claim.total_claimed,

@@ -37,20 +37,20 @@ provider. Do NOT use the buyer, payer, or customer name as vendor_name. Example:
 vendor_name is "ACRA" or "Accounting and Corporate Regulatory Authority", NOT "MMLOGISTIX PTE LTD"
 (the customer who paid).
 
-INVOICE NUMBER (invoice_number): Accept values labelled Invoice no., Receipt no., Receipt number,
+DOCUMENT NUMBER (document_number): Accept values labelled Invoice no., Receipt no., Receipt number,
 Reference no., Ref no., ARN, Document no., or similar.
 
-INVOICE DATE (invoice_date): Accept Date and time, Date of service, Transaction date, Payment date,
+DOCUMENT DATE (document_date): Accept Date and time, Date of service, Transaction date, Payment date,
 Invoice date, or similar. Format as YYYY-MM-DD.
 
 DUE DATE (due_date): Payment due date from payment terms when present. For receipts or documents
 that are already paid (payment confirmed, receipt issued after payment), set due_date equal to
-invoice_date.
+document_date.
 
 Return ONLY valid JSON matching this schema:
 {{
-  "invoice_number": string|null,
-  "invoice_date": "YYYY-MM-DD"|null,
+  "document_number": string|null,
+  "document_date": "YYYY-MM-DD"|null,
   "due_date": "YYYY-MM-DD"|null,
   "payment_due_date": "YYYY-MM-DD"|null,
   "vendor_name": string|null,
@@ -84,8 +84,8 @@ Extract customer invoice fields from the text below.
 Always extract due_date (payment due date) when present in the document or derivable from payment terms.
 Return ONLY valid JSON matching this schema:
 {{
-  "invoice_number": string|null,
-  "invoice_date": "YYYY-MM-DD"|null,
+  "document_number": string|null,
+  "document_date": "YYYY-MM-DD"|null,
   "due_date": "YYYY-MM-DD"|null,
   "payment_due_date": "YYYY-MM-DD"|null,
   "customer_name": string|null,
@@ -115,7 +115,7 @@ Return ONLY valid JSON:
   "payment_amount": string|null,
   "currency": string,
   "bank_reference": string|null,
-  "allocations": [{{"invoice_number": string, "amount_applied": string, "discount_taken": "0.00"}}],
+  "allocations": [{{"document_number": string, "amount_applied": string, "discount_taken": "0.00"}}],
   "unallocated_amount": string,
   "missing_fields": [string],
   "warnings": [string],
@@ -145,14 +145,14 @@ _EXCHANGE_RATE_PATTERNS = (
 
 
 def _normalize_ap_due_date(
-    invoice_date: date | None,
+    document_date: date | None,
     due_date: date | None,
     document_text: str,
 ) -> date | None:
     if due_date:
         return due_date
-    if invoice_date and _PAID_RECEIPT_RE.search(document_text):
-        return invoice_date
+    if document_date and _PAID_RECEIPT_RE.search(document_text):
+        return document_date
     return None
 
 
@@ -220,7 +220,7 @@ def _line_items(raw: Any) -> list[InvoiceLineItem]:
 
 def _invoice_missing_fields(extracted: ExtractedInvoice, *, role: str) -> list[str]:
     missing = list(extracted.missing_fields)
-    required = ["invoice_number", "total_amount", "invoice_date", "due_date"]
+    required = ["document_number", "total_amount", "document_date", "due_date"]
     if role == "ap":
         required.append("vendor_name")
     else:
@@ -278,10 +278,10 @@ async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceR
         return extract_invoice_stub(request)
 
     line_items = _line_items(data.get("line_items"))
-    invoice_date = _parse_date(data.get("invoice_date"))
+    document_date = _parse_date(data.get("document_date") or data.get("invoice_date"))
     due_date = _parse_date(data.get("due_date") or data.get("payment_due_date"))
     if role == "ap":
-        due_date = _normalize_ap_due_date(invoice_date, due_date, document_text)
+        due_date = _normalize_ap_due_date(document_date, due_date, document_text)
     vendor_name = _optional_str(data.get("vendor_name"))
     customer_name = _optional_str(data.get("customer_name"))
     if role != "ap":
@@ -299,8 +299,8 @@ async def extract_invoice_llm(request: ExtractInvoiceRequest) -> ExtractInvoiceR
         elif currency != "SGD":
             sgd_amount = None
     extracted = ExtractedInvoice(
-        invoice_number=_optional_str(data.get("invoice_number")),
-        invoice_date=invoice_date,
+        document_number=_optional_str(data.get("document_number") or data.get("invoice_number")),
+        document_date=document_date,
         due_date=due_date,
         vendor_name=vendor_name,
         customer_name=customer_name,
@@ -348,11 +348,14 @@ async def extract_payment_advice_llm(
 
     allocations: list[InvoiceAllocation] = []
     for row in data.get("allocations") or []:
-        if not isinstance(row, dict) or not row.get("invoice_number"):
+        if not isinstance(row, dict):
+            continue
+        doc_num = row.get("document_number") or row.get("invoice_number")
+        if not doc_num:
             continue
         allocations.append(
             InvoiceAllocation(
-                invoice_number=str(row["invoice_number"]),
+                document_number=str(doc_num),
                 amount_applied=_normalize_amount(row.get("amount_applied")) or "0",
                 discount_taken=_normalize_amount(row.get("discount_taken")) or "0.00",
             )
@@ -392,10 +395,10 @@ Return ONLY valid JSON:
   "document_type": "receipt"|"invoice"|"credit_card_statement",
   "document_date": "YYYY-MM-DD"|null,
   "document_number": string|null,
-  "merchant_name": string,
+  "vendor_name": string,
   "total_amount": string,
   "currency": string,
-  "gst_amount": string|null,
+  "tax_amount": string|null,
   "expense_category": "meals"|"travel"|"accommodation"|"office_supplies"|"government_fees"|"entertainment"|"other",
   "business_purpose": string,
   "exchange_rate": string|null,
@@ -419,7 +422,7 @@ Return ONLY valid JSON:
 }}
 
 expense_category MUST be one of: meals, travel, accommodation, office_supplies, government_fees, entertainment, other.
-Map transport/taxi to travel. merchant_name is the vendor who issued the receipt (not the employee).
+Map transport/taxi to travel. vendor_name is the vendor who issued the receipt (not the employee).
 
 Claimant hint: {claimant_hint}
 Department hint: {department_hint}

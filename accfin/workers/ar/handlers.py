@@ -235,7 +235,7 @@ class ARWorkerService:
                 risk_flags=risk_flags,
             )
 
-        posting_date = inv.invoice_date or date.today()
+        posting_date = inv.document_date or date.today()
         if email is None:
             email = await self._email_for_case(case)
         period_block = await ensure_gl_period_allows_posting(
@@ -248,7 +248,7 @@ class ARWorkerService:
         )
         if period_block:
             await self._start_processing(case)
-            await self._timeline_completed(case, "ar_invoice", inv.invoice_number, "manual_review", None)
+            await self._timeline_completed(case, "ar_invoice", inv.document_number, "manual_review", None)
             await self._session.flush()
             return period_block
 
@@ -279,8 +279,8 @@ class ARWorkerService:
             "policy_tier": tier,
             "stp": final_status == "posted",
             "missing_fields": inv.missing_fields,
-            "invoice_number": inv.invoice_number,
-            "invoice_date": str(inv.invoice_date) if inv.invoice_date else None,
+            "document_number": inv.document_number,
+            "document_date": str(inv.document_date) if inv.document_date else None,
             "vendor": case.counterparty_name,
             "total_amount": str(amount),
             "currency": inv.currency,
@@ -293,7 +293,7 @@ class ARWorkerService:
             actor="ar-worker",
             description="Invoice extraction completed",
             metadata={
-                "invoice_number": inv.invoice_number,
+                "document_number": inv.document_number,
                 "total_amount": str(amount),
                 "currency": inv.currency,
                 "vendor": case.counterparty_name,
@@ -301,7 +301,7 @@ class ARWorkerService:
                 "missing_fields": inv.missing_fields,
             },
         )
-        await self._timeline_completed(case, "ar_invoice", inv.invoice_number, final_status, journal_id)
+        await self._timeline_completed(case, "ar_invoice", inv.document_number, final_status, journal_id)
         if journal_id and final_status == "posted":
             await self._cases.add_timeline(
                 case_id=case.id,
@@ -336,7 +336,7 @@ class ARWorkerService:
             )
             if tier >= 2:
                 extracted = {
-                    "invoice_number": inv.invoice_number,
+                    "document_number": inv.document_number,
                     "total_amount": str(amount),
                     "currency": inv.currency,
                     "vendor_name": case.counterparty_name,
@@ -437,7 +437,8 @@ class ARWorkerService:
         items = [
             OpenInvoiceItem(
                 case_number=c.case_number,
-                invoice_number=(c.classification_metadata or {}).get("invoice_number"),
+                document_number=(c.classification_metadata or {}).get("document_number")
+                or (c.workflow_metadata or {}).get("document_number"),
                 amount=str(c.amount_value) if c.amount_value else None,
                 currency=c.amount_currency or "SGD",
             )
@@ -493,7 +494,8 @@ class ARWorkerService:
                 RecentCase(
                     case_id=c.id,
                     case_number=c.case_number,
-                    invoice_number=meta.get("invoice_number") or c.workflow_metadata.get("invoice_number"),
+                    document_number=meta.get("document_number")
+                    or (c.workflow_metadata or {}).get("document_number"),
                     total_amount=str(c.amount_value) if c.amount_value else None,
                 )
             )
@@ -518,9 +520,9 @@ class ARWorkerService:
             case_id=case.id,
             case_number=case.case_number,
             status=status,
-            entry_date=inv.invoice_date or date.today(),
-            description=f"AR Invoice — {case.counterparty_name} {inv.invoice_number}",
-            reference=inv.invoice_number,
+            entry_date=inv.document_date or date.today(),
+            description=f"AR Invoice — {case.counterparty_name} {inv.document_number}",
+            reference=inv.document_number,
             currency=inv.currency,
             total=amount,
             posted=posted,

@@ -531,11 +531,7 @@ class APWorkerService:
 
         # ── Step 2: Duplicate check ───────────────────────────────────
         if _resume_step_reached(resume_from, "2B") and not overrides.get("override_duplicate"):
-            doc_number = (
-                getattr(inv, "invoice_number", None)
-                or getattr(inv, "document_number", None)
-                or ""
-            )
+            doc_number = inv.document_number or ""
             total_amount_dec = Decimal(str(inv.total_amount or "0"))
             vendor_name_str = inv.vendor_name or case.counterparty_name or ""
             if doc_number and vendor_name_str:
@@ -901,7 +897,7 @@ class APWorkerService:
 
         # ── Step 7: Document type routing + journal ───────────────────
         amount = sgd_amount
-        tax_raw = extracted.get("gst_amount") or extracted.get("tax_amount") or getattr(inv, "tax_amount", None)
+        tax_raw = extracted.get("tax_amount") or getattr(inv, "tax_amount", None)
         tax = Decimal(str(tax_raw or "0"))
         document_type = (
             str(extracted.get("document_type", "invoice"))
@@ -912,7 +908,7 @@ class APWorkerService:
         )
 
         # GL period check before posting
-        posting_date = getattr(inv, "invoice_date", None) or date.today()
+        posting_date = inv.document_date or date.today()
         period_block = await ensure_gl_period_allows_posting(
             self._session,
             case,
@@ -1097,12 +1093,8 @@ class APWorkerService:
     ) -> str | None:
         net = amount - tax
         status = "posted" if posted else "draft"
-        inv_number = (
-            getattr(inv, "invoice_number", None)
-            or getattr(inv, "document_number", None)
-            or ""
-        )
-        inv_date = getattr(inv, "invoice_date", None) or date.today()
+        inv_number = inv.document_number or ""
+        inv_date = inv.document_date or date.today()
         currency = getattr(inv, "currency", None) or "SGD"
         description = f"AP {document_type.replace('_', ' ').title()} — {case.counterparty_name} {inv_number}"
 

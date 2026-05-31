@@ -22,7 +22,7 @@ def test_due_date_from_terms_when_not_on_document() -> None:
     )
     inv_date = date(2026, 5, 1)
     due, source, warnings = compute_due_date(
-        invoice_date=inv_date,
+        document_date=inv_date,
         extracted_due=None,
         term=term,
         document_total=Decimal("1000"),
@@ -36,7 +36,7 @@ def test_extracted_due_date_wins() -> None:
     term = PaymentTerm(code="NET30", label="Net 30", due_days=30, is_active=True)
     explicit = date(2026, 6, 15)
     due, source, _ = compute_due_date(
-        invoice_date=date(2026, 5, 1),
+        document_date=date(2026, 5, 1),
         extracted_due=explicit,
         term=term,
         document_total=Decimal("100"),

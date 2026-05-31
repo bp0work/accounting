@@ -169,8 +169,8 @@ async def test_uat_013_due_date_from_payment_terms(db_session) -> None:
     await db_session.flush()
 
     inv = ExtractedInvoice(
-        invoice_number="INV-UAT13",
-        invoice_date=date(2026, 5, 1),
+        document_number="INV-UAT13",
+        document_date=date(2026, 5, 1),
         due_date=None,
         payment_terms="Net 30",
         total_amount="1000.00",
@@ -234,8 +234,8 @@ def _uat15_hermes(tax_code: str):
             return ExtractInvoiceResponse(
                 confidence_score=0.95,
                 output=ExtractedInvoice(
-                    invoice_number="INV-E2E",
-                    invoice_date=date(2026, 5, 10),
+                    document_number="INV-E2E",
+                    document_date=date(2026, 5, 10),
                     due_date=None,
                     payment_terms="NET30",
                     total_amount="1090.00",

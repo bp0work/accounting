@@ -149,9 +149,8 @@ async def check_duplicate_by_fields(
         meta = existing.workflow_metadata or {}
         extracted = meta.get("extracted_fields") or {}
         inv_num = (
-            extracted.get("invoice_number")
-            or extracted.get("document_number")
-            or meta.get("invoice_number")
+            extracted.get("document_number")
+            or meta.get("document_number")
         )
         if not inv_num:
             continue

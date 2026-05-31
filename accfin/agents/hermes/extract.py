@@ -35,7 +35,7 @@ def _parse_amount(text: str) -> str | None:
     return match.group(1).replace(",", "") if match else None
 
 
-def _parse_invoice_number(text: str) -> str | None:
+def _parse_document_number(text: str) -> str | None:
     patterns = [
         r"(?:invoice|inv)[\s#:.-]*([A-Z0-9-]+)",
         r"(?:receipt(?:\s+no\.?|\s+number)?)[\s#:.-]*([A-Z0-9-]+)",
@@ -56,12 +56,12 @@ def _parse_po_reference(text: str) -> str | None:
 
 def extract_invoice_stub(request: ExtractInvoiceRequest) -> ExtractInvoiceResponse:
     text = request.extracted_text or ""
-    invoice_number = _parse_invoice_number(text)
+    document_number = _parse_document_number(text)
     po_reference = _parse_po_reference(text)
     total = _parse_amount(text)
     missing = []
-    if not invoice_number:
-        missing.append("invoice_number")
+    if not document_number:
+        missing.append("document_number")
     if not total:
         missing.append("total_amount")
     today = date.today()
@@ -69,8 +69,8 @@ def extract_invoice_stub(request: ExtractInvoiceRequest) -> ExtractInvoiceRespon
         re.search(r"\b(receipt|paid|payment\s+confirmed|payment\s+received)\b", text, re.I)
     )
     extracted = ExtractedInvoice(
-        invoice_number=invoice_number,
-        invoice_date=today,
+        document_number=document_number,
+        document_date=today,
         due_date=today if is_paid_receipt else None,
         vendor_name=request.supplier_hint,
         po_reference=po_reference,
@@ -92,11 +92,11 @@ def extract_payment_advice_stub(
 ) -> ExtractPaymentAdviceResponse:
     text = request.extracted_text or ""
     amount = _parse_amount(text)
-    inv = _parse_invoice_number(text)
+    inv = _parse_document_number(text)
     allocations: list[InvoiceAllocation] = []
     if inv and amount:
         allocations.append(
-            InvoiceAllocation(invoice_number=inv, amount_applied=amount, discount_taken="0.00")
+            InvoiceAllocation(document_number=inv, amount_applied=amount, discount_taken="0.00")
         )
     missing = []
     if not amount:
@@ -116,10 +116,10 @@ def extract_payment_advice_stub(
 
 
 def check_duplicate_stub(request: CheckDuplicateRequest) -> CheckDuplicateResponse:
-    inv_num = request.extracted_invoice.invoice_number
+    inv_num = request.extracted_invoice.document_number
     total = request.extracted_invoice.total_amount
     for recent in request.recent_cases:
-        if recent.invoice_number and inv_num and recent.invoice_number == inv_num:
+        if recent.document_number and inv_num and recent.document_number == inv_num:
             if recent.total_amount and total and recent.total_amount == total:
                 return CheckDuplicateResponse(
                     output=CheckDuplicateOutput(
@@ -141,7 +141,7 @@ def generate_soa_stub(request: GenerateSOARequest) -> GenerateSOAResponse:
     for item in request.open_invoices:
         amt = Decimal(item.amount or "0")
         total += amt
-        lines.append(f"  {item.case_number} / {item.invoice_number}: {item.currency} {amt}")
+        lines.append(f"  {item.case_number} / {item.document_number}: {item.currency} {amt}")
     lines.append(f"Total outstanding: SGD {total}")
     return GenerateSOAResponse(
         output=GenerateSOAOutput(

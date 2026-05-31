@@ -142,12 +142,8 @@ async def build_journal_entry_approval_detail(
         or _str_val(extracted.get("vendor_name"))
         or _str_val(meta.get("vendor_name"))
     )
-    invoice_number = _str_val(extracted.get("invoice_number")) or _str_val(
-        extracted.get("document_number")
-    )
-    invoice_date = _str_val(extracted.get("invoice_date")) or _str_val(
-        extracted.get("document_date")
-    )
+    document_number = _str_val(extracted.get("document_number"))
+    document_date = _str_val(extracted.get("document_date"))
     document_type = _document_type_label(_str_val(extracted.get("document_type")))
 
     amount: Decimal | None = None
@@ -159,10 +155,10 @@ async def build_journal_entry_approval_detail(
     elif extracted.get("sgd_amount") not in (None, ""):
         amount = Decimal(str(extracted.get("sgd_amount")))
 
-    gst_raw = extracted.get("gst_amount") or extracted.get("tax_amount")
-    if gst_raw not in (None, ""):
+    tax_raw = extracted.get("tax_amount")
+    if tax_raw not in (None, ""):
         try:
-            gst = Decimal(str(gst_raw))
+            gst = Decimal(str(tax_raw))
         except Exception:
             gst = None
 
@@ -194,8 +190,8 @@ async def build_journal_entry_approval_detail(
 
     return JournalEntryApprovalDetail(
         vendor=vendor,
-        invoice_number=invoice_number,
-        invoice_date=invoice_date,
+        document_number=document_number,
+        document_date=document_date,
         document_type=document_type,
         amount_sgd=_format_money(net, currency),
         gst=_format_money(gst, currency),

@@ -25,8 +25,8 @@ def test_detail_from_workflow_metadata() -> None:
     meta = {
         "journal_entry": {
             "vendor": "ACRA",
-            "invoice_number": "ACRA250424004470",
-            "invoice_date": "24 Apr 2025",
+            "document_number": "ACRA250424004470",
+            "document_date": "24 Apr 2025",
             "document_type": "Invoice",
             "amount_sgd": "15.00",
             "gst": "1.24",

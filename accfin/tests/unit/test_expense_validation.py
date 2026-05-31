@@ -19,7 +19,7 @@ def test_parsing_missing_ignores_sender_validated_and_business_purpose() -> None
     extracted = {
         "document_type": "receipt",
         "document_date": "2025-04-24",
-        "merchant_name": "ACRA",
+        "vendor_name": "ACRA",
         "total_amount": "16.24",
         "currency": "SGD",
         "expense_category": "government_fees",
@@ -47,7 +47,7 @@ def test_receipt_older_than_90_days() -> None:
         {
             "document_date": old,
             "total_amount": "10",
-            "merchant_name": "Cafe",
+            "vendor_name": "Cafe",
         },
         today=date.today(),
     )
