@@ -92,6 +92,7 @@
 
   let teachFields: TeachFieldForm[] = [];
   let teachFieldsKey = '';
+  let teachPanelExpanded = false;
 
   const DATE_FIELD_NAMES = new Set(['invoice_date', 'due_date', 'payment_due_date']);
 
@@ -182,7 +183,9 @@
   $: showTeachPanel =
     (item?.status === 'manual_review' || item?.status === 'on_hold') &&
     reviewSnapshot.missing.length > 0 &&
-    vendorName.length > 0;
+    vendorName.length > 0 &&
+    (item.type !== 'expense_claim' ||
+      Boolean(item?.workflow_metadata?.parsing_confirmed_at));
   $: canRetryWithHints = showTeachPanel && savedHintFields.size > 0;
   $: canConfirmParsing =
     item?.status === 'pending_confirmation' && confirmParsingRoles.has(role);
@@ -721,65 +724,80 @@
         </section>
       {/if}
       {#if showTeachPanel}
-        <section class="teach-box">
-          <h2>Teach the Agent</h2>
-          <p class="hint">
-            Document vendor: <strong>{vendorName}</strong>. Tell the extractor how each missing
-            field appears on this vendor&apos;s documents.
+        <section class="teach-box teach-box-secondary">
+          <h2>Vendor extraction hints</h2>
+          <p class="hint teach-box-lead">
+            Help the agent find these fields on future documents from this vendor. This is not
+            the primary way to resolve a stuck case — use the parsing confirmation form when the
+            case is awaiting confirmation.
           </p>
-          {#each teachFields as row}
-            <div class="teach-field">
-              <h3>{row.field_name.replaceAll('_', ' ')}</h3>
-              <label>
-                Field label on document
-                <input
-                  type="text"
-                  bind:value={row.field_label}
-                  placeholder="e.g. Date and time"
-                />
-              </label>
-              <label>
-                Example value
-                <input
-                  type="text"
-                  bind:value={row.example_value}
-                  placeholder="e.g. 24 Apr 2025 07:42 PM"
-                />
-              </label>
-              {#if DATE_FIELD_NAMES.has(row.field_name)}
+          <button
+            type="button"
+            class="teach-toggle"
+            onclick={() => (teachPanelExpanded = !teachPanelExpanded)}
+          >
+            {teachPanelExpanded ? 'Hide hints' : 'Show hints for future documents'}
+          </button>
+          {#if teachPanelExpanded}
+            <p class="hint">
+              Vendor: <strong>{vendorName}</strong>. Map how each missing field appears on this
+              vendor&apos;s documents.
+            </p>
+            {#each teachFields as row}
+              <div class="teach-field">
+                <h3>{row.field_name.replaceAll('_', ' ')}</h3>
                 <label>
-                  Date format
+                  Field label on document
                   <input
                     type="text"
-                    bind:value={row.date_format}
-                    placeholder="e.g. DD Mon YYYY HH:MM AM/PM"
+                    bind:value={row.field_label}
+                    placeholder="e.g. Date and time"
                   />
                 </label>
-              {/if}
-              <button
-                type="button"
-                class="save-hint"
-                disabled={row.saving}
-                onclick={() => saveHint(row)}
-              >
-                {row.saving ? 'Saving…' : 'Save hint'}
+                <label>
+                  Example value
+                  <input
+                    type="text"
+                    bind:value={row.example_value}
+                    placeholder="e.g. 24 Apr 2025 07:42 PM"
+                  />
+                </label>
+                {#if DATE_FIELD_NAMES.has(row.field_name)}
+                  <label>
+                    Date format
+                    <input
+                      type="text"
+                      bind:value={row.date_format}
+                      placeholder="e.g. DD Mon YYYY HH:MM AM/PM"
+                    />
+                  </label>
+                {/if}
+                <button
+                  type="button"
+                  class="save-hint"
+                  disabled={row.saving}
+                  onclick={() => saveHint(row)}
+                >
+                  {row.saving ? 'Saving…' : 'Save hint'}
+                </button>
+              </div>
+            {/each}
+            {#if teachMessage}
+              <p class="hint success">{teachMessage}</p>
+            {/if}
+            {#if canRetryWithHints}
+              <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
+                {retrying ? 'Requeuing…' : 'Retry with hints'}
               </button>
-            </div>
-          {/each}
-          {#if teachMessage}
-            <p class="hint success">{teachMessage}</p>
-          {/if}
-          {#if canRetryWithHints}
-            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-              {retrying ? 'Requeuing…' : 'Retry with hints'}
-            </button>
-          {:else if canRetryTransientHermes}
-            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-              {retrying ? 'Requeuing…' : 'Retry processing'}
-            </button>
-            <p class="hint">
-              Hermes timed out or was temporarily unavailable. Retry requeues this case after Ollama is healthy.
-            </p>
+            {:else if canRetryTransientHermes}
+              <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
+                {retrying ? 'Requeuing…' : 'Retry processing'}
+              </button>
+              <p class="hint">
+                Hermes timed out or was temporarily unavailable. Retry requeues this case after
+                Ollama is healthy.
+              </p>
+            {/if}
           {/if}
         </section>
       {/if}
@@ -1431,6 +1449,18 @@
     border: 1px solid #bfdbfe;
     border-radius: 8px;
     background: #eff6ff;
+  }
+  .teach-box-secondary {
+    margin-top: 1.5rem;
+    border-color: #94a3b8;
+    background: #f1f5f9;
+  }
+  .teach-box-lead {
+    margin: 0.5rem 0 0.75rem;
+    max-width: 42rem;
+  }
+  .teach-toggle {
+    margin-bottom: 0.75rem;
   }
   .teach-box h2 {
     margin-top: 0;

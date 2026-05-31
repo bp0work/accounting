@@ -56,8 +56,9 @@ PARSING_MANDATORY_FIELDS = (
     "total_amount",
     "currency",
     "expense_category",
-    "business_purpose",
 )
+
+PARSING_OPTIONAL_FIELDS = ("business_purpose",)
 
 
 def normalize_expense_category(raw: str | None) -> str:
@@ -71,14 +72,12 @@ def normalize_expense_category(raw: str | None) -> str:
     return "other"
 
 
-def expense_parsing_missing(extracted: dict, *, sender_validated: bool) -> list[str]:
+def expense_parsing_missing(extracted: dict) -> list[str]:
     missing: list[str] = []
     for field in PARSING_MANDATORY_FIELDS:
         val = extracted.get(field)
         if val is None or str(val).strip() == "":
             missing.append(field)
-    if not sender_validated:
-        missing.append("sender_validated")
     doc_type = str(extracted.get("document_type") or "").strip().lower()
     if doc_type and doc_type not in EXPENSE_DOCUMENT_TYPES:
         missing.append("document_type")
