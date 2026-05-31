@@ -16,6 +16,11 @@
     patchCounterparty,
     patchCounterpartyAccount,
   } from '$lib/api/finance-setup';
+  import {
+    COUNTERPARTY_TYPES,
+    counterpartyTypeLabel,
+    isSupplierType,
+  } from '$lib/counterparty-labels';
 
   type Tab = 'subaccounts' | 'terms' | 'tax';
 
@@ -29,7 +34,7 @@
   let taxCodes = $state<Array<Record<string, unknown>>>([]);
 
   let cpName = $state('');
-  let cpType = $state('vendor');
+  let cpType = $state('supplier');
   let cpCode = $state('');
   let cpHasContract = $state(false);
   let cpContractReference = $state('');
@@ -98,9 +103,9 @@
       return;
     }
     try {
-      const isVendor = isVendorType(cpType);
-      const contractFields = isVendor
-        ? vendorContractPayload(
+      const isSupplier = isSupplierType(cpType);
+      const contractFields = isSupplier
+        ? supplierContractPayload(
             cpHasContract,
             cpContractReference,
             cpContractStartDate,
@@ -118,7 +123,7 @@
           };
       await createCounterparty({
         name,
-        type: isVendor ? 'vendor' : cpType,
+        type: cpType,
         code: cpCode || null,
         contact_email: cpContactEmail.trim() || null,
         ...contractFields,
@@ -139,20 +144,8 @@
     }
   }
 
-  function displayCounterpartyType(value: unknown): string {
-    const t = String(value ?? '').toLowerCase();
-    if (t === 'supplier') return 'vendor';
-    if (t === 'staff') return 'Staff';
-    return t || '—';
-  }
-
-  function isVendorType(value: unknown): boolean {
-    const t = String(value ?? '').toLowerCase();
-    return t === 'vendor' || t === 'supplier';
-  }
-
   /** Set has_contract when checkbox is on or any contract field is filled. */
-  function vendorContractPayload(
+  function supplierContractPayload(
     hasContractCheckbox: boolean,
     reference: string,
     startDate: string,
@@ -186,7 +179,7 @@
   }
 
   function formatContractSummary(cp: Record<string, unknown> | undefined): string {
-    if (!cp || !isVendorType(cp.type)) return '—';
+    if (!cp || !isSupplierType(cp.type)) return '—';
     if (!cp.has_contract && !cp.contract_reference && !cp.contract_expiry_date) return '—';
     const ref = cp.contract_reference ? String(cp.contract_reference) : '—';
     const start = formatContractDate(cp.contract_start_date);
@@ -195,9 +188,7 @@
   }
 
   function contractExpiringSoon(cp: Record<string, unknown>): boolean {
-    const t = String(cp.type ?? '').toLowerCase();
-    const isVendor = t === 'vendor' || t === 'supplier';
-    if (!isVendor) return false;
+    if (!isSupplierType(cp.type)) return false;
     if (!cp.contract_expiry_date) return false;
     const expiry = new Date(String(cp.contract_expiry_date));
     if (Number.isNaN(expiry.getTime())) return false;
@@ -318,12 +309,12 @@
     error = '';
     msg = '';
     const cp = counterpartyById(id);
-    if (!cp || !isVendorType(cp.type)) {
-      error = 'Contract fields apply to vendors only';
+    if (!cp || !isSupplierType(cp.type)) {
+      error = 'Contract fields apply to suppliers only';
       return;
     }
     try {
-      await patchCounterparty(id, vendorContractPayload(
+      await patchCounterparty(id, supplierContractPayload(
         editCpHasContract,
         editCpContractReference,
         editCpContractStartDate,
@@ -398,22 +389,22 @@
     <div class="row">
       <input bind:value={cpName} placeholder="Legal name" />
       <select bind:value={cpType}>
-        <option value="customer">Customer</option>
-        <option value="vendor">Vendor</option>
-        <option value="staff">Staff</option>
+        {#each COUNTERPARTY_TYPES as typeValue}
+          <option value={typeValue}>{counterpartyTypeLabel(typeValue)}</option>
+        {/each}
       </select>
       <input bind:value={cpCode} placeholder="Code (optional)" />
       <input
         bind:value={cpContactEmail}
         type="email"
-        placeholder="Contact email (required for staff)"
+        placeholder="Contact email (required for employees)"
       />
       <button type="button" disabled={!cpName.trim()} onclick={addCounterparty}>
         Add counterparty
       </button>
     </div>
-    {#if cpType === 'vendor'}
-      <div class="row wrap vendor-contract">
+    {#if cpType === 'supplier'}
+      <div class="row wrap supplier-contract">
         <label class="inline">
           <input type="checkbox" bind:checked={cpHasContract} />
           Contract in place
@@ -421,7 +412,7 @@
         <input bind:value={cpContractReference} placeholder="Contract reference (optional)" maxlength="255" />
         <input type="date" bind:value={cpContractStartDate} title="Contract start date" />
         <input type="date" bind:value={cpContractExpiryDate} title="Contract expiry date" />
-        <input bind:value={cpSupplierOwner} placeholder="Vendor owner (optional)" />
+        <input bind:value={cpSupplierOwner} placeholder="Supplier owner (optional)" />
         <input
           type="number"
           min="0"
@@ -436,8 +427,8 @@
         <li class:editing={editingCpId === String(cp.id)}>
           <div class="cp-row">
             <span>
-              {cp.name} ({displayCounterpartyType(cp.type)}) — {cp.code ?? 'no code'}
-              {#if isVendorType(cp.type) && (cp.has_contract || cp.contract_reference)}
+              {cp.name} ({counterpartyTypeLabel(cp.type)}) — {cp.code ?? 'no code'}
+              {#if isSupplierType(cp.type) && (cp.has_contract || cp.contract_reference)}
                 <span class="contract-inline">
                   — {formatContractSummary(cp)}
                 </span>
@@ -446,7 +437,7 @@
                 <span class="warn" title="Contract expiring soon">⚠️</span>
               {/if}
             </span>
-            {#if isVendorType(cp.type)}
+            {#if isSupplierType(cp.type)}
               {#if editingCpId === String(cp.id)}
                 <button type="button" onclick={() => saveEditCounterparty(String(cp.id))}>Save contract</button>
                 <button type="button" class="secondary" onclick={cancelEditCounterparty}>Cancel</button>
@@ -455,8 +446,8 @@
               {/if}
             {/if}
           </div>
-          {#if editingCpId === String(cp.id) && isVendorType(cp.type)}
-            <div class="row wrap vendor-contract cp-edit">
+          {#if editingCpId === String(cp.id) && isSupplierType(cp.type)}
+            <div class="row wrap supplier-contract cp-edit">
               <label class="inline">
                 <input type="checkbox" bind:checked={editCpHasContract} />
                 Contract in place
@@ -464,7 +455,7 @@
               <input bind:value={editCpContractReference} placeholder="Contract reference" maxlength="255" />
               <input type="date" bind:value={editCpContractStartDate} title="Contract start date" />
               <input type="date" bind:value={editCpContractExpiryDate} title="Contract expiry date" />
-              <input bind:value={editCpSupplierOwner} placeholder="Vendor owner (optional)" />
+              <input bind:value={editCpSupplierOwner} placeholder="Supplier owner (optional)" />
               <input
                 type="number"
                 min="0"
@@ -512,7 +503,7 @@
     </div>
     {#if saCounterpartyId}
       {@const selectedCp = counterpartyById(saCounterpartyId)}
-      {#if selectedCp && isVendorType(selectedCp.type)}
+      {#if selectedCp && isSupplierType(selectedCp.type)}
         <p class="contract-panel">
           <strong>Contract ({selectedCp.name}):</strong>
           {#if selectedCp.has_contract || selectedCp.contract_reference || selectedCp.contract_expiry_date}
@@ -686,7 +677,7 @@
   .actions button { margin-right: 0.25rem; }
   button.secondary { background: #eee; color: #333; border: 1px solid #ccc; }
   .warn { margin-left: 0.5rem; }
-  .vendor-contract input { min-width: 12rem; }
+  .supplier-contract input { min-width: 12rem; }
   label.inline { display: inline-flex; gap: 0.35rem; align-items: center; }
   .cp-list { list-style: none; padding: 0; }
   .cp-list li { margin-bottom: 0.75rem; padding: 0.5rem; border: 1px solid #eee; border-radius: 4px; }

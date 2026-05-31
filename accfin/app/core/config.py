@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.54a-duplicate-status-hotfix"
+        return "0.14.56-counterparty-type-labels"
 
     @property
     def edge_public_base_url(self) -> str:
