@@ -77,23 +77,48 @@ export function isExcludedFromRecentCases(
 }
 
 const EXTRACTED_FIELD_LABELS: Record<string, string> = {
-  document_date: 'Document date',
-  document_number: 'Document number',
   vendor_name: 'Vendor name',
+  document_type: 'Document type',
+  document_number: 'Document number',
+  document_date: 'Document date',
+  currency: 'Currency',
   tax_amount: 'Tax amount',
+  total_amount: 'Total amount',
+  business_purpose: 'Business purpose',
+  gl_account_id: 'GL account',
+  sender_validated: 'Document validated',
+  // Legacy metadata keys
   invoice_date: 'Document date',
   invoice_number: 'Document number',
   merchant_name: 'Vendor name',
   gst_amount: 'Tax amount',
-  sender_validated: 'Document validated',
-  gl_account_id: 'GL account',
   exchange_rate: 'Exchange rate',
 };
+
+/** Display order for parsing confirmation and manual review extracted fields. */
+export const EXTRACTED_FIELD_DISPLAY_ORDER = [
+  'vendor_name',
+  'document_type',
+  'document_number',
+  'document_date',
+  'currency',
+  'tax_amount',
+  'total_amount',
+  'business_purpose',
+  'gl_account_id',
+  'sender_validated',
+] as const;
 
 /** Inbound submitter — API `submitted_by` (email from_name or from_address). */
 /** Display label for extracted / review field keys from workflow metadata. */
 export function extractedFieldLabel(fieldKey: string): string {
-  return EXTRACTED_FIELD_LABELS[fieldKey] ?? fieldKey.replaceAll('_', ' ');
+  return EXTRACTED_FIELD_LABELS[fieldKey] ?? toSentenceCaseFieldLabel(fieldKey);
+}
+
+function toSentenceCaseFieldLabel(fieldKey: string): string {
+  const words = fieldKey.replaceAll('_', ' ').trim();
+  if (!words) return fieldKey;
+  return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
 }
 
 export function submittedByDisplay(item: {
