@@ -9,9 +9,9 @@ CRITICAL_FIELDS: dict[str, frozenset[str]] = {
     "ap_invoice": frozenset(
         {
             "vendor_name",
-            "invoice_number",   # document_number
+            "document_number",
             "total_amount",
-            "invoice_date",     # document_date
+            "document_date",
             "due_date",
             "payment_terms",
             # document_type defaults to "invoice" when absent — not treated as missing

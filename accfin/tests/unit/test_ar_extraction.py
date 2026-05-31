@@ -38,7 +38,7 @@ def test_evaluate_manual_on_critical_missing():
         evaluate_extraction_path(
             case_type="ar_invoice",
             confidence=0.95,
-            missing_fields=["invoice_number"],
+            missing_fields=["document_number"],
             stp_eligible=True,
             risk_flags=[],
         )
@@ -55,7 +55,7 @@ def test_extract_invoice_stub_parses_subject():
         )
     )
     assert resp.output is not None
-    assert resp.output.invoice_number == "INV-555"
+    assert resp.output.document_number == "INV-555"
     assert resp.confidence_score >= 0.70
 
 
@@ -64,13 +64,13 @@ def test_check_duplicate_detects_match():
         CheckDuplicateRequest(
             case_id=UUID("00000000-0000-0000-0000-000000000002"),
             extracted_invoice=ExtractedInvoice(
-                invoice_number="INV-1", total_amount="100.00", currency="SGD"
+                document_number="INV-1", total_amount="100.00", currency="SGD"
             ),
             recent_cases=[
                 RecentCase(
                     case_id=UUID("00000000-0000-0000-0000-000000000003"),
                     case_number="CAS-1",
-                    invoice_number="INV-1",
+                    document_number="INV-1",
                     total_amount="100.00",
                 )
             ],

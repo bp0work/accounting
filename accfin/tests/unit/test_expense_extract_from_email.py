@@ -43,7 +43,7 @@ async def test_extract_from_email_uses_unwrapped_hermes_output() -> None:
 
     assert confidence == pytest.approx(0.91)
     assert fields is not None
-    assert fields["merchant_name"] == "Cafe One"
+    assert fields["vendor_name"] == "Cafe One"
     assert fields["total_amount"] == "42.50"
     assert fields["expense_category"] == "meals"
 

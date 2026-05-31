@@ -14,13 +14,11 @@ class ParsingConfirmationFields(BaseModel):
     document_date: str | None = None
     due_date: str | None = None
     vendor_name: str | None = None
-    merchant_name: str | None = None
     total_amount: str | None = None
-    gst_amount: str | None = None
+    tax_amount: str | None = None
     currency: str = "SGD"
     exchange_rate: str | None = None
     payment_terms: str | None = None
-    expense_category: str | None = None
     business_purpose: str | None = None
     gl_account_id: UUID | None = None
     sender_validated: bool = False

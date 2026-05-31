@@ -15,8 +15,8 @@ from app.services.executive_mail_service import ExecutiveMailService
 def invoice_extracted_fields(inv: Any) -> dict[str, str | None]:
     """Plain dict of extracted invoice fields for manager email + UI."""
     return {
-        "invoice_number": inv.invoice_number,
-        "invoice_date": str(inv.invoice_date) if inv.invoice_date else None,
+        "document_number": inv.document_number,
+        "document_date": str(inv.document_date) if inv.document_date else None,
         "due_date": str(inv.due_date) if inv.due_date else None,
         "vendor_name": inv.vendor_name,
         "total_amount": inv.total_amount,

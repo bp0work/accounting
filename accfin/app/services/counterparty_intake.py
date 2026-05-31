@@ -129,7 +129,7 @@ async def resolve_payment_term(
 
 def compute_due_date(
     *,
-    invoice_date: date | None,
+    document_date: date | None,
     extracted_due: date | None,
     term: PaymentTerm | None,
     document_total: Decimal,
@@ -137,14 +137,14 @@ def compute_due_date(
     warnings: list[str] = []
     if extracted_due:
         return extracted_due, "extracted", warnings
-    if not invoice_date:
+    if not document_date:
         return None, None, warnings
     if term is None:
         return None, None, warnings
     if term.minimum_invoice_amount is not None and document_total < term.minimum_invoice_amount:
         warnings.append("payment_term_not_applied")
         return None, "payment_terms", warnings
-    return invoice_date + timedelta(days=term.due_days), "payment_terms", warnings
+    return document_date + timedelta(days=term.due_days), "payment_terms", warnings
 
 
 async def resolve_tax_gl(
@@ -220,7 +220,7 @@ async def resolve_invoice_intake(
         subaccount=sub,
     )
     due, due_source, term_warnings = compute_due_date(
-        invoice_date=inv.invoice_date,
+        document_date=inv.document_date,
         extracted_due=inv.due_date,
         term=term,
         document_total=amount,
@@ -261,8 +261,8 @@ def build_extraction_output(
 ) -> dict:
     return {
         "document_type": document_type,
-        "invoice_number": inv.invoice_number,
-        "invoice_date": str(inv.invoice_date) if inv.invoice_date else None,
+        "document_number": inv.document_number,
+        "document_date": str(inv.document_date) if inv.document_date else None,
         "due_date": str(resolution.due_date) if resolution.due_date else None,
         "amount_value": str(inv.total_amount or "0"),
         "amount_currency": inv.currency,

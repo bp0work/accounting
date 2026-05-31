@@ -69,7 +69,7 @@ def _output_from_flat(data: dict, categories: list[str]) -> ExtractExpenseClaimO
                 expense_date=_parse_date(data.get("document_date")),
                 category=category,
                 description=str(data.get("business_purpose") or data.get("purpose") or "Expense"),
-                merchant=data.get("merchant_name"),
+                merchant=row.get("merchant") or data.get("vendor_name"),
                 currency=str(data.get("currency") or "SGD"),
                 amount_claimed=str(data.get("total_amount") or "0"),
                 confidence=float(data.get("confidence_score") or 0.85),

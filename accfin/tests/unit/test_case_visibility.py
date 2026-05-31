@@ -96,12 +96,12 @@ def test_status_reason_includes_missing_fields_and_confidence():
     case = _case(
         status="manual_review",
         workflow_metadata={
-            "missing_fields": ["invoice_number", "invoice_date"],
+            "missing_fields": ["document_number", "document_date"],
             "extraction_confidence": 0.62,
         },
     )
     assert status_reason(case) == (
-        "Missing fields: invoice_number, invoice_date · Extraction confidence: 0.62"
+        "Missing fields: document_number, document_date · Extraction confidence: 0.62"
     )
 
 
@@ -116,7 +116,7 @@ def test_client_vendor_name_ap_uses_extracted_vendor():
         workflow_metadata={
             "extracted_fields": {
                 "vendor_name": "Accounting and Corporate Regulatory Authority",
-                "invoice_number": "R-123",
+                "document_number": "R-123",
             }
         },
     )

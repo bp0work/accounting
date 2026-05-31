@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.vendor_extraction_hint import VendorExtractionHint
 from app.repositories.vendor_extraction_hint import VendorExtractionHintRepository
 
-DATE_FIELD_NAMES = frozenset({"invoice_date", "due_date", "payment_due_date"})
+DATE_FIELD_NAMES = frozenset({"document_date", "due_date", "payment_due_date"})
 
 
 def format_vendor_hints_prompt(hints: list[VendorExtractionHint], *, vendor_name: str) -> str:

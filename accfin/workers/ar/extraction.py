@@ -7,7 +7,7 @@ from decimal import Decimal
 from app.schemas.hermes import ExtractedInvoice, ExtractedPaymentAdvice
 
 CRITICAL_FIELDS: dict[str, frozenset[str]] = {
-    "ar_invoice": frozenset({"invoice_number", "total_amount", "invoice_date", "currency"}),
+    "ar_invoice": frozenset({"document_number", "total_amount", "document_date", "currency"}),
     "ar_credit_note": frozenset(
         {"credit_note_number", "total_amount", "original_invoice_reference"}
     ),
@@ -16,9 +16,9 @@ CRITICAL_FIELDS: dict[str, frozenset[str]] = {
 
 
 def map_credit_note_fields(extracted: ExtractedInvoice) -> list[str]:
-    """Treat invoice_number as credit_note_number for critical-field checks."""
+    """Treat document_number as credit_note_number for critical-field checks."""
     missing = list(extracted.missing_fields)
-    if not extracted.invoice_number and "credit_note_number" not in missing:
+    if not extracted.document_number and "credit_note_number" not in missing:
         missing.append("credit_note_number")
     return missing
 

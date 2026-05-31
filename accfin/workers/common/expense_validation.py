@@ -52,10 +52,9 @@ CATEGORY_POLICY_NAME: dict[str, str] = {
 PARSING_MANDATORY_FIELDS = (
     "document_type",
     "document_date",
-    "merchant_name",
+    "vendor_name",
     "total_amount",
     "currency",
-    "expense_category",
 )
 
 PARSING_OPTIONAL_FIELDS = ("business_purpose",)
@@ -85,7 +84,7 @@ def expense_parsing_missing(extracted: dict) -> list[str]:
 
 
 def parse_document_date(extracted: dict) -> date | None:
-    raw = extracted.get("document_date") or extracted.get("invoice_date")
+    raw = extracted.get("document_date")
     if not raw:
         return None
     text = str(raw).strip()
@@ -100,15 +99,15 @@ def parse_document_date(extracted: dict) -> date | None:
 async def check_expense_duplicate(
     session: AsyncSession,
     *,
-    merchant_name: str,
+    vendor_name: str,
     document_number: str | None,
     total_amount: Decimal | None,
     document_date: date | None,
     exclude_case_id: UUID | None = None,
     days: int = 90,
 ) -> tuple[bool, str | None]:
-    """Match expense_claim cases on merchant + doc# + amount + date within window."""
-    if not merchant_name.strip():
+    """Match expense_claim cases on vendor + doc# + amount + date within window."""
+    if not vendor_name.strip():
         return False, None
     cutoff = datetime.now(UTC) - timedelta(days=days)
     q = (
@@ -127,9 +126,9 @@ async def check_expense_duplicate(
     for existing in result.scalars().all():
         meta = existing.workflow_metadata or {}
         ext = meta.get("extracted_fields") or {}
-        merchant = str(ext.get("merchant_name") or ext.get("vendor_name") or "").strip()
-        if not merchant or merchant.lower() not in merchant_name.lower():
-            if merchant_name.lower() not in merchant.lower():
+        vendor = str(ext.get("vendor_name") or "").strip()
+        if not vendor or vendor.lower() not in vendor_name.lower():
+            if vendor_name.lower() not in vendor.lower():
                 continue
         existing_doc = str(ext.get("document_number") or "").strip().lower()
         if doc_norm and existing_doc and existing_doc != doc_norm:
@@ -218,9 +217,9 @@ def receipt_validity_issues(extracted: dict, *, today: date | None = None) -> li
             issues.append("invalid_amount")
     except (InvalidOperation, ValueError):
         issues.append("invalid_amount")
-    merchant = str(extracted.get("merchant_name") or "").strip()
-    if not merchant:
-        issues.append("merchant_missing")
+    vendor = str(extracted.get("vendor_name") or "").strip()
+    if not vendor:
+        issues.append("vendor_missing")
     return issues
 
 
@@ -243,24 +242,25 @@ def expense_extraction_to_fields(
     sender_val: dict | None = None,
 ) -> dict[str, str | None]:
     """Map Hermes JSON / confirmed fields to workflow extracted_fields."""
-    category = normalize_expense_category(data.get("expense_category"))
     sender = sender_val or {}
     validated = sender.get("sender_validated", False)
+    vendor = str(data.get("vendor_name") or data.get("merchant_name") or "").strip() or None
+    tax = data.get("tax_amount")
+    if tax is None:
+        tax = data.get("gst_amount")
     return {
         "document_type": str(data.get("document_type") or "receipt"),
         "document_number": str(data.get("document_number")).strip()
         if data.get("document_number")
         else None,
         "document_date": str(data.get("document_date") or "")[:10] or None,
-        "merchant_name": str(data.get("merchant_name") or "").strip() or None,
-        "vendor_name": str(data.get("merchant_name") or "").strip() or None,
+        "vendor_name": vendor,
         "total_amount": str(data.get("total_amount") or "").strip() or None,
-        "gst_amount": str(data.get("gst_amount") or "").strip() if data.get("gst_amount") else None,
+        "tax_amount": str(tax).strip() if tax else None,
         "currency": str(data.get("currency") or "SGD"),
         "exchange_rate": str(data.get("exchange_rate")).strip()
         if data.get("exchange_rate")
         else None,
-        "expense_category": category,
         "business_purpose": str(data.get("business_purpose") or data.get("purpose") or "").strip()
         or None,
         "sender_validated": "true" if validated else "false",

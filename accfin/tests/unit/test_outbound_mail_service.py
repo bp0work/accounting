@@ -38,16 +38,16 @@ def test_render_missing_fields_escalation_includes_request_info():
             "case_number": "CAS-20260524-0002",
             "summary": "Missing invoice fields",
             "extraction_confidence": 0.55,
-            "extracted_fields": {"vendor_name": "Acme", "invoice_number": None},
-            "missing_fields": ["invoice_number", "invoice_date"],
+            "extracted_fields": {"vendor_name": "Acme", "document_number": None},
+            "missing_fields": ["document_number", "document_date"],
             "executive_mailbox": "accap.mmlogistix@bp0.work",
             "approve_url": "https://example.test/approve",
             "request_info_url": "https://example.test/request-info",
             "reject_url": "https://example.test/reject",
         }
     )
-    assert "invoice_number" in plain
-    assert "invoice_date" in plain
+    assert "document_number" in plain
+    assert "document_date" in plain
     assert "Request more info" in plain
     assert "Request More Info" in html
     assert "https://example.test/request-info" in html
@@ -166,12 +166,12 @@ async def test_build_send_plan_manager_escalation_reattaches(tmp_path, monkeypat
             "template": "manager.escalation.missing_fields",
             "case_number": "CAS-1",
             "reattach_inbound_attachments": True,
-            "summary": "Missing invoice_number",
-            "error_reason": "Missing invoice_number",
+            "summary": "Missing document_number",
+            "error_reason": "Missing document_number",
             "approve_url": "https://example.test/approve",
             "request_info_url": "https://example.test/info",
             "reject_url": "https://example.test/reject",
-            "missing_fields": ["invoice_number"],
+            "missing_fields": ["document_number"],
             "extracted_fields": {"vendor_name": "Acme"},
             "extraction_confidence": 0.55,
         },
@@ -234,7 +234,7 @@ async def test_build_send_plan_manager_escalation_reattaches(tmp_path, monkeypat
     assert plan is not None
     assert len(plan.attachments) == 1
     assert plan.attachments[0].filename == "invoice.pdf"
-    assert "invoice_number" in plan.body_plain
+    assert "document_number" in plan.body_plain
     assert plan.in_reply_to == "<orig@test>"
 
 

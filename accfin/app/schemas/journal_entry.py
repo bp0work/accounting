@@ -9,8 +9,8 @@ class JournalEntryApprovalDetail(BaseModel):
     """Summary shown on Finance UI journal entry approval panel."""
 
     vendor: str | None = None
-    invoice_number: str | None = None
-    invoice_date: str | None = None
+    document_number: str | None = None
+    document_date: str | None = None
     document_type: str | None = None
     amount_sgd: str | None = None
     gst: str | None = None

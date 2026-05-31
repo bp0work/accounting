@@ -33,6 +33,18 @@ PARSING_CONFIRMATION_NOTIFY_TO = (
 
 SENDER_MAILBOX = "acc.mmlogistix@bp0.work"
 
+EXPENSE_CONFIRMATION_FIELD_KEYS = (
+    "document_date",
+    "document_number",
+    "vendor_name",
+    "total_amount",
+    "currency",
+    "tax_amount",
+    "exchange_rate",
+    "gl_account_id",
+    "business_purpose",
+)
+
 
 def _parse_date(value: Any) -> date | None:
     if value is None or value == "":
@@ -52,9 +64,6 @@ def _parse_date(value: Any) -> date | None:
 
 def normalize_extracted_fields(raw: dict[str, Any]) -> dict[str, str | None]:
     """Canonical field dict for UI, workers, and notification email."""
-    doc_num = raw.get("document_number") or raw.get("invoice_number")
-    doc_date = raw.get("document_date") or raw.get("invoice_date")
-    gst = raw.get("gst_amount") or raw.get("tax_amount")
     sender = raw.get("sender_validated")
     if isinstance(sender, bool):
         sender_str = "true" if sender else "false"
@@ -64,27 +73,24 @@ def normalize_extracted_fields(raw: dict[str, Any]) -> dict[str, str | None]:
         sender_str = (
             "true" if str(sender).strip().lower() in ("true", "1", "yes") else "false"
         )
-    out = {
+    doc_num = raw.get("document_number")
+    doc_date = raw.get("document_date")
+    tax = raw.get("tax_amount")
+    out: dict[str, str | None] = {
         "document_type": str(raw.get("document_type") or "invoice"),
         "document_number": str(doc_num).strip() if doc_num else None,
         "document_date": str(doc_date).strip() if doc_date else None,
         "due_date": str(raw.get("due_date")).strip() if raw.get("due_date") else None,
         "vendor_name": str(raw.get("vendor_name")).strip() if raw.get("vendor_name") else None,
         "total_amount": str(raw.get("total_amount")).strip() if raw.get("total_amount") else None,
-        "gst_amount": str(gst).strip() if gst else None,
+        "tax_amount": str(tax).strip() if tax else None,
         "currency": str(raw.get("currency") or "SGD"),
         "exchange_rate": str(raw.get("exchange_rate")).strip() if raw.get("exchange_rate") else None,
         "sgd_amount": str(raw.get("sgd_amount")).strip() if raw.get("sgd_amount") else None,
         "payment_terms": str(raw.get("payment_terms")).strip() if raw.get("payment_terms") else None,
         "sender_validated": sender_str,
-        "invoice_number": str(doc_num).strip() if doc_num else None,
-        "invoice_date": str(doc_date).strip() if doc_date else None,
-        "tax_amount": str(gst).strip() if gst else None,
     }
-    merchant = raw.get("merchant_name")
-    if merchant is not None and str(merchant).strip():
-        out["merchant_name"] = str(merchant).strip()
-    for key in ("expense_category", "business_purpose"):
+    for key in ("business_purpose",):
         val = raw.get(key)
         if val is not None and str(val).strip():
             out[key] = str(val).strip()
@@ -97,13 +103,13 @@ def normalize_extracted_fields(raw: dict[str, Any]) -> dict[str, str | None]:
 def extracted_fields_to_invoice(fields: dict[str, Any]) -> ExtractedInvoice:
     norm = normalize_extracted_fields(fields)
     return ExtractedInvoice(
-        invoice_number=norm.get("document_number"),
-        invoice_date=_parse_date(norm.get("document_date")),
+        document_number=norm.get("document_number"),
+        document_date=_parse_date(norm.get("document_date")),
         due_date=_parse_date(norm.get("due_date")),
         vendor_name=norm.get("vendor_name"),
         customer_name=fields.get("customer_name"),
         total_amount=norm.get("total_amount"),
-        tax_amount=norm.get("gst_amount"),
+        tax_amount=norm.get("tax_amount"),
         currency=norm.get("currency") or "SGD",
         payment_terms=norm.get("payment_terms"),
         missing_fields=[],
@@ -114,9 +120,6 @@ def extracted_fields_to_invoice(fields: dict[str, Any]) -> ExtractedInvoice:
 def invoice_to_confirmation_fields(inv: Any, *, document_type: str | None = None) -> dict[str, str | None]:
     base = invoice_extracted_fields(inv)
     base["document_type"] = document_type or "invoice"
-    base["document_number"] = base.get("invoice_number")
-    base["document_date"] = base.get("invoice_date")
-    base["gst_amount"] = base.get("tax_amount")
     base["sender_validated"] = "false"
     return normalize_extracted_fields(base)
 
@@ -132,7 +135,7 @@ def expense_claim_to_confirmation_fields(claim: Any) -> dict[str, str | None]:
             "document_number": claim.case_number,
             "document_date": str(claim.claim_period_from),
             "due_date": str(claim.claim_period_to),
-            "gst_amount": None,
+            "tax_amount": None,
             "sender_validated": "false",
         }
     )
@@ -140,7 +143,8 @@ def expense_claim_to_confirmation_fields(claim: Any) -> dict[str, str | None]:
 
 def expense_fields_to_confirmation(extracted: dict) -> dict[str, str | None]:
     """Expense claim fields for Finance UI parsing confirmation."""
-    return normalize_extracted_fields(dict(extracted))
+    norm = normalize_extracted_fields(dict(extracted))
+    return {key: norm.get(key) for key in EXPENSE_CONFIRMATION_FIELD_KEYS}
 
 
 async def mailbox_for_case(
