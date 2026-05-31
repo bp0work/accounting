@@ -29,7 +29,7 @@
     type VendorExtractionHintCreate,
   } from '$lib/api/vendor-hints';
   import { listCoaAccounts, type CoaAccountItem } from '$lib/api/coa';
-  import { extractedFieldLabel, submittedByDisplay } from '$lib/case-labels';
+  import { extractedFieldLabel, EXTRACTED_FIELD_DISPLAY_ORDER, submittedByDisplay } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { sessionUser } from '$lib/stores/session';
 
@@ -552,8 +552,41 @@
   }
 
   function resolveCoaAccountLabel(accountId: string): string {
-    const acct = reviewCoaAccounts.find((a) => String(a.id) === accountId);
+    const acct =
+      expenseCoaAccounts.find((a) => String(a.id) === accountId) ??
+      reviewCoaAccounts.find((a) => String(a.id) === accountId);
     return acct ? `${acct.account_code} — ${acct.account_name}` : accountId;
+  }
+
+  function getExtractedFieldValue(
+    extracted: Record<string, string | null>,
+    key: string,
+  ): string | null {
+    switch (key) {
+      case 'vendor_name':
+        return extracted.vendor_name ?? extracted.merchant_name ?? null;
+      case 'document_date':
+        return extracted.document_date ?? extracted.invoice_date ?? null;
+      case 'document_number':
+        return extracted.document_number ?? extracted.invoice_number ?? null;
+      case 'tax_amount':
+        return extracted.tax_amount ?? extracted.gst_amount ?? null;
+      default:
+        return extracted[key] ?? null;
+    }
+  }
+
+  function orderedExtractedDisplayEntries(
+    extracted: Record<string, string | null>,
+    caseType?: string,
+  ): Array<{ key: string; value: string | null }> {
+    const entries: Array<{ key: string; value: string | null }> = [];
+    for (const key of EXTRACTED_FIELD_DISPLAY_ORDER) {
+      const value = getExtractedFieldValue(extracted, key);
+      if (!showExtractedReviewField(key, value, extracted, caseType)) continue;
+      entries.push({ key, value });
+    }
+    return entries;
   }
 
   function showExtractedReviewField(
@@ -582,6 +615,13 @@
   function formatExtractedReviewValue(key: string, value: string | null): string {
     if (key === 'gl_account_id' && value) {
       return resolveCoaAccountLabel(value);
+    }
+    if (key === 'sender_validated') {
+      const normalized = String(value ?? 'false').trim().toLowerCase();
+      return normalized === 'true' || normalized === '1' || normalized === 'yes' ? 'Yes' : 'No';
+    }
+    if (key === 'document_type' && value) {
+      return value.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     }
     return value ?? '—';
   }
@@ -755,7 +795,8 @@
     {/if}
     {#if item.status === 'manual_review' || item.status === 'on_hold'}
       {@const review = manualReviewDetails(item)}
-      {#if review.missing.length > 0 || review.confidence != null || Object.keys(review.extracted).length > 0}
+      {@const reviewExtractedRows = orderedExtractedDisplayEntries(review.extracted, item.type)}
+      {#if review.missing.length > 0 || review.confidence != null || reviewExtractedRows.length > 0}
         <section class="review-box">
           <h2>Manual review details</h2>
           {#if review.confidence != null}
@@ -769,14 +810,12 @@
               {/each}
             </ul>
           {/if}
-          {#if Object.keys(review.extracted).length > 0}
+          {#if reviewExtractedRows.length > 0}
             <p><strong>Extracted:</strong></p>
             <dl class="extracted">
-              {#each Object.entries(review.extracted) as [key, value]}
-                {#if showExtractedReviewField(key, value, review.extracted, item.type)}
-                  <dt>{extractedFieldLabel(key)}</dt>
-                  <dd>{formatExtractedReviewValue(key, value)}</dd>
-                {/if}
+              {#each reviewExtractedRows as row (row.key)}
+                <dt>{extractedFieldLabel(row.key)}</dt>
+                <dd>{formatExtractedReviewValue(row.key, row.value)}</dd>
               {/each}
             </dl>
           {/if}
@@ -868,15 +907,14 @@
         !Array.isArray(item.workflow_metadata.extracted_fields)
           ? (item.workflow_metadata.extracted_fields as Record<string, string | null>)
           : {}}
+      {@const parsingExtractedRows = orderedExtractedDisplayEntries(parsingExtracted, item.type)}
       <section class="confirm-box">
         <h2>Confirm Parsing</h2>
-        {#if Object.keys(parsingExtracted).length > 0}
+        {#if parsingExtractedRows.length > 0}
           <dl class="extracted">
-            {#each Object.entries(parsingExtracted) as [key, value]}
-              {#if showExtractedReviewField(key, value, parsingExtracted, item.type)}
-                <dt>{extractedFieldLabel(key)}</dt>
-                <dd>{formatExtractedReviewValue(key, value)}</dd>
-              {/if}
+            {#each parsingExtractedRows as row (row.key)}
+              <dt>{extractedFieldLabel(row.key)}</dt>
+              <dd>{formatExtractedReviewValue(row.key, row.value)}</dd>
             {/each}
           </dl>
         {/if}
