@@ -437,7 +437,27 @@
   async function runManualAction(action: EscalationUiAction, label: string) {
     if (!item || manualLoadingAction !== null || retrying || !manualActionConfig) return;
     if (action === 'retry') {
-      await handleRetry();
+      manualLoadingAction = 'retry';
+      manualActionMessage = '';
+      error = '';
+      try {
+        if (pendingEscalation) {
+          const result = await respondToCaseEscalation(caseId, {
+            action: 'retry',
+            comment: escalationComment.trim() || null,
+          });
+          manualActionMessage = result.message ?? `${label} recorded.`;
+          escalationComment = '';
+        } else {
+          const result = await retryCase(caseId);
+          manualActionMessage = `Requeued as ${result.status} (was ${result.previous_status}).`;
+        }
+        await load();
+      } catch (e) {
+        error = e instanceof Error ? e.message : 'Retry failed';
+      } finally {
+        manualLoadingAction = null;
+      }
       return;
     }
     const comment = escalationComment.trim();
@@ -722,7 +742,7 @@
             <a href="/counterparty-accounts">Open Counterparty Accounts</a>
           </p>
         {/if}
-        {#if manualActionConfig.primary?.action === 'retry' || manualActionConfig.primary || manualActionConfig.secondary}
+        {#if manualActionConfig.primary?.action === 'retry' || manualActionConfig.retry || manualActionConfig.primary || manualActionConfig.secondary}
           {#if manualActionConfig.commentRequiredForPrimary || manualActionConfig.commentRequiredForReject}
             <label class="escalation-comment">
               {manualActionConfig.commentRequiredForPrimary && reasonCode === 'AP_CURRENCY_CONVERSION_REQUIRED'
@@ -752,7 +772,7 @@
             {@const primaryAction = manualActionConfig.primary.action}
             <button
               type="button"
-              class="approve"
+              class={primaryAction === 'retry' ? 'retry' : 'approve'}
               disabled={manualLoadingAction !== null || retrying}
               aria-busy={manualLoadingAction === primaryAction ||
                 (primaryAction === 'retry' && retrying)}
@@ -762,6 +782,17 @@
               {manualLoadingAction === primaryAction || (primaryAction === 'retry' && retrying)
                 ? 'Working…'
                 : manualActionConfig.primary.label}
+            </button>
+          {/if}
+          {#if manualActionConfig.retry}
+            <button
+              type="button"
+              class="retry"
+              disabled={manualLoadingAction !== null || retrying}
+              aria-busy={manualLoadingAction === 'retry'}
+              onclick={() => runManualAction('retry', manualActionConfig.retry!.label)}
+            >
+              {manualLoadingAction === 'retry' ? 'Working…' : manualActionConfig.retry.label}
             </button>
           {/if}
           {#if manualActionConfig.secondary}
@@ -783,7 +814,7 @@
             </button>
           {/if}
         </div>
-        {#if !pendingEscalation && manualActionConfig.primary?.action !== 'retry'}
+        {#if !pendingEscalation && manualActionConfig.primary?.action !== 'retry' && !manualActionConfig.retry}
           <p class="hint">
             Email escalation is not pending — fix setup in Finance, then use Retry processing below.
           </p>

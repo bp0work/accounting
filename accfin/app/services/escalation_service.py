@@ -27,6 +27,7 @@ from app.services.binding_authority_service import (
     binding_reason_code,
 )
 from app.services.executive_mail_service import ExecutiveMailService
+from app.services.queue_router import enqueue_accounts
 
 # Mirrors AP_OVERRIDE_KEYS in workers.ap.handlers — kept here to avoid circular import
 _AP_STEP_OVERRIDE_KEYS: dict[str, str] = {
@@ -165,11 +166,11 @@ class EscalationService:
         action: str,
         wire_token: str,
     ) -> EscalationRespondContext:
-        if action not in ("approve", "reject", "escalate", "request_info"):
+        if action not in ("approve", "reject", "escalate", "request_info", "retry"):
             raise AppHTTPException(
                 422,
                 "INVALID_ESCALATION_ACTION",
-                "action must be approve, reject, escalate, or request_info",
+                "action must be approve, reject, escalate, request_info, or retry",
             )
 
         token_hash = self._validate_token(wire_token, escalation_id)
@@ -182,12 +183,12 @@ class EscalationService:
         if str(row.reason_code or "") in (
             _REASON_VENDOR_NOT_FOUND,
             _REASON_EXP_SUBMITTER_NOT_FOUND,
-        ) and action != "reject":
+        ) and action not in ("reject", "retry"):
             raise AppHTTPException(
                 422,
                 "ESCALATION_REJECT_ONLY",
-                "Only Reject is available for this escalation. Register staff or vendor in "
-                "Counterparty Accounts, then retry from Finance UI if applicable.",
+                "Only Reject or Retry is available for this escalation. Register vendor or employee "
+                "in Counterparty Accounts, then use Retry from Finance UI if applicable.",
             )
 
         case = await self._cases.get(row.case_id)
@@ -230,11 +231,11 @@ class EscalationService:
         comment: str | None = None,
         responder_email: str | None = None,
     ) -> EscalationRespondResult:
-        if action not in ("approve", "reject", "escalate", "request_info"):
+        if action not in ("approve", "reject", "escalate", "request_info", "retry"):
             raise AppHTTPException(
                 422,
                 "INVALID_ESCALATION_ACTION",
-                "action must be approve, reject, escalate, or request_info",
+                "action must be approve, reject, escalate, request_info, or retry",
             )
 
         token_hash = self._validate_token(wire_token, escalation_id)
@@ -251,7 +252,7 @@ class EscalationService:
             raise AppHTTPException(
                 422,
                 "ESCALATION_REJECT_ONLY",
-                "Only Reject is available for this escalation.",
+                "Only Reject or Retry is available for this escalation.",
             )
 
         if row.status != "pending":
@@ -335,6 +336,74 @@ class EscalationService:
                     )
                     message = "Approved. Case requeued for processing and submitter notified."
 
+        elif action == "retry":
+            row.status = "approved"
+            row.responded_at = now
+            row.responded_by_email = responder
+            row.manager_comment = trimmed_comment
+            case = await self._cases.get(row.case_id)
+            if case:
+                meta = dict(case.workflow_metadata or {})
+                meta["escalation_pending"] = False
+                meta["manager_decision"] = "retry"
+                if trimmed_comment:
+                    meta["manager_comment"] = trimmed_comment
+                for key in (
+                    "error_code",
+                    "error_message",
+                    "error_reason",
+                    "error_type",
+                    "reason_code",
+                    "reason",
+                ):
+                    meta.pop(key, None)
+                meta.update(
+                    {
+                        "current_stage": "processing",
+                        "reprocess_requested": True,
+                        "manual_retry": True,
+                    }
+                )
+                case.workflow_metadata = meta
+                previous_status = case.status
+                case.status = "classified"
+                message_id = str(uuid4())
+                await self._cases.add_timeline(
+                    case_id=case.id,
+                    event_type="case_retry",
+                    from_status=previous_status,
+                    to_status="classified",
+                    actor=responder,
+                    description="Escalation retry — requeued without override",
+                    metadata={"queue_message_id": message_id, "escalation_id": str(row.id)},
+                )
+                await self._executive_mail.log_step(
+                    action="manager_retry",
+                    summary=f"[{case.case_number}] Manager retry — reprocessing",
+                    actor_type="manager",
+                    actor_name=responder,
+                    mailbox_id=row.originating_mailbox_id,
+                    case_id=case.id,
+                    email_id=case.email_id,
+                    metadata={
+                        "escalation_id": str(row.id),
+                        "manager_comment": trimmed_comment,
+                    },
+                )
+                await self._session.flush()
+                await enqueue_accounts(
+                    case_id=case.id,
+                    case_type=case.type,
+                    case_number=case.case_number,
+                    email_id=case.email_id,
+                    priority=case.priority or "medium",
+                    stp_eligible=bool(case.stp_eligible),
+                    confidence_score=float(case.confidence_score or 0),
+                    source="escalation-retry",
+                    message_id=message_id,
+                )
+                message = "Retry recorded. Case requeued for processing."
+
         elif action == "reject":
             row.status = "rejected"
             row.responded_at = now
@@ -375,8 +444,8 @@ class EscalationService:
                         if str(reason_code) == _REASON_EXP_SUBMITTER_NOT_FOUND:
                             error_reason = (
                                 "Your expense claim cannot be processed because your email "
-                                "is not registered as staff. Please contact accounts to be "
-                                "added as a Staff counterparty before resubmitting."
+                                "is not registered as an employee. Please contact accounts to be "
+                                "added as an Employee counterparty before resubmitting."
                             )
                         else:
                             ctx = row.context or {}

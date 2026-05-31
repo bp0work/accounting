@@ -26,7 +26,7 @@ class FinanceDailyLogJobResponse(BaseModel):
 
 
 class CaseEscalationRespondRequest(BaseModel):
-    action: str = Field(pattern="^(approve|reject|request_info)$")
+    action: str = Field(pattern="^(approve|reject|request_info|retry)$")
     comment: str | None = Field(default=None, max_length=4000)
 
 
