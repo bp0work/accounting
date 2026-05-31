@@ -9,6 +9,7 @@ from app.api.routes import (
     audit,
     auth,
     cases,
+    coa,
     events,
     expense_claims,
     health,
@@ -80,6 +81,7 @@ api_router.include_router(notifications.router)
 api_router.include_router(events.router)
 api_router.include_router(audit.router)
 api_router.include_router(expense_claims.router)
+api_router.include_router(coa.router)
 api_router.include_router(internal_jobs.router)
 api_router.include_router(mail_actions.router)
 app.include_router(api_router)

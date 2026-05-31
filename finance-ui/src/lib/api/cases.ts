@@ -134,6 +134,7 @@ export type ParsingConfirmationFields = {
   payment_terms?: string | null;
   expense_category?: string | null;
   business_purpose?: string | null;
+  gl_account_id?: string | null;
   sender_validated: boolean;
 };
 

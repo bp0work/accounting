@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.48-empty-extraction-parsing-confirm"
+        return "0.14.50-coa-expense-parsing-ui"
 
     @property
     def edge_public_base_url(self) -> str:
