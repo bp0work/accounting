@@ -595,7 +595,7 @@ class ExpenseWorkerService:
             claim = ExpenseClaim(
                 case_id=case.id,
                 case_number=case.case_number,
-                claimant_id=case.assigned_to,
+                claimant_id=staff.id if staff else case.assigned_to,
                 claimant_name=staff.name if staff else case.counterparty_name or "Staff",
                 submission_date=date.today(),
                 claim_period_from=parse_document_date(extracted) or date.today(),
@@ -607,7 +607,7 @@ class ExpenseWorkerService:
                 submitted_via="email",
             )
             await self._expense.add_claim(claim)
-        claim.total_claimed = Decimal(str(extracted.get("sgd_amount") or extracted.get("total_amount") or "0"))
+        claim.total_claimed = Decimal(str(extracted.get("total_amount") or "0"))
         claim.currency = "SGD"
         if not claim.line_items:
             gl_uuid = self._parse_gl_account_id(extracted.get("gl_account_id"))

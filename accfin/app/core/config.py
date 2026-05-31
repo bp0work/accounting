@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.56-counterparty-type-labels"
+        return "0.14.57-claimant-id-fix"
 
     @property
     def edge_public_base_url(self) -> str:
