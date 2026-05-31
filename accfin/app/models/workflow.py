@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.models.case import CASE_TYPE_ENUM
 
 _CASE_STATUS = ENUM(
     "inbound",
@@ -24,20 +25,7 @@ _CASE_STATUS = ENUM(
     name="case_status",
     create_type=False,
 )
-_CASE_TYPE = ENUM(
-    "ar_invoice",
-    "ar_payment_advice",
-    "ar_credit_note",
-    "ap_invoice",
-    "ap_po_validation",
-    "ap_payment_proposal",
-    "treasury_reconciliation",
-    "treasury_fx",
-    "treasury_suspense",
-    "general_inquiry",
-    name="case_type",
-    create_type=False,
-)
+_CASE_TYPE = CASE_TYPE_ENUM
 
 
 class WorkflowDefinition(Base, TimestampMixin):

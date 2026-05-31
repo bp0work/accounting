@@ -17,6 +17,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, ENUM, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.models.case import CASE_TYPE_ENUM
 
 
 class Email(Base):
@@ -55,23 +56,7 @@ class Email(Base):
         nullable=False,
         server_default="received",
     )
-    classified_as: Mapped[str | None] = mapped_column(
-        ENUM(
-            "ar_invoice",
-            "ar_payment_advice",
-            "ar_credit_note",
-            "ap_invoice",
-            "ap_po_validation",
-            "ap_payment_proposal",
-            "treasury_reconciliation",
-            "treasury_fx",
-            "treasury_suspense",
-            "general_inquiry",
-            name="case_type",
-            create_type=False,
-        ),
-        nullable=True,
-    )
+    classified_as: Mapped[str | None] = mapped_column(CASE_TYPE_ENUM, nullable=True)
     classification_confidence: Mapped[float | None] = mapped_column(Numeric(3, 2), nullable=True)
     classified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     spf_result: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -153,23 +138,7 @@ class MailGatewayConfig(Base, TimestampMixin):
     require_parsing_confirmation: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
-    default_case_type: Mapped[str | None] = mapped_column(
-        ENUM(
-            "ar_invoice",
-            "ar_payment_advice",
-            "ar_credit_note",
-            "ap_invoice",
-            "ap_po_validation",
-            "ap_payment_proposal",
-            "treasury_reconciliation",
-            "treasury_fx",
-            "treasury_suspense",
-            "general_inquiry",
-            name="case_type",
-            create_type=False,
-        ),
-        nullable=True,
-    )
+    default_case_type: Mapped[str | None] = mapped_column(CASE_TYPE_ENUM, nullable=True)
     routing_rules: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
     max_attachment_size_mb: Mapped[int] = mapped_column(Integer, nullable=False, server_default="25")
     allowed_attachment_types: Mapped[list[str]] = mapped_column(

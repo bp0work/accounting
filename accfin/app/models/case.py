@@ -3,6 +3,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from enum import Enum
 
 from sqlalchemy import (
     Boolean,
@@ -53,22 +54,26 @@ class Counterparty(Base, TimestampMixin):
     extra_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
 
 
-_CASE_TYPE = ENUM(
-    "ar_invoice",
-    "ar_payment_advice",
-    "ar_credit_note",
-    "ap_invoice",
-    "ap_po_validation",
-    "ap_payment_proposal",
-    "treasury_reconciliation",
-    "treasury_fx",
-    "treasury_suspense",
-    "general_inquiry",
-    "ar_soa_request",
-    "expense_claim",
-    name="case_type",
-    create_type=False,
-)
+class CaseType(str, Enum):
+    """PostgreSQL ``case_type`` enum — keep in sync with Alembic migrations."""
+
+    AR_INVOICE = "ar_invoice"
+    AR_PAYMENT_ADVICE = "ar_payment_advice"
+    AR_CREDIT_NOTE = "ar_credit_note"
+    AP_INVOICE = "ap_invoice"
+    AP_PO_VALIDATION = "ap_po_validation"
+    AP_PAYMENT_PROPOSAL = "ap_payment_proposal"
+    TREASURY_RECONCILIATION = "treasury_reconciliation"
+    TREASURY_FX = "treasury_fx"
+    TREASURY_SUSPENSE = "treasury_suspense"
+    GENERAL_INQUIRY = "general_inquiry"
+    AR_SOA_REQUEST = "ar_soa_request"
+    EXPENSE_CLAIM = "expense_claim"
+
+
+CASE_TYPE_VALUES: tuple[str, ...] = tuple(member.value for member in CaseType)
+CASE_TYPE_ENUM = ENUM(*CASE_TYPE_VALUES, name="case_type", create_type=False)
+_CASE_TYPE = CASE_TYPE_ENUM
 _CASE_STATUS = ENUM(
     "inbound",
     "classified",
