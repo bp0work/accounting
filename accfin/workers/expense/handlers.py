@@ -413,14 +413,8 @@ class ExpenseWorkerService:
         case.amount_currency = "SGD"
 
         posting_date = parse_document_date(extracted) or date.today()
-        period_block = await ensure_gl_period_allows_posting(
-            self._session,
-            case,
-            message,
-            posting_date=posting_date,
-            email=email,
-            actor_name="expense-worker",
-            expense=True,
+        period_block = await self._ensure_gl_period_for_posting(
+            case, message, posting_date=posting_date, email=email
         )
         if period_block:
             claim.status = "manual_review"
@@ -785,6 +779,26 @@ class ExpenseWorkerService:
             actor="expense-worker",
             description=description,
             metadata=metadata or {},
+        )
+
+    async def _ensure_gl_period_for_posting(
+        self,
+        case: Case,
+        message: dict,
+        *,
+        posting_date: date,
+        email: Email | None,
+    ) -> dict | None:
+        """GL period gate — PERIOD_CLOSED always creates a fresh manager escalation."""
+        return await ensure_gl_period_allows_posting(
+            self._session,
+            case,
+            message,
+            posting_date=posting_date,
+            email=email,
+            actor_name="expense-worker",
+            expense=True,
+            force_new_escalation=True,
         )
 
     async def _escalate_step(

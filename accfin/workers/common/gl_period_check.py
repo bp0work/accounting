@@ -37,6 +37,7 @@ async def ensure_gl_period_allows_posting(
     email: Email | None,
     actor_name: str,
     expense: bool = False,
+    force_new_escalation: bool = False,
 ) -> dict | None:
     """
     Run period check. Returns escalation result dict if blocked; None if posting may proceed.
@@ -54,6 +55,16 @@ async def ensure_gl_period_allows_posting(
         )
         return None
     except PeriodClosedError as exc:
+        if force_new_escalation:
+            from app.services.executive_mail_service import ExecutiveMailService
+
+            svc = ExecutiveMailService(session)
+            if await svc.cancel_pending_escalation(case.id):
+                meta = dict(case.workflow_metadata or {})
+                meta["escalation_pending"] = False
+                meta.pop("escalation_id", None)
+                case.workflow_metadata = meta
+                await session.flush()
         return await route_period_closed_escalation(
             session,
             case,
