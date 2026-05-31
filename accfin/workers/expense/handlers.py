@@ -9,7 +9,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import attributes, selectinload
 
 from app.clients.hermes import HermesClient, HermesError
 from app.models.case import Case, Counterparty
@@ -657,7 +657,8 @@ class ExpenseWorkerService:
                 gl_account_id=gl_uuid,
             )
             if is_new:
-                claim.line_items = [line_item]
+                attributes.set_committed_value(claim, "line_items", [])
+                claim.line_items.append(line_item)
             else:
                 claim.line_items.append(line_item)
         return claim
