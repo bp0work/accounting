@@ -645,19 +645,21 @@ class ExpenseWorkerService:
         claim.currency = "SGD"
         if is_new or not claim.line_items:
             gl_uuid = self._parse_gl_account_id(extracted.get("gl_account_id"))
-            claim.line_items.append(
-                ExpenseLineItem(
-                    line_number=1,
-                    expense_date=parse_document_date(extracted) or date.today(),
-                    category=normalize_expense_category(extracted.get("expense_category")),
-                    description=str(extracted.get("business_purpose") or "Expense"),
-                    merchant=extracted.get("vendor_name"),
-                    currency="SGD",
-                    amount_claimed=claim.total_claimed,
-                    amount_sgd=claim.total_claimed,
-                    gl_account_id=gl_uuid,
-                )
+            line_item = ExpenseLineItem(
+                line_number=1,
+                expense_date=parse_document_date(extracted) or date.today(),
+                category=normalize_expense_category(extracted.get("expense_category")),
+                description=str(extracted.get("business_purpose") or "Expense"),
+                merchant=extracted.get("vendor_name"),
+                currency="SGD",
+                amount_claimed=claim.total_claimed,
+                amount_sgd=claim.total_claimed,
+                gl_account_id=gl_uuid,
             )
+            if is_new:
+                claim.line_items = [line_item]
+            else:
+                claim.line_items.append(line_item)
         return claim
 
     async def _resolve_expense_account(self, extracted: dict):
