@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.45-expense-workflow"
+        return "0.14.46-case-type-expense-claim-enum"
 
     @property
     def edge_public_base_url(self) -> str:

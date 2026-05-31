@@ -2,7 +2,7 @@ from app.models.audit import AuditLog, SystemSetting
 from app.models.executive_mail import CaseEscalation, FinanceActivityLog, PendingOutboundEmail
 from app.models.expense import ExpenseClaim, ExpenseLineItem, ExpensePolicy
 from app.models.base import Base, TimestampMixin
-from app.models.case import Case, CaseAttachment, CaseNote, CaseTimeline, Counterparty
+from app.models.case import Case, CaseAttachment, CaseNote, CaseTimeline, CaseType, Counterparty
 from app.models.counterparty_master import CounterpartyAccount, PaymentTerm, TenantTaxCode
 from app.models.ledger import CoaAccount, JournalEntry, JournalEntryLine
 from app.models.purchase_order import PurchaseOrder
@@ -38,6 +38,7 @@ __all__ = [
     "PaymentTerm",
     "TenantTaxCode",
     "Case",
+    "CaseType",
     "CaseTimeline",
     "CaseNote",
     "CaseAttachment",

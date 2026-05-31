@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.hermes import HermesClient, HermesError
 from app.core.database import get_session_factory
 from app.core.state_machine import CaseStateMachine
-from app.models.case import Case, Counterparty
+from app.models.case import Case, CaseType, Counterparty
 from app.models.mail import Email, EmailAttachment
 from app.repositories.case import CaseRepository
 from app.schemas.hermes import (
@@ -31,19 +31,7 @@ from app.services.queue_router import enqueue_dead_letter, route_case_to_queue, 
 
 logger = logging.getLogger(__name__)
 
-VALID_CASE_TYPES = [
-    "ar_invoice",
-    "ar_payment_advice",
-    "ar_credit_note",
-    "ap_invoice",
-    "ap_po_validation",
-    "ap_payment_proposal",
-    "expense_claim",
-    "treasury_reconciliation",
-    "treasury_fx",
-    "treasury_suspense",
-    "general_inquiry",
-]
+VALID_CASE_TYPES = [member.value for member in CaseType]
 
 SLA_HOURS = {"critical": 1, "high": 4, "medium": 24, "low": 72}
 
