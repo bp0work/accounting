@@ -141,6 +141,12 @@
   const transientHermesCodes = new Set(['HERMES_TIMEOUT', 'HERMES_UNAVAILABLE']);
 
   /** Hermes timeout/unavailable — match metadata codes or API error_reason text. */
+  function trimOptional(value: unknown): string | null {
+    if (value == null) return null;
+    const s = typeof value === 'string' ? value.trim() : String(value).trim();
+    return s || null;
+  }
+
   function transientHermesCode(caseItem: CaseItem): string | null {
     const meta = caseItem.workflow_metadata ?? {};
     for (const key of ['error_code', 'error_type', 'reason_code'] as const) {
@@ -345,24 +351,26 @@
     parsingMessage = '';
     error = '';
     try {
-      if (parsingForm.currency.trim().toUpperCase() !== 'SGD' && !parsingForm.exchange_rate?.trim()) {
-        error = `Exchange rate is required when currency is ${parsingForm.currency}.`;
+      const currency = trimOptional(parsingForm.currency)?.toUpperCase() ?? 'SGD';
+      if (currency !== 'SGD' && !trimOptional(parsingForm.exchange_rate)) {
+        error = `Exchange rate is required when currency is ${currency}.`;
         return;
       }
       const body: ParsingConfirmationFields = {
         ...parsingForm,
-        document_number: parsingForm.document_number?.trim() || null,
-        document_date: parsingForm.document_date?.trim() || null,
-        due_date: parsingForm.due_date?.trim() || null,
-        vendor_name: parsingForm.vendor_name?.trim() || null,
-        merchant_name: parsingForm.merchant_name?.trim() || parsingForm.vendor_name?.trim() || null,
-        total_amount: parsingForm.total_amount?.trim() || null,
-        gst_amount: parsingForm.gst_amount?.trim() || null,
-        exchange_rate: parsingForm.exchange_rate?.trim() || null,
-        payment_terms: parsingForm.payment_terms?.trim() || null,
-        expense_category: parsingForm.expense_category?.trim() || null,
-        business_purpose: parsingForm.business_purpose?.trim() || null,
-        gl_account_id: parsingForm.gl_account_id?.trim() || null,
+        document_number: trimOptional(parsingForm.document_number),
+        document_date: trimOptional(parsingForm.document_date),
+        due_date: trimOptional(parsingForm.due_date),
+        vendor_name: trimOptional(parsingForm.vendor_name),
+        merchant_name:
+          trimOptional(parsingForm.merchant_name) ?? trimOptional(parsingForm.vendor_name),
+        total_amount: trimOptional(parsingForm.total_amount),
+        gst_amount: trimOptional(parsingForm.gst_amount),
+        exchange_rate: trimOptional(parsingForm.exchange_rate),
+        payment_terms: trimOptional(parsingForm.payment_terms),
+        expense_category: trimOptional(parsingForm.expense_category),
+        business_purpose: trimOptional(parsingForm.business_purpose),
+        gl_account_id: trimOptional(parsingForm.gl_account_id),
       };
       const result = await confirmParsing(caseId, body);
       parsingMessage = `Parsing confirmed (${result.correction_count} correction(s)) — case requeued.`;
@@ -858,7 +866,7 @@
                   {expenseCoaLoading ? 'Loading accounts…' : 'Select account…'}
                 </option>
                 {#each expenseCoaAccounts as acct (acct.id)}
-                  <option value={acct.id}>{acct.account_code} — {acct.account_name}</option>
+                  <option value={String(acct.id)}>{acct.account_code} — {acct.account_name}</option>
                 {/each}
               </select>
             </label>
