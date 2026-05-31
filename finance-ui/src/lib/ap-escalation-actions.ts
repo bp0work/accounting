@@ -78,7 +78,7 @@ function contextForCode(code: string, caseItem: CaseItem): string {
         'counterparty with matching contact email, then use Retry — or Reject to notify the submitter.'
       );
     case 'EXP_SUBMITTER_INACTIVE':
-      return 'Employee submitter is inactive. Reactivate in Counterparty Accounts, then Resubmit — or Reject.';
+      return 'Employee submitter is inactive. Reactivate in Counterparty Accounts, then use Retry — or Reject.';
     case 'EXP_POLICY_EXCEEDED':
       return `Expense exceeds T&E policy limits. Accept with an override reason in the comment field, or Reject.`;
     case 'EXP_RECEIPT_INVALID':
@@ -166,7 +166,7 @@ export function escalationActionConfig(
       };
     case 'EXP_SUBMITTER_INACTIVE':
       return {
-        primary: { label: 'Resubmit', action: 'approve' },
+        primary: { label: 'Retry', action: 'retry' },
         secondary: { label: 'Reject', action: 'reject' },
         commentRequiredForPrimary: false,
         commentRequiredForReject: true,
@@ -199,7 +199,7 @@ export function escalationActionConfig(
       };
     case 'EXP_SUBMITTER_NOT_FOUND':
       return {
-        primary: null,
+        primary: { label: 'Retry', action: 'retry' },
         secondary: { label: 'Reject', action: 'reject' },
         commentRequiredForPrimary: false,
         commentRequiredForReject: true,
