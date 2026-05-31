@@ -178,7 +178,7 @@ class ExpenseWorkerService:
                     )
 
             missing = expense_parsing_missing(extracted)
-            if missing or confidence_f < 0.70:
+            if missing or (not use_stored and confidence_f < 0.70):
                 missing_label = ", ".join(missing) if missing else "low extraction confidence"
                 summary = (
                     f"Unable to parse all required expense details for {case.case_number}. "
