@@ -559,9 +559,9 @@ class ExpenseWorkerService:
             )
         except HermesError:
             return None, 0.0
-        if not extraction.output or not extraction.output.line_items:
+        if not extraction.line_items:
             return None, float(extraction.confidence_score or 0)
-        out = extraction.output
+        out = extraction
         flat = {
             "document_type": "receipt",
             "document_date": str(out.line_items[0].expense_date or out.claim_period_to or ""),
