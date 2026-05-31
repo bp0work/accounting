@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.52-canonical-field-naming"
+        return "0.14.53-expense-confirm-resume-fix"
 
     @property
     def edge_public_base_url(self) -> str:

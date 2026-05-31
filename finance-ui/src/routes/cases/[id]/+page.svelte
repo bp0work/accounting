@@ -556,7 +556,23 @@
     return acct ? `${acct.account_code} — ${acct.account_name}` : accountId;
   }
 
-  function showExtractedReviewField(key: string, value: string | null): boolean {
+  function showExtractedReviewField(
+    key: string,
+    value: string | null,
+    extracted: Record<string, string | null> = {},
+    caseType?: string,
+  ): boolean {
+    if (
+      caseType === 'expense_claim' &&
+      (key === 'due_date' || key === 'payment_terms')
+    ) {
+      return false;
+    }
+    if (key === 'sgd_amount') {
+      const currency = trimOptional(extracted.currency)?.toUpperCase() ?? 'SGD';
+      if (currency === 'SGD') return false;
+      return trimOptional(value) != null;
+    }
     if (key === 'exchange_rate' || key === 'tax_amount' || key === 'gst_amount') {
       return trimOptional(value) != null;
     }
@@ -757,7 +773,7 @@
             <p><strong>Extracted:</strong></p>
             <dl class="extracted">
               {#each Object.entries(review.extracted) as [key, value]}
-                {#if showExtractedReviewField(key, value)}
+                {#if showExtractedReviewField(key, value, review.extracted, item.type)}
                   <dt>{extractedFieldLabel(key)}</dt>
                   <dd>{formatExtractedReviewValue(key, value)}</dd>
                 {/if}
@@ -846,8 +862,24 @@
       {/if}
     {/if}
     {#if item.status === 'pending_confirmation'}
+      {@const parsingExtracted =
+        item.workflow_metadata?.extracted_fields &&
+        typeof item.workflow_metadata.extracted_fields === 'object' &&
+        !Array.isArray(item.workflow_metadata.extracted_fields)
+          ? (item.workflow_metadata.extracted_fields as Record<string, string | null>)
+          : {}}
       <section class="confirm-box">
         <h2>Confirm Parsing</h2>
+        {#if Object.keys(parsingExtracted).length > 0}
+          <dl class="extracted">
+            {#each Object.entries(parsingExtracted) as [key, value]}
+              {#if showExtractedReviewField(key, value, parsingExtracted, item.type)}
+                <dt>{extractedFieldLabel(key)}</dt>
+                <dd>{formatExtractedReviewValue(key, value)}</dd>
+              {/if}
+            {/each}
+          </dl>
+        {/if}
         {#if canConfirmParsing}
           <p class="hint">
             Review extracted fields before duplicate check and validation continue.
