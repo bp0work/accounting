@@ -14,7 +14,7 @@
   let reason = '';
   let message = '';
   let error = '';
-  let busy = false;
+  let loadingAction: 'approve' | 'reject' | 'escalate' | null = null;
 
   const tier2Roles = new Set(['accounts_clerk', 'finance_officer']);
   const executiveRoles = new Set(['cfo', 'finance_manager']);
@@ -48,8 +48,9 @@
   }
 
   async function doApprove() {
+    if (loadingAction !== null) return;
     message = '';
-    busy = true;
+    loadingAction = 'approve';
     try {
       await approve(id, note || 'Approved');
       message = 'Approved';
@@ -57,17 +58,18 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Approve failed';
     } finally {
-      busy = false;
+      loadingAction = null;
     }
   }
 
   async function doReject() {
+    if (loadingAction !== null) return;
     if (!reason.trim()) {
       error = 'Rejection reason is required.';
       return;
     }
     message = '';
-    busy = true;
+    loadingAction = 'reject';
     try {
       await reject(id, reason);
       message = 'Rejected';
@@ -75,13 +77,14 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Reject failed';
     } finally {
-      busy = false;
+      loadingAction = null;
     }
   }
 
   async function doEscalate() {
+    if (loadingAction !== null) return;
     message = '';
-    busy = true;
+    loadingAction = 'escalate';
     try {
       await escalateToCfo(id, note || undefined);
       message = 'Escalated to CFO';
@@ -89,7 +92,7 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Escalate failed';
     } finally {
-      busy = false;
+      loadingAction = null;
     }
   }
 </script>
@@ -123,11 +126,32 @@
         <textarea bind:value={reason} placeholder="Required to reject" rows="2"></textarea>
       </label>
       <div class="actions">
-        <button type="button" disabled={busy} on:click={doApprove}>Approve</button>
-        <button type="button" class="reject" disabled={busy} on:click={doReject}>Reject</button>
+        <button
+          type="button"
+          disabled={loadingAction !== null}
+          aria-busy={loadingAction === 'approve'}
+          on:click={doApprove}
+        >
+          {loadingAction === 'approve' ? 'Working…' : 'Approve'}
+        </button>
+        <button
+          type="button"
+          class="reject"
+          disabled={loadingAction !== null}
+          aria-busy={loadingAction === 'reject'}
+          on:click={doReject}
+        >
+          {loadingAction === 'reject' ? 'Working…' : 'Reject'}
+        </button>
         {#if showAccActions}
-          <button type="button" class="escalate" disabled={busy} on:click={doEscalate}>
-            Escalate to CFO
+          <button
+            type="button"
+            class="escalate"
+            disabled={loadingAction !== null}
+            aria-busy={loadingAction === 'escalate'}
+            on:click={doEscalate}
+          >
+            {loadingAction === 'escalate' ? 'Working…' : 'Escalate to CFO'}
           </button>
         {/if}
       </div>

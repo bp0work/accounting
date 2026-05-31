@@ -35,7 +35,7 @@
   let item: CaseItem | null = null;
   let approvalNote = '';
   let approvalReason = '';
-  let approvalBusy = false;
+  let approvalLoadingAction: 'approve' | 'reject' | 'escalate' | null = null;
   let approvalMessage = '';
   let timeline: TimelineEntry[] = [];
   let error = '';
@@ -46,11 +46,11 @@
   let overrideSubmitting = false;
   let savedHintFields = new Set<string>();
   let teachMessage = '';
-  let parsingBusy = false;
+  let parsingLoadingAction: 'confirm' | 'reject' | null = null;
   let parsingMessage = '';
   let rejectParsingReason = '';
   let escalationComment = '';
-  let manualActionBusy = false;
+  let manualLoadingAction: EscalationUiAction | null = null;
   let manualActionMessage = '';
 
   const confirmParsingRoles = new Set([
@@ -316,8 +316,8 @@
   }
 
   async function handleConfirmParsing() {
-    if (!item || parsingBusy || !canConfirmParsing) return;
-    parsingBusy = true;
+    if (!item || parsingLoadingAction !== null || !canConfirmParsing) return;
+    parsingLoadingAction = 'confirm';
     parsingMessage = '';
     error = '';
     try {
@@ -345,18 +345,18 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Confirm parsing failed';
     } finally {
-      parsingBusy = false;
+      parsingLoadingAction = null;
     }
   }
 
   async function handleRejectParsing() {
-    if (!item || parsingBusy || !canConfirmParsing) return;
+    if (!item || parsingLoadingAction !== null || !canConfirmParsing) return;
     const reason = rejectParsingReason.trim();
     if (!reason) {
       error = 'Rejection reason is required.';
       return;
     }
-    parsingBusy = true;
+    parsingLoadingAction = 'reject';
     parsingMessage = '';
     error = '';
     try {
@@ -367,7 +367,7 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Reject parsing failed';
     } finally {
-      parsingBusy = false;
+      parsingLoadingAction = null;
     }
   }
 
@@ -388,7 +388,7 @@
   }
 
   async function runManualAction(action: EscalationUiAction, label: string) {
-    if (!item || manualActionBusy || !manualActionConfig) return;
+    if (!item || manualLoadingAction !== null || retrying || !manualActionConfig) return;
     if (action === 'retry') {
       await handleRetry();
       return;
@@ -411,7 +411,7 @@
       return;
     }
 
-    manualActionBusy = true;
+    manualLoadingAction = action;
     manualActionMessage = '';
     error = '';
     try {
@@ -425,7 +425,7 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Action failed';
     } finally {
-      manualActionBusy = false;
+      manualLoadingAction = null;
     }
   }
 
@@ -505,8 +505,8 @@
   }
 
   async function handleApprove() {
-    if (!item?.pending_approval_id || approvalBusy) return;
-    approvalBusy = true;
+    if (!item?.pending_approval_id || approvalLoadingAction !== null) return;
+    approvalLoadingAction = 'approve';
     approvalMessage = '';
     error = '';
     try {
@@ -517,18 +517,18 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Approve failed';
     } finally {
-      approvalBusy = false;
+      approvalLoadingAction = null;
     }
   }
 
   async function handleReject() {
-    if (!item?.pending_approval_id || approvalBusy) return;
+    if (!item?.pending_approval_id || approvalLoadingAction !== null) return;
     const reason = approvalReason.trim();
     if (!reason) {
       error = 'Rejection reason is required.';
       return;
     }
-    approvalBusy = true;
+    approvalLoadingAction = 'reject';
     approvalMessage = '';
     error = '';
     try {
@@ -539,13 +539,13 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Reject failed';
     } finally {
-      approvalBusy = false;
+      approvalLoadingAction = null;
     }
   }
 
   async function handleEscalate() {
-    if (!item?.pending_approval_id || approvalBusy) return;
-    approvalBusy = true;
+    if (!item?.pending_approval_id || approvalLoadingAction !== null) return;
+    approvalLoadingAction = 'escalate';
     approvalMessage = '';
     error = '';
     try {
@@ -556,7 +556,7 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Escalate failed';
     } finally {
-      approvalBusy = false;
+      approvalLoadingAction = null;
     }
   }
 </script>
@@ -627,30 +627,37 @@
         {/if}
         <div class="manual-action-buttons">
           {#if manualActionConfig.primary}
+            {@const primaryAction = manualActionConfig.primary.action}
             <button
               type="button"
               class="approve"
-              disabled={manualActionBusy || retrying}
-              aria-busy={manualActionBusy || retrying}
+              disabled={manualLoadingAction !== null || retrying}
+              aria-busy={manualLoadingAction === primaryAction ||
+                (primaryAction === 'retry' && retrying)}
               onclick={() =>
                 runManualAction(manualActionConfig.primary!.action, manualActionConfig.primary!.label)}
             >
-              {manualActionBusy ? 'Working…' : manualActionConfig.primary.label}
+              {manualLoadingAction === primaryAction || (primaryAction === 'retry' && retrying)
+                ? 'Working…'
+                : manualActionConfig.primary.label}
             </button>
           {/if}
           {#if manualActionConfig.secondary}
+            {@const secondaryAction = manualActionConfig.secondary.action}
             <button
               type="button"
               class={manualActionConfig.secondary.action === 'reject' ? 'reject' : 'secondary'}
-              disabled={manualActionBusy || retrying}
-              aria-busy={manualActionBusy || retrying}
+              disabled={manualLoadingAction !== null || retrying}
+              aria-busy={manualLoadingAction === secondaryAction}
               onclick={() =>
                 runManualAction(
                   manualActionConfig.secondary!.action,
                   manualActionConfig.secondary!.label
                 )}
             >
-              {manualActionConfig.secondary.label}
+              {manualLoadingAction === secondaryAction
+                ? 'Working…'
+                : manualActionConfig.secondary.label}
             </button>
           {/if}
         </div>
@@ -911,10 +918,11 @@
             <button
               type="button"
               class="approve"
-              disabled={parsingBusy}
+              disabled={parsingLoadingAction !== null}
+              aria-busy={parsingLoadingAction === 'confirm'}
               onclick={handleConfirmParsing}
             >
-              {parsingBusy ? 'Working…' : 'Confirm & Continue'}
+              {parsingLoadingAction === 'confirm' ? 'Working…' : 'Confirm & Continue'}
             </button>
             <label class="reject-reason">
               Rejection reason
@@ -927,10 +935,11 @@
             <button
               type="button"
               class="reject"
-              disabled={parsingBusy}
+              disabled={parsingLoadingAction !== null}
+              aria-busy={parsingLoadingAction === 'reject'}
               onclick={handleRejectParsing}
             >
-              Reject
+              {parsingLoadingAction === 'reject' ? 'Working…' : 'Reject'}
             </button>
           </div>
         {:else}
@@ -1040,15 +1049,33 @@
             <textarea bind:value={approvalReason} rows="2" placeholder="Required to reject"></textarea>
           </label>
           <div class="approval-actions">
-            <button type="button" class="approve" disabled={approvalBusy} onclick={handleApprove}>
-              {approvalBusy ? 'Working…' : 'Approve'}
+            <button
+              type="button"
+              class="approve"
+              disabled={approvalLoadingAction !== null}
+              aria-busy={approvalLoadingAction === 'approve'}
+              onclick={handleApprove}
+            >
+              {approvalLoadingAction === 'approve' ? 'Working…' : 'Approve'}
             </button>
-            <button type="button" class="reject" disabled={approvalBusy} onclick={handleReject}>
-              Reject
+            <button
+              type="button"
+              class="reject"
+              disabled={approvalLoadingAction !== null}
+              aria-busy={approvalLoadingAction === 'reject'}
+              onclick={handleReject}
+            >
+              {approvalLoadingAction === 'reject' ? 'Working…' : 'Reject'}
             </button>
             {#if showAccApprovalActions}
-              <button type="button" class="escalate" disabled={approvalBusy} onclick={handleEscalate}>
-                Escalate to CFO
+              <button
+                type="button"
+                class="escalate"
+                disabled={approvalLoadingAction !== null}
+                aria-busy={approvalLoadingAction === 'escalate'}
+                onclick={handleEscalate}
+              >
+                {approvalLoadingAction === 'escalate' ? 'Working…' : 'Escalate to CFO'}
               </button>
             {/if}
           </div>
