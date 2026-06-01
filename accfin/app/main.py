@@ -21,6 +21,7 @@ from app.api.routes import (
     metrics,
     notifications,
     reconciliation,
+    reports,
     vendor_extraction_hints,
 )
 from app.core.metrics import HTTP_LATENCY, HTTP_REQUESTS
@@ -82,6 +83,7 @@ api_router.include_router(events.router)
 api_router.include_router(audit.router)
 api_router.include_router(expense_claims.router)
 api_router.include_router(coa.router)
+api_router.include_router(reports.router)
 api_router.include_router(internal_jobs.router)
 api_router.include_router(mail_actions.router)
 app.include_router(api_router)
