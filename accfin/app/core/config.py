@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.73-journal-line-edit"
+        return "0.14.74-tokendata-attr-fixes"
 
     @property
     def edge_public_base_url(self) -> str:
