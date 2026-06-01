@@ -145,11 +145,18 @@ class EscalationService:
 
         notification = (row.context or {}).get("notification") or {}
         wire = notification.get("wire_token")
+        # Wire token secures unauthenticated email links; Finance UI retry is session-authenticated.
         if not wire:
-            raise AppHTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "ESCALATION_TOKEN_MISSING",
-                "Escalation is missing an action token; use the email link or contact support",
+            if action != "retry":
+                raise AppHTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "ESCALATION_TOKEN_MISSING",
+                    "Escalation is missing an action token; use the email link or contact support",
+                )
+            return await self.respond_retry_from_ui(
+                row.id,
+                comment=comment,
+                responder_email=responder_email,
             )
 
         return await self.respond(
@@ -223,6 +230,24 @@ class EscalationService:
             already_responded=False,
         )
 
+    async def respond_retry_from_ui(
+        self,
+        escalation_id: UUID,
+        *,
+        comment: str | None,
+        responder_email: str,
+    ) -> EscalationRespondResult:
+        """Finance UI retry — authenticated via cases API; no email wire token required."""
+        row = await self._repo.get(escalation_id)
+        if row is None:
+            raise AppHTTPException(404, "ESCALATION_NOT_FOUND", "Escalation not found")
+        return await self._respond_impl(
+            row,
+            action="retry",
+            comment=comment,
+            responder_email=responder_email,
+        )
+
     async def respond(
         self,
         escalation_id: UUID,
@@ -246,10 +271,26 @@ class EscalationService:
         if row.response_token_hash != token_hash:
             raise AppHTTPException(400, "INVALID_ESCALATION_TOKEN", "Token does not match escalation")
 
+        return await self._respond_impl(
+            row,
+            action=action,
+            comment=comment,
+            responder_email=responder_email,
+        )
+
+    async def _respond_impl(
+        self,
+        row: CaseEscalation,
+        *,
+        action: str,
+        comment: str | None = None,
+        responder_email: str | None = None,
+    ) -> EscalationRespondResult:
+
         if str(row.reason_code or "") in (
             _REASON_VENDOR_NOT_FOUND,
             _REASON_EXP_SUBMITTER_NOT_FOUND,
-        ) and action != "reject":
+        ) and action not in ("reject", "retry"):
             raise AppHTTPException(
                 422,
                 "ESCALATION_REJECT_ONLY",

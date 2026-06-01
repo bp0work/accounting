@@ -216,6 +216,108 @@ async def test_case_escalation_respond_retry_exp_parsing_incomplete_on_hold(
 
 
 @pytest.mark.integration
+async def test_case_escalation_respond_retry_without_wire_token_from_ui(
+    db_session, async_client: AsyncClient, clerk_auth_headers: dict[str, str]
+) -> None:
+    """Authenticated Finance UI retry does not require email wire_token in context."""
+    mailbox = (await db_session.execute(select(MailGatewayConfig).limit(1))).scalar_one()
+
+    case = Case(
+        id=uuid4(),
+        case_number=f"CAS-UI-NOWIRE-{uuid4().hex[:8]}",
+        type="expense_claim",
+        status="on_hold",
+        subject="pytest retry without wire",
+        workflow_metadata={
+            "escalation_pending": True,
+            "reason_code": "EXP_PARSING_INCOMPLETE",
+            "resume_from_step": "2A",
+        },
+    )
+    db_session.add(case)
+    await db_session.flush()
+
+    esc_id = uuid4()
+    _, token_hash, expires = issue_escalation_token(escalation_id=esc_id, case_id=case.id)
+    escalation = CaseEscalation(
+        id=esc_id,
+        case_id=case.id,
+        originating_mailbox_id=mailbox.id,
+        target_email=mailbox.email_address,
+        status="pending",
+        reason_code="EXP_PARSING_INCOMPLETE",
+        summary="Parsing incomplete",
+        context={"notification": {}},
+        response_token_hash=token_hash,
+        token_expires_at=expires,
+    )
+    db_session.add(escalation)
+    meta = dict(case.workflow_metadata or {})
+    meta["escalation_id"] = str(esc_id)
+    case.workflow_metadata = meta
+    await db_session.commit()
+
+    response = await async_client.post(
+        f"/api/cases/{case.id}/escalation-respond",
+        headers=clerk_auth_headers,
+        json={"action": "retry", "comment": "Reprocess after vendor hints"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["action"] == "retry"
+
+    await db_session.refresh(case)
+    assert case.status == "classified"
+    assert case.workflow_metadata.get("manual_retry") is True
+
+
+@pytest.mark.integration
+async def test_case_escalation_respond_approve_still_requires_wire_token(
+    db_session, async_client: AsyncClient, clerk_auth_headers: dict[str, str]
+) -> None:
+    mailbox = (await db_session.execute(select(MailGatewayConfig).limit(1))).scalar_one()
+
+    case = Case(
+        id=uuid4(),
+        case_number=f"CAS-UI-NOWIRE-APR-{uuid4().hex[:8]}",
+        type="ap_invoice",
+        status="on_hold",
+        subject="pytest approve without wire",
+        workflow_metadata={"escalation_pending": True, "reason_code": "AP_CONTRACT_MISSING"},
+    )
+    db_session.add(case)
+    await db_session.flush()
+
+    esc_id = uuid4()
+    _, token_hash, expires = issue_escalation_token(escalation_id=esc_id, case_id=case.id)
+    db_session.add(
+        CaseEscalation(
+            id=esc_id,
+            case_id=case.id,
+            originating_mailbox_id=mailbox.id,
+            target_email=mailbox.email_address,
+            status="pending",
+            reason_code="AP_CONTRACT_MISSING",
+            summary="Contract missing",
+            context={"notification": {}},
+            response_token_hash=token_hash,
+            token_expires_at=expires,
+        )
+    )
+    meta = dict(case.workflow_metadata or {})
+    meta["escalation_id"] = str(esc_id)
+    case.workflow_metadata = meta
+    await db_session.commit()
+
+    response = await async_client.post(
+        f"/api/cases/{case.id}/escalation-respond",
+        headers=clerk_auth_headers,
+        json={"action": "approve", "comment": "Contract updated"},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "ESCALATION_TOKEN_MISSING"
+
+
+@pytest.mark.integration
 async def test_get_case_repairs_stale_escalation_pending_flag(
     db_session, async_client: AsyncClient, clerk_auth_headers: dict[str, str]
 ) -> None:
