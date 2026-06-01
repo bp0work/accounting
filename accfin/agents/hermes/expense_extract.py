@@ -115,7 +115,10 @@ async def extract_expense_claim_llm(
         "government_fees",
         "other",
     ]
-    prompt = _EXPENSE_CLAIM_PROMPT.format(
+    hints_block = (request.vendor_hints or "").strip()
+    if hints_block:
+        hints_block = hints_block if hints_block.endswith("\n\n") else f"{hints_block}\n\n"
+    prompt = hints_block + _EXPENSE_CLAIM_PROMPT.format(
         source_text=source_text[:12000],
         claimant_hint=request.claimant_hint or "unknown",
         department_hint=request.department_hint or "unknown",

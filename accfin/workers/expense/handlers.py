@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import attributes, selectinload
 
 from app.clients.hermes import HermesClient, HermesError
+from app.constants.tenant import TENANT_MMLOGISTIX
 from app.models.case import Case, Counterparty
 from app.models.user import User
 from app.models.expense import ExpenseClaim, ExpenseLineItem
@@ -22,6 +23,10 @@ from app.repositories.ledger import LedgerRepository
 from app.schemas.hermes import ExtractExpenseClaimRequest
 from app.services.approval_service import ApprovalService
 from app.services.queue_router import EXPENSE_STEP_OVERRIDE_QUEUE_KEYS
+from app.services.vendor_extraction_hints import (
+    format_vendor_hints_prompt,
+    get_hints_for_vendor,
+)
 from app.services.binding_authority_service import BindingAuthorityService, apply_binding_sla
 from app.services.email_context import ensure_attachment_texts
 from app.services.executive_mail_service import ExecutiveMailService
@@ -573,11 +578,34 @@ class ExpenseWorkerService:
             "tier": tier,
         }
 
+    def _vendor_name_for_hints(self, case: Case) -> str | None:
+        meta = case.workflow_metadata or {}
+        extracted = meta.get("extracted_fields")
+        if isinstance(extracted, dict):
+            raw = extracted.get("vendor_name") or extracted.get("merchant_name")
+            if raw:
+                name = str(raw).strip()
+                if name:
+                    return name
+        if case.counterparty_name:
+            name = case.counterparty_name.strip()
+            if name:
+                return name
+        return None
+
     async def _extract_from_email(
         self, case: Case, email: Email | None
     ) -> tuple[dict | None, float]:
         body = ""
         attachments: list[dict] = []
+        vendor_hints: str | None = None
+        vendor_name = self._vendor_name_for_hints(case)
+        if vendor_name:
+            hints = await get_hints_for_vendor(
+                self._session, vendor_name, tenant_id=TENANT_MMLOGISTIX
+            )
+            block = format_vendor_hints_prompt(hints, vendor_name=vendor_name)
+            vendor_hints = block or None
         if email:
             body = email.body_text or email.body_preview or ""
             await ensure_attachment_texts(self._session, email.id, hermes=self._hermes)
@@ -598,6 +626,7 @@ class ExpenseWorkerService:
                     email_id=str(case.email_id or case.id),
                     email_body=body,
                     attachments=attachments,
+                    vendor_hints=vendor_hints,
                     expense_categories=list(
                         {
                             "meals",

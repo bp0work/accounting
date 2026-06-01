@@ -258,6 +258,7 @@ class ExtractExpenseClaimRequest(BaseModel):
     claimant_hint: str | None = None
     department_hint: str | None = None
     expense_categories: list[str] = Field(default_factory=list)
+    vendor_hints: str | None = None
 
 
 class ExtractedExpenseLineItem(BaseModel):
