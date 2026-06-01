@@ -193,11 +193,15 @@ def _parse_date(value: Any) -> date | None:
 def _normalize_amount(value: Any) -> str | None:
     if value is None or value == "":
         return None
-    cleaned = str(value).replace(",", "").replace("$", "").strip()
+    text = str(value).strip()
+    if not text:
+        return None
+    from app.utils.hermes_amounts import clean_decimal_amount_string
+
     try:
-        return str(Decimal(cleaned))
+        return str(Decimal(clean_decimal_amount_string(text)))
     except (InvalidOperation, ValueError):
-        return str(value)
+        return text
 
 
 def _line_items(raw: Any) -> list[InvoiceLineItem]:

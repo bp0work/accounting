@@ -24,6 +24,7 @@ from app.services.approval_service import ApprovalService
 from app.services.binding_authority_service import BindingAuthorityService, apply_binding_sla
 from app.services.email_context import ensure_attachment_texts
 from app.services.executive_mail_service import ExecutiveMailService
+from app.utils.hermes_amounts import clean_decimal_amount_string, decimal_from_hermes_amount
 from workers.common.ap_validation import extract_sender_validation
 from workers.common.binding_authority_escalation import route_binding_authority_escalation
 from workers.common.expense_validation import (
@@ -235,7 +236,7 @@ class ExpenseWorkerService:
             doc_num = extracted.get("document_number")
             doc_date = parse_document_date(extracted)
             try:
-                total_dec = Decimal(str(extracted.get("total_amount") or "0"))
+                total_dec = decimal_from_hermes_amount(extracted.get("total_amount"))
             except Exception:
                 total_dec = None
             if vendor:
@@ -314,7 +315,9 @@ class ExpenseWorkerService:
             )
             if not within:
                 try:
-                    amount = Decimal(str(extracted.get("sgd_amount") or extracted.get("total_amount") or "0"))
+                    amount = decimal_from_hermes_amount(
+                        extracted.get("sgd_amount") or extracted.get("total_amount")
+                    )
                 except Exception:
                     amount = Decimal("0")
                 limit_str = f"{limit:,.2f}" if limit else "policy"
@@ -402,9 +405,11 @@ class ExpenseWorkerService:
         )
 
         claim = await self._ensure_claim(case, extracted, staff, email)
-        sgd_amount = Decimal(str(extracted.get("sgd_amount") or extracted.get("total_amount") or "0"))
+        sgd_amount = decimal_from_hermes_amount(
+            extracted.get("sgd_amount") or extracted.get("total_amount")
+        )
         try:
-            tax = Decimal(str(extracted.get("tax_amount") or "0"))
+            tax = decimal_from_hermes_amount(extracted.get("tax_amount"))
         except Exception:
             tax = Decimal("0")
 
@@ -575,13 +580,13 @@ class ExpenseWorkerService:
             "document_date": str(out.line_items[0].expense_date or out.claim_period_to or ""),
             "document_number": None,
             "vendor_name": out.line_items[0].merchant,
-            "total_amount": str(out.line_items[0].amount_claimed),
+            "total_amount": clean_decimal_amount_string(out.line_items[0].amount_claimed),
             "currency": out.currency,
             "expense_category": out.line_items[0].category,
             "business_purpose": out.purpose,
             "tax_amount": None,
         }
-        total = sum(Decimal(li.amount_claimed or "0") for li in out.line_items)
+        total = sum(decimal_from_hermes_amount(li.amount_claimed) for li in out.line_items)
         flat["total_amount"] = str(total)
         sender_val = extract_sender_validation(
             email.subject if email else None,
@@ -639,7 +644,7 @@ class ExpenseWorkerService:
                 claim_period_to=parse_document_date(extracted) or date.today(),
                 purpose=extracted.get("business_purpose"),
                 currency=str(extracted.get("currency") or "SGD"),
-                total_claimed=Decimal(str(extracted.get("total_amount") or "0")),
+                total_claimed=decimal_from_hermes_amount(extracted.get("total_amount")),
                 status="processing",
                 submitted_via="email",
             )
@@ -647,7 +652,7 @@ class ExpenseWorkerService:
         else:
             claim.claimant_id = claimant_id
             claim.claimant_name = claimant_name
-        claim.total_claimed = Decimal(str(extracted.get("total_amount") or "0"))
+        claim.total_claimed = decimal_from_hermes_amount(extracted.get("total_amount"))
         claim.currency = "SGD"
         if is_new or not claim.line_items:
             gl_uuid = self._parse_gl_account_id(extracted.get("gl_account_id"))

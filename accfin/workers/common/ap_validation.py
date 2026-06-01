@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+
+from app.utils.hermes_amounts import decimal_from_hermes_amount
 from uuid import UUID
 
 from sqlalchemy import select
@@ -87,7 +89,7 @@ def resolve_ap_sgd_amount(extracted: dict) -> tuple[Decimal, dict, bool]:
     fields = dict(extracted)
     currency = str(fields.get("currency") or "SGD").strip().upper()
     try:
-        total = Decimal(str(fields.get("total_amount") or "0"))
+        total = decimal_from_hermes_amount(fields.get("total_amount"))
     except (InvalidOperation, ValueError):
         total = Decimal("0")
 
@@ -98,7 +100,7 @@ def resolve_ap_sgd_amount(extracted: dict) -> tuple[Decimal, dict, bool]:
     rate_raw = fields.get("exchange_rate")
     if rate_raw not in (None, ""):
         try:
-            rate = Decimal(str(rate_raw))
+            rate = decimal_from_hermes_amount(rate_raw)
             if rate <= 0:
                 raise InvalidOperation("non-positive rate")
             sgd = (total * rate).quantize(Decimal("0.01"))
