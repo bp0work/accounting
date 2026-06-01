@@ -1,6 +1,6 @@
 # AI Finance Operations Platform — Implementation Monorepo
 
-**Release version:** `0.14.80-accounts-manager-role-rename` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`). Finance UI: `0.14.77-submission-detail-page`. Client Admin: `0.14.69-login-portal-links`.
+**Release version:** `0.14.90-parsing-incomplete-retry-reset` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`). Finance UI: `0.14.87-retry-escalation-routing`. Client Admin: `0.14.69-login-portal-links`.
 
 Runnable code for the bp0.work finance platform. **Application code** lives here; **release-synced specification excerpts** for the current deploy are under `platform_dox/` (canonical working copies may also exist as a sibling folder next to `application/` on the operator workstation).
 
