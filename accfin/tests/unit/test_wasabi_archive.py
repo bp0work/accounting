@@ -122,3 +122,41 @@ async def test_archive_uploads_and_updates_db(tmp_path):
     assert attachment.wasabi_archive_path == "transactions/CAS-20260520-0001/invoice.pdf"
     assert outcome == {"archived": 1, "total": 1}
     session.flush.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_presigned_download_url_when_configured():
+    settings = Settings(
+        FINANCE_DATABASE_URL="postgresql+asyncpg://u:p@localhost/db",
+        FINANCE_REDIS__PASSWORD="x",
+        FINANCE_JWT__SECRET="secret",
+        FINANCE_PRIVACY_ENCRYPTION_KEY="0" * 64,
+        FINANCE_WASABI__ACCESS_KEY_ID="key",
+        FINANCE_WASABI__SECRET_ACCESS_KEY="secret",
+    )
+    session = AsyncMock()
+    svc = WasabiArchiveService(session, settings=settings)
+    with patch.object(svc, "_presign_get_sync", return_value="https://wasabi.example/presigned") as presign:
+        url = await svc.presigned_download_url(
+            object_key="transactions/CAS-1/invoice.pdf",
+            expires=3600,
+        )
+    assert url == "https://wasabi.example/presigned"
+    presign.assert_called_once_with(
+        object_key="transactions/CAS-1/invoice.pdf",
+        expires=3600,
+    )
+
+
+@pytest.mark.asyncio
+async def test_presigned_download_url_returns_none_when_disabled():
+    settings = Settings(
+        FINANCE_DATABASE_URL="postgresql+asyncpg://u:p@localhost/db",
+        FINANCE_REDIS__PASSWORD="x",
+        FINANCE_JWT__SECRET="secret",
+        FINANCE_PRIVACY_ENCRYPTION_KEY="0" * 64,
+    )
+    session = AsyncMock()
+    svc = WasabiArchiveService(session, settings=settings)
+    url = await svc.presigned_download_url(object_key="transactions/x.pdf")
+    assert url is None

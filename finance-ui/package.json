@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.76-number-formatting",
+  "version": "0.14.77-submission-detail-page",
   "private": true,
   "type": "module",
   "scripts": {

@@ -102,6 +102,20 @@ export function fetchCaseTimeline(caseId: string) {
   return apiFetch<TimelineEntry[]>(`/cases/${caseId}/timeline`);
 }
 
+export type CaseAttachmentItem = {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  source: 'email' | 'case_upload' | string;
+  download_url: string | null;
+  expires_in_seconds: number | null;
+};
+
+export function fetchCaseAttachments(caseId: string) {
+  return apiFetch<{ data: CaseAttachmentItem[] }>(`/cases/${caseId}/attachments`);
+}
+
 export type CaseRetryResult = {
   case_id: string;
   case_number: string;

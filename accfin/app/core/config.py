@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.76-number-formatting"
+        return "0.14.77-submission-detail-page"
 
     @property
     def edge_public_base_url(self) -> str:
