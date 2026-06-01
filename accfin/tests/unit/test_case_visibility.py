@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 from app.models.case import Case
 from app.services.case_visibility import (
+    assignee_action_by,
     case_action_by,
     case_status_group,
     case_status_group_label,
@@ -167,6 +168,20 @@ def test_action_by_processing_is_blank():
 def test_action_by_manual_review_is_acc():
     case = _case(status="manual_review", workflow_metadata={})
     assert case_action_by(case) == "ACC"
+
+
+def test_assignee_finance_manager_is_acc_not_cfo():
+    user = MagicMock()
+    user.display_name = "Finance Manager"
+    user.role.name = "finance_manager"
+    assert assignee_action_by(user) == "ACC"
+
+
+def test_assignee_finance_director_is_cfo():
+    user = MagicMock()
+    user.display_name = "Finance Director"
+    user.role.name = "finance_director"
+    assert assignee_action_by(user) == "CFO"
 
 
 def test_action_by_tier2_approval_is_acc():

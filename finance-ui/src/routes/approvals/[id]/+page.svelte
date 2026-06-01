@@ -16,8 +16,8 @@
   let error = '';
   let loadingAction: 'approve' | 'reject' | 'escalate' | null = null;
 
-  const tier2Roles = new Set(['accounts_clerk', 'finance_officer']);
-  const executiveRoles = new Set(['cfo', 'finance_manager']);
+  const tier2Roles = new Set(['accounts_clerk', 'finance_officer', 'finance_manager']);
+  const executiveRoles = new Set(['cfo', 'finance_director']);
 
   $: id = $page.params.id;
   $: role = ($sessionUser?.role_name ?? '').toLowerCase();
@@ -27,7 +27,9 @@
     item.tier === 2 &&
     !item.binding_escalated_to_cfo;
   $: showCfoActions =
-    item?.status === 'pending' && executiveRoles.has(role) && item.tier >= 2;
+    item?.status === 'pending' &&
+    executiveRoles.has(role) &&
+    (item.binding_escalated_to_cfo || item.tier >= 3);
   $: showActions = showAccActions || showCfoActions;
 
   onMount(load);
