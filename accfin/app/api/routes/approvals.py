@@ -76,7 +76,7 @@ async def list_approvals(
         case_id=case_id,
         my_pending_user_id=user.user_id if my_pending else None,
         binding_queue=binding_queue,
-        role_name=user.role_name,
+        role_name=user.role,
         limit=50,
     )
     items = []
