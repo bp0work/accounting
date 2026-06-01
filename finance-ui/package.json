@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.86-manual-review-coa-labels",
+  "version": "0.14.87-retry-escalation-routing",
   "private": true,
   "type": "module",
   "scripts": {
