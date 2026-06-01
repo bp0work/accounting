@@ -32,6 +32,7 @@
     type EscalationUiAction,
   } from '$lib/ap-escalation-actions';
   import {
+    listVendorExtractionHints,
     saveVendorExtractionHint,
     type VendorExtractionHintCreate,
   } from '$lib/api/vendor-hints';
@@ -82,6 +83,8 @@
   let overrideReason = '';
   let overrideSubmitting = false;
   let savedHintFields = new Set<string>();
+  /** Active hints already stored for this vendor (any session). */
+  let vendorExistingHintCount = 0;
   let reExtracting = false;
   let teachMessage = '';
   let parsingLoadingAction: 'confirm' | 'reject' | null = null;
@@ -306,8 +309,8 @@
   $: canRetryTransientHermes = item ? isTransientHermesCase(item) : false;
   $: showStandardRetry =
     item &&
-    (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes) &&
-    (!canRetryWithHints || canRetryTransientHermes);
+    item.status !== 'pending_confirmation' &&
+    (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes);
 
   $: caseId = $page.params.id ?? '';
 
@@ -338,12 +341,49 @@
     }
     return reviewSnapshot.missing;
   })();
-  $: canRetryWithHints = showTeachPanel && savedHintFields.size > 0;
-  $: canReExtractWithHints =
-    item?.status === 'pending_confirmation' &&
-    savedHintFields.size > 0 &&
-    hasPermission('cases:write');
   $: isExpenseConfirm = item?.type === 'expense_claim';
+
+  function hasReExtractPermission(caseItem: CaseItem): boolean {
+    const expense = caseItem.type === 'expense_claim';
+    return (
+      hasPermission('cases:write') || (expense && hasPermission('expenses:write'))
+    );
+  }
+
+  function vendorHintsAvailable(): boolean {
+    return savedHintFields.size > 0 || vendorExistingHintCount > 0;
+  }
+
+  function canRunReExtract(caseItem: CaseItem | null): boolean {
+    if (!caseItem || caseItem.status !== 'pending_confirmation') return false;
+    if (!vendorHintsAvailable()) return false;
+    return hasReExtractPermission(caseItem);
+  }
+
+  $: canReExtractWithHints = item ? canRunReExtract(item) : false;
+
+  let vendorHintsLoadKey = '';
+  $: if (item?.status === 'pending_confirmation' && vendorName) {
+    const key = `${item.id}:${vendorName}`;
+    if (key !== vendorHintsLoadKey) {
+      vendorHintsLoadKey = key;
+      void refreshVendorExistingHints(vendorName);
+    }
+  }
+
+  async function refreshVendorExistingHints(vendor: string) {
+    const name = vendor.trim();
+    if (!name) {
+      vendorExistingHintCount = 0;
+      return;
+    }
+    try {
+      const rows = await listVendorExtractionHints(name);
+      vendorExistingHintCount = rows.filter((h) => h.is_active).length;
+    } catch {
+      vendorExistingHintCount = 0;
+    }
+  }
   $: canWriteParsingConfirm = isExpenseConfirm
     ? hasPermission('expenses:write')
     : hasPermission('cases:write');
@@ -541,8 +581,14 @@
         liabilityCoaAccounts = [];
         reviewCoaAccounts = [];
       }
+      if (item?.status === 'pending_confirmation') {
+        await refreshVendorExistingHints(resolveVendorName(item));
+      } else {
+        vendorExistingHintCount = 0;
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
+      vendorExistingHintCount = 0;
     }
   }
 
@@ -574,6 +620,7 @@
     try {
       await saveVendorExtractionHint(body);
       savedHintFields = new Set([...savedHintFields, row.field_name]);
+      await refreshVendorExistingHints(vendorName);
       teachMessage = `Saved hint for ${row.field_name.replaceAll('_', ' ')}. Use Re-extract with hints to preview updated fields.`;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not save hint';
@@ -583,12 +630,21 @@
   }
 
   async function handleReExtract() {
-    if (!item || reExtracting || !canReExtractWithHints) return;
+    if (!item || reExtracting) return;
+    const id = item.id || caseId;
+    if (!id) {
+      error = 'Case id is missing.';
+      return;
+    }
+    if (!canRunReExtract(item)) {
+      teachMessage = 'Save a vendor hint first, or ensure hints exist for this vendor.';
+      return;
+    }
     reExtracting = true;
     error = '';
     teachMessage = '';
     try {
-      const result = await reExtractCase(caseId);
+      const result = await reExtractCase(id);
       applyParsingFormFromExtracted(result.extracted_fields);
       if (item.workflow_metadata) {
         item = {
@@ -1493,22 +1549,13 @@
               type="button"
               class="retry"
               disabled={reExtracting}
-              onclick={handleReExtract}
+              onclick={() => void handleReExtract()}
             >
               {reExtracting ? 'Re-extracting…' : 'Re-extract with hints'}
             </button>
-          {/if}
-          {#if canRetryWithHints}
-            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-              {retrying ? 'Requeuing…' : 'Retry with hints'}
-            </button>
-          {:else if canRetryTransientHermes}
-            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-              {retrying ? 'Requeuing…' : 'Retry processing'}
-            </button>
+          {:else if item.status === 'pending_confirmation' && vendorName && !vendorHintsAvailable()}
             <p class="hint">
-              Hermes timed out or was temporarily unavailable. Retry requeues this case after Ollama
-              is healthy.
+              Save at least one field hint for this vendor to enable re-extraction.
             </p>
           {/if}
         {/if}
