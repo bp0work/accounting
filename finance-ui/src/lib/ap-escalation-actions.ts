@@ -69,6 +69,16 @@ export function hasPendingEscalation(caseItem: CaseItem): boolean {
   return Boolean(meta.escalation_pending && meta.escalation_id);
 }
 
+/** Cases & Approvals — manual review queue (manager escalation awaiting Finance UI action). */
+export function isManualReviewQueueCase(
+  caseItem: CaseItem,
+  roleName: string | undefined | null
+): boolean {
+  if (!canUseManualReviewActions(roleName)) return false;
+  if (caseItem.status !== 'manual_review' && caseItem.status !== 'on_hold') return false;
+  return hasPendingEscalation(caseItem);
+}
+
 function vendorLabel(caseItem: CaseItem): string {
   const meta = caseItem.workflow_metadata ?? {};
   const extracted = meta.extracted_fields;

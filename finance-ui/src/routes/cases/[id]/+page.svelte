@@ -31,7 +31,12 @@
     type VendorExtractionHintCreate,
   } from '$lib/api/vendor-hints';
   import { listCoaAccounts, type CoaAccountItem } from '$lib/api/coa';
-  import { extractedFieldLabel, EXTRACTED_FIELD_DISPLAY_ORDER, submittedByDisplay } from '$lib/case-labels';
+  import {
+    caseStatusLabel,
+    extractedFieldLabel,
+    EXTRACTED_FIELD_DISPLAY_ORDER,
+    submittedByDisplay,
+  } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { sessionUser } from '$lib/stores/session';
 
@@ -727,7 +732,7 @@
         {item.status_group_label ?? item.status}
       </span>
       <span class="state-sep">·</span>
-      <strong class="status-label">{item.status_label ?? item.status}</strong>
+      <strong class="status-label">{caseStatusLabel(item)}</strong>
     </p>
     {#if item.status_reason && !item.error_reason}
       <p class="hint">{normalizeEscalationDisplayCopy(item.status_reason)}</p>
