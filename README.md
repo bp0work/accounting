@@ -1,6 +1,6 @@
 # AI Finance Operations Platform — Implementation Monorepo
 
-**Release version:** `0.15.03-requeue-button` (FastAPI and Finance UI — see `accfin/app/core/config.py` → `Settings.version`, `finance-ui/package.json`, and `/api/health`). Client Admin: `0.14.69-login-portal-links`. Operator release notes and deploy matrix: local `platform_dox/` (not in git).
+**Release version:** `0.15.03-expense-reversal` (FastAPI and Finance UI — see `accfin/app/core/config.py` → `Settings.version`, `finance-ui/package.json`, and `/api/health`). Client Admin: `0.14.69-login-portal-links`. Operator release notes and deploy matrix: local `platform_dox/` (not in git).
 
 Runnable code for the bp0.work finance platform. **Application code** lives here; **release-synced specification excerpts** for the current deploy are under `platform_dox/` (canonical working copies may also exist as a sibling folder next to `application/` on the operator workstation).
 
