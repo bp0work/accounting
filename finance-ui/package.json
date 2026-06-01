@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.71-remove-review-link",
+  "version": "0.14.72-journal-account-edit",
   "private": true,
   "type": "module",
   "scripts": {

@@ -705,7 +705,8 @@ class ExpenseWorkerService:
             return None
         if gst > 0 and gst_account is None:
             return None
-        net = amount - gst if gst > 0 and gst < amount else amount
+        amount_ex_tax = amount - gst
+        net = amount_ex_tax if amount_ex_tax > 0 else Decimal("0")
         status = "posted" if posted else "draft"
         entry = await self._ledger.create_journal_entry(
             case_id=case.id,

@@ -14,6 +14,7 @@
     rejectParsing,
     overrideGlPeriodPost,
     type CaseItem,
+    type JournalEntryLineDetail,
     type ParsingConfirmationFields,
     type TimelineEntry,
   } from '$lib/api/cases';
@@ -66,6 +67,7 @@
   let journalCoaLoading = false;
   let journalExpenseAccountId = '';
   let journalPayableAccountId = '';
+  let journalAccountSyncKey = '';
   let reviewCoaAccounts: CoaAccountItem[] = [];
 
   const confirmParsingRoles = new Set([
@@ -115,6 +117,41 @@
   const tier2Roles = new Set(['accounts_clerk', 'finance_officer', 'finance_manager']);
   const executiveRoles = new Set(['cfo', 'finance_director']);
 
+  function findCoaAccount(id: string, ...lists: CoaAccountItem[][]): CoaAccountItem | undefined {
+    for (const list of lists) {
+      const hit = list.find((a) => String(a.id) === id);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+
+  function parseJournalMoney(value: string | null | undefined): number {
+    if (value == null || value === '') return 0;
+    const n = Number(String(value).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function formatJournalMoney(value: number): string {
+    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function isGstJournalLine(line: JournalEntryLineDetail): boolean {
+    return line.account_code === '2011';
+  }
+
+  function isPayableCreditLine(
+    line: JournalEntryLineDetail,
+    allLines: JournalEntryLineDetail[],
+  ): boolean {
+    if (!line.credit || parseJournalMoney(line.credit) <= 0) return false;
+    const creditLines = allLines.filter(
+      (l) => l.credit && parseJournalMoney(l.credit) > 0,
+    );
+    if (creditLines.length === 0) return false;
+    const maxLine = Math.max(...creditLines.map((l) => l.line_number));
+    return line.line_number === maxLine;
+  }
+
   $: role = ($sessionUser?.role_name ?? '').toLowerCase();
   $: bindingTier = item?.current_approval_tier ?? null;
   $: bindingEscalated = Boolean(item?.binding_escalated_to_cfo);
@@ -122,6 +159,69 @@
   $: awaitingJournalApproval =
     !!item && journalApprovalStatuses.has(item.status);
   $: journalApproval = item?.journal_entry ?? null;
+
+  $: displayedJournalLines = (() => {
+    const base = journalApproval?.lines ?? [];
+    if (base.length === 0) return [];
+    return base.map((line) => {
+      if (line.line_number === 1 && line.debit && journalExpenseAccountId) {
+        const acct = findCoaAccount(journalExpenseAccountId, expenseCoaAccounts);
+        if (acct) {
+          return {
+            ...line,
+            account_id: String(acct.id),
+            account_code: acct.account_code,
+            account_name: acct.account_name,
+          };
+        }
+      }
+      if (isPayableCreditLine(line, base) && journalPayableAccountId) {
+        const acct = findCoaAccount(journalPayableAccountId, liabilityCoaAccounts);
+        if (acct) {
+          return {
+            ...line,
+            account_id: String(acct.id),
+            account_code: acct.account_code,
+            account_name: acct.account_name,
+          };
+        }
+      }
+      return line;
+    });
+  })();
+
+  $: journalHeaderExGst = (() => {
+    const expenseLine = displayedJournalLines.find((l) => l.line_number === 1 && l.debit);
+    if (!expenseLine?.debit) return null;
+    return formatJournalMoney(parseJournalMoney(expenseLine.debit));
+  })();
+
+  $: journalHeaderGst = (() => {
+    let sum = 0;
+    let any = false;
+    for (const line of displayedJournalLines) {
+      if (isGstJournalLine(line) && line.debit) {
+        sum += parseJournalMoney(line.debit);
+        any = true;
+      }
+    }
+    return any && sum > 0 ? formatJournalMoney(sum) : null;
+  })();
+
+  $: journalHeaderTotal = (() => {
+    let sum = 0;
+    let any = false;
+    for (const line of displayedJournalLines) {
+      if (line.credit) {
+        const v = parseJournalMoney(line.credit);
+        if (v > 0) {
+          sum += v;
+          any = true;
+        }
+      }
+    }
+    return any ? formatJournalMoney(sum) : null;
+  })();
   $: showAccApprovalActions =
     awaitingJournalApproval &&
     tier2Roles.has(role) &&
@@ -210,6 +310,15 @@
   $: canConfirmParsing =
     item?.status === 'pending_confirmation' && confirmParsingRoles.has(role);
   $: isExpenseConfirm = item?.type === 'expense_claim';
+
+  $: parsingAmountExTax = (() => {
+    if (!isExpenseConfirm) return '';
+    const total = Number(String(parsingForm.total_amount).replace(/,/g, ''));
+    const tax = Number(String(parsingForm.tax_amount).replace(/,/g, ''));
+    if (!Number.isFinite(total) || total === 0) return '';
+    const ex = total - (Number.isFinite(tax) ? tax : 0);
+    return formatJournalMoney(ex);
+  })();
 
   $: reasonCode = item ? caseReasonCode(item) : '';
   $: showActionRequiredPanel = item ? showManualReviewPanel(item, role) : false;
@@ -311,7 +420,11 @@
   }
 
   $: if (journalApproval) {
-    syncJournalAccountSelections();
+    const syncKey = journalApproval.journal_entry_id ?? 'journal';
+    if (syncKey !== journalAccountSyncKey) {
+      journalAccountSyncKey = syncKey;
+      syncJournalAccountSelections();
+    }
   }
 
   async function load() {
@@ -696,7 +809,20 @@
     approvalMessage = '';
     error = '';
     try {
-      await approve(item.pending_approval_id, approvalNote || 'Approved');
+      const approvePayload: {
+        note: string;
+        debit_account_id?: string;
+        credit_account_id?: string;
+      } = { note: approvalNote || 'Approved' };
+      const initialExpense = journalApproval?.expense_account_id ?? '';
+      const initialPayable = journalApproval?.payable_account_id ?? '';
+      if (journalExpenseAccountId && journalExpenseAccountId !== initialExpense) {
+        approvePayload.debit_account_id = journalExpenseAccountId;
+      }
+      if (journalPayableAccountId && journalPayableAccountId !== initialPayable) {
+        approvePayload.credit_account_id = journalPayableAccountId;
+      }
+      await approve(item.pending_approval_id, approvePayload);
       approvalMessage = 'Approved — journal posted.';
       approvalNote = '';
       await load();
@@ -1062,7 +1188,7 @@
             </label>
           {/if}
           <label>
-            Total amount
+            {isExpenseConfirm ? 'Total amount (tax inclusive)' : 'Total amount'}
             <input type="number" step="0.01" bind:value={parsingForm.total_amount} />
           </label>
           {#if isExpenseConfirm}
@@ -1070,6 +1196,10 @@
               Tax amount
               <input type="number" step="0.01" bind:value={parsingForm.tax_amount} />
             </label>
+            <div class="derived-field">
+              <span class="derived-label">Amount ex-tax</span>
+              <output class="derived-value">{parsingAmountExTax || '—'}</output>
+            </div>
             <label>
               Currency
               <select bind:value={parsingForm.currency}>
@@ -1235,17 +1365,17 @@
               <dt>Document type</dt>
               <dd>{journalApproval.document_type}</dd>
             {/if}
-            {#if journalApproval.amount_sgd}
+            {#if journalHeaderExGst}
               <dt>Amount (ex-GST)</dt>
-              <dd>{journalApproval.amount_sgd}</dd>
+              <dd>{journalHeaderExGst}</dd>
             {/if}
-            {#if journalApproval.gst}
+            {#if journalHeaderGst}
               <dt>GST</dt>
-              <dd>{journalApproval.gst}</dd>
+              <dd>{journalHeaderGst}</dd>
             {/if}
-            {#if journalApproval.total}
+            {#if journalHeaderTotal}
               <dt>Total (inclusive)</dt>
-              <dd>{journalApproval.total}</dd>
+              <dd>{journalHeaderTotal}</dd>
             {/if}
             {#if journalApproval.approval_tier_label}
               <dt>Approval tier</dt>
@@ -1279,7 +1409,7 @@
               </select>
             </label>
           </div>
-          {#if journalApproval.lines && journalApproval.lines.length > 0}
+          {#if displayedJournalLines.length > 0}
             <table class="journal-lines-table">
               <thead>
                 <tr>
@@ -1291,7 +1421,7 @@
                 </tr>
               </thead>
               <tbody>
-                {#each journalApproval.lines as line (line.line_number)}
+                {#each displayedJournalLines as line (line.line_number)}
                   <tr>
                     <td>{line.line_number}</td>
                     <td>
@@ -1789,6 +1919,23 @@
     margin-top: 0.25rem;
     padding: 0.4rem;
     box-sizing: border-box;
+  }
+
+  .derived-field {
+    margin: 0.25rem 0 0.75rem;
+  }
+  .derived-label {
+    display: block;
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+  }
+  .derived-value {
+    display: block;
+    padding: 0.35rem 0.5rem;
+    background: #f8fafc;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
   }
 
   .journal-lines-table {
