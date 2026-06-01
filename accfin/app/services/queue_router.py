@@ -30,6 +30,7 @@ async def enqueue_accounts(
     retry_count: int = 0,
     source: str = "accounts-worker",
     override_po_check: bool = False,
+    override_policy: bool = False,
     gl_period_override: bool = False,
     gl_period_override_reason: str | None = None,
     gl_period_posted_by: str | None = None,
@@ -57,6 +58,8 @@ async def enqueue_accounts(
     }
     if override_po_check:
         payload["override_po_check"] = True
+    if override_policy:
+        payload["override_policy"] = True
     if gl_period_override:
         payload["gl_period_override"] = True
         if gl_period_override_reason:

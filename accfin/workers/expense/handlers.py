@@ -127,7 +127,9 @@ class ExpenseWorkerService:
         email = await self._email_for_case(case)
         resume_from = _pop_resume_from_step(case)
         meta = case.workflow_metadata or {}
-        overrides: dict = meta.get("exp_step_overrides") or {}
+        overrides: dict = dict(meta.get("exp_step_overrides") or {})
+        if message.get("override_policy"):
+            overrides["override_policy"] = True
 
         if resume_from:
             await self._add_timeline(

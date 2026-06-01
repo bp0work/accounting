@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
@@ -9,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.models.case import Case
-from app.services.queue_router import route_case_to_queue
+from app.services.queue_router import enqueue_accounts, route_case_to_queue
 
 
 @pytest.mark.asyncio
@@ -46,3 +47,27 @@ async def test_route_case_to_queue_pushes_accounts_payload():
         confidence_score=0.95,
         source="accounts-worker",
     )
+
+
+@pytest.mark.asyncio
+async def test_enqueue_accounts_includes_override_policy_when_set():
+    case_id = uuid.uuid4()
+    redis = AsyncMock()
+    redis.rpush = AsyncMock()
+
+    with (
+        patch("app.services.queue_router.get_redis", return_value=redis),
+        patch("app.services.queue_router.get_settings") as mock_settings,
+    ):
+        mock_settings.return_value.accounts_queue_name = "accounts_queue"
+        await enqueue_accounts(
+            case_id=case_id,
+            case_type="expense_claim",
+            case_number="CAS-EXP-0001",
+            override_policy=True,
+        )
+
+    redis.rpush.assert_awaited_once()
+    payload = json.loads(redis.rpush.await_args.args[1])
+    assert payload["override_policy"] is True
+    assert payload["case_id"] == str(case_id)

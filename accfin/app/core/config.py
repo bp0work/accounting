@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.90-parsing-incomplete-retry-reset"
+        return "0.14.92-policy-override-queue-flag"
 
     @property
     def edge_public_base_url(self) -> str:
