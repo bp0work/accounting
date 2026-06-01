@@ -23,6 +23,7 @@ from app.models.policy import Approval
 from app.repositories.case import CaseRepository
 from app.repositories.policy import PolicyRepository
 from app.schemas.auth import TokenData
+from app.schemas.case_attachment import CaseAttachmentListResponse
 from app.schemas.case import (
     CaseDashboardResponse,
     CaseListResponse,
@@ -47,6 +48,7 @@ from app.services.parsing_confirmation_service import (
     execute_confirm_parsing,
     execute_reject_parsing,
 )
+from app.services.case_attachments import CaseAttachmentService
 from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
 from app.services.case_journal_approval import build_journal_entry_approval_detail
@@ -312,6 +314,17 @@ async def get_case(
         assignee=assignee,
         include_journal_entry=True,
     )
+
+
+@router.get("/cases/{case_id}/attachments", response_model=CaseAttachmentListResponse)
+async def list_case_attachments(
+    case_id: UUID,
+    _user: TokenData = Depends(require_permission("cases:read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> CaseAttachmentListResponse:
+    service = CaseAttachmentService(session)
+    items = await service.list_for_case(case_id)
+    return CaseAttachmentListResponse(data=items)
 
 
 @router.post("/cases/{case_id}/status", response_model=CaseStatusTransitionResponse)

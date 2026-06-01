@@ -167,6 +167,19 @@ export function submittedByDisplay(item: {
   return label || '—';
 }
 
+/** Submission detail — counterparty name plus inbound email address. */
+export function submissionSubmittedByDisplay(item: {
+  counterparty_name?: string | null;
+  from_address?: string | null;
+}): string {
+  const name = item.counterparty_name?.trim();
+  const email = item.from_address?.trim();
+  if (name && email) return `${name} (${email})`;
+  if (name) return name;
+  if (email) return email;
+  return '—';
+}
+
 export function clientVendorColumnValue(item: {
   type: string;
   client_vendor_name?: string | null;

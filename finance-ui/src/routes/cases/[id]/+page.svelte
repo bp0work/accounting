@@ -879,7 +879,9 @@
     {#if item.error_reason}
       <p class="badge error">Error: {normalizeEscalationDisplayCopy(item.error_reason)}</p>
     {/if}
-    <p><strong>{item.case_number}</strong> · {item.type}</p>
+    <p>
+      <strong><a href="/cases/{item.id}/submission">{item.case_number}</a></strong> · {item.type}
+    </p>
     <p class="case-state" title="System status: {item.status}">
       <span class="status-group status-group-{item.status_group ?? 'processing'}">
         {item.status_group_label ?? item.status}

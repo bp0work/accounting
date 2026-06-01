@@ -157,3 +157,24 @@ class WasabiArchiveService:
             object_key,
         )
         return True
+
+    def _presign_get_sync(self, *, object_key: str, expires: int) -> str:
+        return self._s3_client().generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self._settings.wasabi_bucket, "Key": object_key},
+            ExpiresIn=expires,
+        )
+
+    async def presigned_download_url(
+        self, *, object_key: str, expires: int = 3600
+    ) -> str | None:
+        """Pre-signed GET URL for an archived object (default 1 hour)."""
+        if not object_key or not self._settings.wasabi_configured:
+            return None
+        try:
+            return await asyncio.to_thread(
+                self._presign_get_sync, object_key=object_key, expires=expires
+            )
+        except (BotoCoreError, ClientError) as exc:
+            logger.warning("Wasabi presign failed for %s: %s", object_key, exc)
+            return None
