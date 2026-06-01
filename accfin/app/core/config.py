@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.15.00-reextract-with-hints"
+        return "0.14.96a-receipt-age-fix"
 
     @property
     def edge_public_base_url(self) -> str:

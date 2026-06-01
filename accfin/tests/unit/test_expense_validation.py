@@ -39,10 +39,10 @@ def test_parsing_optional_fields_tuple() -> None:
     assert "business_purpose" in PARSING_OPTIONAL_FIELDS
 
 
-def test_receipt_older_than_90_days() -> None:
+def test_receipt_older_than_18_months() -> None:
     from datetime import date, timedelta
 
-    old = (date.today() - timedelta(days=120)).isoformat()
+    old = (date.today() - timedelta(days=600)).isoformat()
     issues = receipt_validity_issues(
         {
             "document_date": old,
@@ -51,4 +51,19 @@ def test_receipt_older_than_90_days() -> None:
         },
         today=date.today(),
     )
-    assert "receipt_older_than_90_days" in issues
+    assert "receipt_older_than_18_months" in issues
+
+
+def test_receipt_within_18_months_is_valid() -> None:
+    from datetime import date, timedelta
+
+    recent = (date.today() - timedelta(days=400)).isoformat()
+    issues = receipt_validity_issues(
+        {
+            "document_date": recent,
+            "total_amount": "10",
+            "vendor_name": "Cafe",
+        },
+        today=date.today(),
+    )
+    assert "receipt_older_than_18_months" not in issues

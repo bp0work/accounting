@@ -74,7 +74,7 @@ async def check_expense_duplicate(
     total_amount: Decimal | None,
     document_date: date | None,
     exclude_case_id: UUID | None = None,
-    days: int = 90,
+    days: int = 548,
 ) -> tuple[bool, str | None]:
     """Match expense_claim cases on vendor + doc# + amount + date within window."""
     if not vendor_name.strip():
@@ -175,7 +175,7 @@ def check_expense_policy(
         if policy.per_claim_limit and amount > policy.per_claim_limit:
             return False, category, policy.per_claim_limit
 
-    if (submission_date - (parse_document_date(extracted) or submission_date)).days > 365:
+    if (submission_date - (parse_document_date(extracted) or submission_date)).days > 548:
         return False, category, None
 
     return True, category, limit
@@ -188,8 +188,8 @@ def receipt_validity_issues(extracted: dict, *, today: date | None = None) -> li
     doc_date = parse_document_date(extracted)
     if doc_date is None:
         issues.append("document_date_missing")
-    elif (ref - doc_date).days > 90:
-        issues.append("receipt_older_than_90_days")
+    elif (ref - doc_date).days > 548:
+        issues.append("receipt_older_than_18_months")
     try:
         total = decimal_from_hermes_amount(extracted.get("total_amount"))
         if total <= 0:
