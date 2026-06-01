@@ -123,3 +123,18 @@ def require_permission(permission_code: str):
         return user
 
     return _check
+
+
+def require_accounts_manager():
+    """Expense reversal raise — Accounts Manager only (not Finance Manager or CFO)."""
+
+    async def _check(user: TokenData = Depends(require_permission("cases:write"))) -> TokenData:
+        if user.role != "accounts_manager":
+            raise AppHTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "FORBIDDEN",
+                "Only Accounts Manager may perform this action",
+            )
+        return user
+
+    return _check

@@ -43,11 +43,28 @@ def _document_number(case: Case) -> str:
         return ""
     extracted = meta.get("extracted_fields")
     if not isinstance(extracted, dict):
-        return ""
+        extracted = {}
     raw = extracted.get("document_number")
-    if raw is None:
-        return ""
-    return str(raw).strip()
+    doc = str(raw).strip() if raw is not None else ""
+    if case.parent_case_id is not None or case.status in (
+        "pending_reversal_approval",
+        "reversed",
+        "reversal_rejected",
+    ):
+        source_doc = meta.get("source_document_number")
+        if source_doc:
+            doc = str(source_doc).strip()
+        if doc and not doc.startswith("REV-"):
+            doc = f"REV-{doc}"
+        elif not doc:
+            doc = f"REV-{case.case_number}"
+    return doc
+
+
+def _export_status(case: Case) -> str:
+    if case.status in ("reversed", "reversal_rejected"):
+        return case.status
+    return case.status
 
 
 async def build_cases_csv(session: AsyncSession, *, date_from: date, date_to: date) -> str:
@@ -70,5 +87,5 @@ def _case_export_row(case: Case) -> list[Any]:
         _document_number(case),
         case.amount_currency or "",
         _format_export_amount(case.amount_value),
-        case.status,
+        _export_status(case),
     ]

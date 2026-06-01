@@ -13,11 +13,16 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.database import get_db_session
-from app.core.dependencies import require_manual_review_escalation, require_permission
+from app.core.dependencies import (
+    require_accounts_manager,
+    require_manual_review_escalation,
+    require_permission,
+)
 from app.core.exceptions import AppHTTPException
 from app.core.redis_client import get_redis
 from app.models.accounting_period import AccountingPeriod
 from app.models.mail import Email
+from app.models.case import Case
 from app.models.user import User
 from app.models.policy import Approval
 from app.repositories.case import CaseRepository
@@ -45,7 +50,21 @@ from app.schemas.parsing_confirmation import (
     RejectParsingResponse,
 )
 from app.schemas.case_re_extract import ReExtractResponse
+from app.schemas.case_reversal import (
+    ApproveReversalRequest,
+    ApproveReversalResponse,
+    RaiseReversalRequest,
+    RaiseReversalResponse,
+    RejectReversalRequest,
+    RejectReversalResponse,
+)
 from app.services.case_re_extract import execute_case_re_extract
+from app.services.case_expense_reversal import (
+    execute_approve_reversal,
+    execute_raise_reversal,
+    execute_reject_reversal,
+    reversal_gl_period_context,
+)
 from app.services.parsing_confirmation_service import (
     execute_confirm_parsing,
     execute_reject_parsing,
@@ -142,6 +161,37 @@ async def _pending_approval_id(session: AsyncSession, case_id: UUID) -> UUID | N
     return result.scalar_one_or_none()
 
 
+async def _reversal_link_fields(
+    session: AsyncSession, case
+) -> dict:
+    parent_case_number: str | None = None
+    if case.parent_case_id:
+        parent = await session.get(Case, case.parent_case_id)
+        if parent:
+            parent_case_number = parent.case_number
+
+    linked_id: UUID | None = None
+    linked_number: str | None = None
+    linked_status: str | None = None
+    if case.parent_case_id is None:
+        child = await CaseRepository(session).find_reversal_child(case.id)
+        if child is not None:
+            linked_id = child.id
+            linked_number = child.case_number
+            linked_status = child.status
+
+    period_label, period_closed = await reversal_gl_period_context(session, case)
+    return {
+        "parent_case_id": case.parent_case_id,
+        "parent_case_number": parent_case_number,
+        "linked_reversal_case_id": linked_id,
+        "linked_reversal_case_number": linked_number,
+        "linked_reversal_status": linked_status,
+        "reversal_gl_period_label": period_label,
+        "reversal_gl_period_closed": period_closed,
+    }
+
+
 async def _case_response(
     session: AsyncSession,
     case,
@@ -171,6 +221,7 @@ async def _case_response(
         if include_journal_entry
         else None
     )
+    reversal_fields = await _reversal_link_fields(session, case)
     return base.model_copy(
         update={
             "from_address": from_address,
@@ -197,6 +248,7 @@ async def _case_response(
             "pending_approval_id": pending_approval_id,
             "binding_escalated_to_cfo": bool(wf.get("binding_escalated_to_cfo")),
             "journal_entry": journal_entry,
+            **reversal_fields,
         }
     )
 
@@ -406,6 +458,40 @@ async def re_extract_case(
 ) -> ReExtractResponse:
     """Re-run Hermes extraction with vendor hints; updates extracted_fields only."""
     return await execute_case_re_extract(case_id, user=user)
+
+
+@router.post("/cases/{case_id}/raise-reversal", response_model=RaiseReversalResponse)
+async def raise_case_reversal(
+    case_id: UUID,
+    body: RaiseReversalRequest | None = None,
+    user: TokenData = Depends(require_accounts_manager()),
+) -> RaiseReversalResponse:
+    payload = body or RaiseReversalRequest()
+    return await execute_raise_reversal(case_id, user=user, reason=payload.reason)
+
+
+@router.post("/cases/{case_id}/approve-reversal", response_model=ApproveReversalResponse)
+async def approve_case_reversal(
+    case_id: UUID,
+    body: ApproveReversalRequest | None = None,
+    user: TokenData = Depends(require_permission("approvals:admin")),
+) -> ApproveReversalResponse:
+    payload = body or ApproveReversalRequest()
+    return await execute_approve_reversal(
+        case_id,
+        user=user,
+        comment=payload.comment,
+        gl_period_override_reason=payload.gl_period_override_reason,
+    )
+
+
+@router.post("/cases/{case_id}/reject-reversal", response_model=RejectReversalResponse)
+async def reject_case_reversal(
+    case_id: UUID,
+    body: RejectReversalRequest,
+    user: TokenData = Depends(require_permission("approvals:admin")),
+) -> RejectReversalResponse:
+    return await execute_reject_reversal(case_id, user=user, comment=body.comment)
 
 
 @router.get("/cases/{case_id}/timeline")

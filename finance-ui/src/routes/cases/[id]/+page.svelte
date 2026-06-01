@@ -14,6 +14,10 @@
     reExtractCase,
     rejectParsing,
     overrideGlPeriodPost,
+    raiseCaseReversal,
+    approveCaseReversal,
+    rejectCaseReversal,
+    isReversalCase,
     type CaseItem,
     type JournalEntryLineDetail,
     type ParsingConfirmationFields,
@@ -50,7 +54,7 @@
     submittedByDisplay,
   } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
-  import { formatAmount, formatCount, formatExtractedFieldValue } from '$lib/format';
+  import { formatAmount, formatCount, formatCurrencyAmount, formatExtractedFieldValue } from '$lib/format';
   import {
     formatJournalHeaderForeignLine,
     journalFxFromExtracted,
@@ -106,6 +110,13 @@
   let journalAccountSyncKey = '';
   let journalCoaSyncKey = '';
   let reviewCoaAccounts: CoaAccountItem[] = [];
+  let showRaiseReversalConfirm = false;
+  let raisingReversal = false;
+  let reversalMessage = '';
+  let reversalOverrideReason = '';
+  let reversalApprovalNote = '';
+  let reversalRejectReason = '';
+  let reversalApprovalLoading: 'approve' | 'reject' | null = null;
 
   const confirmParsingRoles = new Set([
     'accounts_manager',
@@ -174,8 +185,33 @@
   $: bindingTier = item?.current_approval_tier ?? null;
   $: bindingEscalated = Boolean(item?.binding_escalated_to_cfo);
   const journalApprovalStatuses = new Set(['pending_approval', 'journal_pending_approval']);
+  const postedExpenseStatuses = new Set(['posted', 'case_closed', 'journal_posted']);
   $: awaitingJournalApproval =
     !!item && journalApprovalStatuses.has(item.status);
+  $: isReversalDetail = !!item && isReversalCase(item);
+  $: awaitingReversalApproval =
+    !!item && item.status === 'pending_reversal_approval' && Boolean(item.parent_case_id);
+  $: canApproveReversal =
+    awaitingReversalApproval &&
+    (executiveRoles.has(role) || hasPermission('approvals:admin'));
+  $: showRaiseReversalButton =
+    !!item &&
+    role === 'accounts_manager' &&
+    hasPermission('cases:write') &&
+    item.type === 'expense_claim' &&
+    postedExpenseStatuses.has(item.status) &&
+    !item.parent_case_id &&
+    !(item.workflow_metadata?.reversed_by) &&
+  !(
+      item.linked_reversal_status === 'pending_reversal_approval' ||
+      item.linked_reversal_status === 'reversed'
+    );
+  $: reversalPendingBadge =
+    !!item &&
+    item.workflow_metadata?.reversed_by &&
+    item.linked_reversal_status === 'pending_reversal_approval';
+  $: reversalCompletedBadge =
+    !!item && item.workflow_metadata?.reversed_by && item.linked_reversal_status === 'reversed';
   $: journalApproval = item?.journal_entry ?? null;
 
   $: displayedJournalLines = (() => {
@@ -1088,6 +1124,70 @@
       approvalLoadingAction = null;
     }
   }
+
+  async function confirmRaiseReversal() {
+    if (!item || raisingReversal) return;
+    raisingReversal = true;
+    reversalMessage = '';
+    error = '';
+    try {
+      const result = await raiseCaseReversal(item.id);
+      reversalMessage = `Reversal ${result.reversal_case_number} raised — awaiting CFO approval`;
+      showRaiseReversalConfirm = false;
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to raise reversal';
+    } finally {
+      raisingReversal = false;
+    }
+  }
+
+  async function handleApproveReversal() {
+    if (!item || reversalApprovalLoading !== null) return;
+    if (item.reversal_gl_period_closed && !reversalOverrideReason.trim()) {
+      error = 'GL period override reason is required for closed periods.';
+      return;
+    }
+    reversalApprovalLoading = 'approve';
+    error = '';
+    reversalMessage = '';
+    try {
+      await approveCaseReversal(item.id, {
+        comment: reversalApprovalNote.trim() || undefined,
+        gl_period_override_reason: reversalOverrideReason.trim() || undefined,
+      });
+      reversalMessage = 'Reversal approved and posted to the GL.';
+      reversalOverrideReason = '';
+      reversalApprovalNote = '';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Approve reversal failed';
+    } finally {
+      reversalApprovalLoading = null;
+    }
+  }
+
+  async function handleRejectReversal() {
+    if (!item || reversalApprovalLoading !== null) return;
+    const reason = reversalRejectReason.trim();
+    if (!reason) {
+      error = 'Rejection comment is required.';
+      return;
+    }
+    reversalApprovalLoading = 'reject';
+    error = '';
+    reversalMessage = '';
+    try {
+      await rejectCaseReversal(item.id, reason);
+      reversalMessage = 'Reversal rejected.';
+      reversalRejectReason = '';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Reject reversal failed';
+    } finally {
+      reversalApprovalLoading = null;
+    }
+  }
 </script>
 
 <a href="/approvals">← Cases & Approvals</a>
@@ -1106,8 +1206,23 @@
     {#if item.error_reason}
       <p class="badge error">Error: {normalizeEscalationDisplayCopy(item.error_reason)}</p>
     {/if}
+    {#if reversalPendingBadge}
+      <p class="badge warn">Reversal pending</p>
+    {/if}
+    {#if reversalCompletedBadge}
+      <p class="badge error">
+        Reversed by {String(item.workflow_metadata?.reversed_by ?? item.linked_reversal_case_number)}
+      </p>
+    {/if}
+    {#if item.parent_case_number}
+      <p class="hint">
+        Reversal of
+        <a href="/cases/{item.parent_case_id}">{item.parent_case_number}</a>
+      </p>
+    {/if}
     <p>
       <strong><a href="/cases/{item.id}/submission">{item.case_number}</a></strong> · {item.type}
+      {#if isReversalDetail}<span class="badge muted">Reversal</span>{/if}
     </p>
     <p class="case-state" title="System status: {item.status}">
       <span class="status-group status-group-{item.status_group ?? 'processing'}">
@@ -1118,6 +1233,21 @@
     </p>
     {#if item.status_reason && !item.error_reason}
       <p class="hint">{normalizeEscalationDisplayCopy(item.status_reason)}</p>
+    {/if}
+    {#if showRaiseReversalButton}
+      <div class="reversal-actions">
+        <button type="button" onclick={() => (showRaiseReversalConfirm = true)}>
+          Raise Reversal
+        </button>
+      </div>
+    {/if}
+    {#if reversalMessage}
+      <p class="hint success">
+        {reversalMessage}
+        {#if item.linked_reversal_case_id}
+          <a href="/cases/{item.linked_reversal_case_id}">View reversal case</a>
+        {/if}
+      </p>
     {/if}
     {#if showActionRequiredPanel && manualActionConfig}
       <section class="action-required-box">
@@ -1648,9 +1778,66 @@
     {#if approvalMessage}
       <p class="hint success">{approvalMessage}</p>
     {/if}
-    {#if awaitingJournalApproval}
+    {#if canApproveReversal}
+      <section class="card reversal-approval-box">
+        <h2>Reversal Journal Approval</h2>
+        <dl class="reversal-summary">
+          <dt>Original case</dt>
+          <dd>
+            {#if item.parent_case_id && item.parent_case_number}
+              <a href="/cases/{item.parent_case_id}">{item.parent_case_number}</a>
+            {:else}
+              —
+            {/if}
+          </dd>
+          <dt>Vendor</dt>
+          <dd>{item.counterparty_name || journalApproval?.vendor || '—'}</dd>
+          <dt>Amount</dt>
+          <dd>{formatCurrencyAmount(item.amount_currency, item.amount_value)}</dd>
+          <dt>GL period</dt>
+          <dd>{item.reversal_gl_period_label || '—'}</dd>
+        </dl>
+        {#if item.reversal_gl_period_closed}
+          <label>
+            GL period override reason (required for closed periods)
+            <textarea
+              bind:value={reversalOverrideReason}
+              rows="3"
+              placeholder="Reason for posting to a closed period"
+            ></textarea>
+          </label>
+        {/if}
+        <label>
+          Note (optional)
+          <textarea bind:value={reversalApprovalNote} rows="2"></textarea>
+        </label>
+        <label>
+          Rejection comment (required to reject)
+          <textarea bind:value={reversalRejectReason} rows="2"></textarea>
+        </label>
+        <div class="approval-actions">
+          <button
+            type="button"
+            class="approve"
+            disabled={reversalApprovalLoading !== null}
+            onclick={handleApproveReversal}
+          >
+            {reversalApprovalLoading === 'approve' ? 'Working…' : 'Approve Reversal'}
+          </button>
+          <button
+            type="button"
+            class="reject"
+            disabled={reversalApprovalLoading !== null}
+            onclick={handleRejectReversal}
+          >
+            {reversalApprovalLoading === 'reject' ? 'Working…' : 'Reject Reversal'}
+          </button>
+        </div>
+      </section>
+    {/if}
+    {#if awaitingJournalApproval || (isReversalDetail && journalApproval)}
       <section class="approval-box">
-        <h2>Journal entry approval</h2>
+        <h2>{isReversalDetail ? 'Reversal Journal Entry' : 'Journal entry approval'}</h2>
         {#if bindingEscalated}
           <p class="hint">Escalated to CFO for final approval.</p>
         {/if}
@@ -1737,7 +1924,7 @@
                   <tr>
                     <td>{line.line_number}</td>
                     <td>
-                      {#if coaType && lineAccountId}
+                      {#if coaType && lineAccountId && !isReversalDetail}
                         <select
                           class="journal-line-account-select"
                           value={lineAccountId}
@@ -1852,6 +2039,31 @@
       </ol>
     {/if}
   </section>
+{/if}
+
+{#if showRaiseReversalConfirm && item}
+  <div class="modal-backdrop" role="presentation">
+    <div class="modal card">
+      <h2>Raise reversal</h2>
+      <p>
+        This will create a reversal journal entry for {item.case_number}. The CFO must approve
+        before it is posted to the GL. Continue?
+      </p>
+      <div class="modal-actions">
+        <button type="button" disabled={raisingReversal} onclick={confirmRaiseReversal}>
+          {raisingReversal ? 'Working…' : 'Continue'}
+        </button>
+        <button
+          type="button"
+          class="muted"
+          disabled={raisingReversal}
+          onclick={() => (showRaiseReversalConfirm = false)}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 {#if showOverrideModal}

@@ -49,6 +49,13 @@ class CaseResponse(BaseModel):
     pending_approval_id: UUID | None = None
     binding_escalated_to_cfo: bool = False
     journal_entry: JournalEntryApprovalDetail | None = None
+    parent_case_id: UUID | None = None
+    parent_case_number: str | None = None
+    linked_reversal_case_id: UUID | None = None
+    linked_reversal_case_number: str | None = None
+    linked_reversal_status: str | None = None
+    reversal_gl_period_label: str | None = None
+    reversal_gl_period_closed: bool = False
 
 
 class CaseListResponse(BaseModel):
