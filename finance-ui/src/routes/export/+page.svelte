@@ -4,6 +4,7 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
   import { exportCasesCsv } from '$lib/api/cases';
   import {
     downloadTrialBalanceCsv,
@@ -11,6 +12,11 @@
     type TrialBalanceReport,
   } from '$lib/api/reports';
   import { formatDateOnly, formatTrialBalanceAmount } from '$lib/format';
+
+  const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
 
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = `${today.slice(0, 7)}-01`;
@@ -25,8 +31,42 @@
   let tbError = '';
   let tbMessage = '';
   let tbLoading = false;
+  let tbPeriodLabel: string | null = null;
 
-  $: tbHeadingDate = formatDateOnly(tbReport?.as_at ?? tbAsAt);
+  $: periodYearParam = $page.url.searchParams.get('period_year');
+  $: periodMonthParam = $page.url.searchParams.get('period_month');
+
+  function lastDayOfMonthIso(year: number, month1Based: number): string {
+    const d = new Date(year, month1Based, 0);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function applyPeriodFromUrl() {
+    if (!periodYearParam || !periodMonthParam) {
+      tbPeriodLabel = null;
+      return;
+    }
+    const year = Number(periodYearParam);
+    const month = Number(periodMonthParam);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+      tbPeriodLabel = null;
+      return;
+    }
+    tbAsAt = lastDayOfMonthIso(year, month);
+    tbPeriodLabel = `${MONTHS[month - 1] || month} ${year}`;
+  }
+
+  $: if (periodYearParam !== null || periodMonthParam !== null) {
+    applyPeriodFromUrl();
+  }
+
+  $: tbHeading =
+    tbPeriodLabel != null
+      ? `Trial Balance — ${tbPeriodLabel}`
+      : `Trial Balance — As at ${formatDateOnly(tbReport?.as_at ?? tbAsAt)}`;
 
   async function submit() {
     error = '';
@@ -71,7 +111,10 @@
     }
   }
 
-  onMount(loadTrialBalance);
+  onMount(() => {
+    applyPeriodFromUrl();
+    void loadTrialBalance();
+  });
 </script>
 
 <h1>Export</h1>
@@ -98,14 +141,17 @@
 
 <section class="card section tb-section">
   <div class="tb-header">
-    <h2>Trial Balance — As at {tbHeadingDate}</h2>
+    <h2>{tbHeading}</h2>
     <div class="tb-actions">
       <label class="tb-date">
         As at
         <input
           type="date"
           bind:value={tbAsAt}
-          on:change={loadTrialBalance}
+          on:change={() => {
+            tbPeriodLabel = null;
+            void loadTrialBalance();
+          }}
         />
       </label>
       <button type="button" class="secondary" disabled={tbLoading} on:click={loadTrialBalance}>
