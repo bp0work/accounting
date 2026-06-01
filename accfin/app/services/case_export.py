@@ -4,48 +4,64 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import date
+from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.case import Case
 from app.repositories.case import CaseRepository
-from app.services.case_metrics import processing_time_minutes
 
 CSV_HEADERS = [
-    "case_number",
-    "type",
-    "status",
-    "counterparty",
-    "amount",
-    "currency",
-    "created_at",
-    "completed_at",
-    "processing_time_minutes",
-    "posted_by",
-    "journal_reference",
+    "Case Number",
+    "Submitted By",
+    "Date Submitted",
+    "Type",
+    "Document Number",
+    "Document Currency",
+    "Document Amount",
+    "Status",
 ]
+
+
+def _format_date_submitted(created_at: datetime | None) -> str:
+    if created_at is None:
+        return ""
+    return created_at.strftime("%d/%m/%Y")
+
+
+def _document_number(case: Case) -> str:
+    meta = case.workflow_metadata or {}
+    if not isinstance(meta, dict):
+        return ""
+    extracted = meta.get("extracted_fields")
+    if not isinstance(extracted, dict):
+        return ""
+    raw = extracted.get("document_number")
+    if raw is None:
+        return ""
+    return str(raw).strip()
 
 
 async def build_cases_csv(session: AsyncSession, *, date_from: date, date_to: date) -> str:
     repo = CaseRepository(session)
-    rows = await repo.list_cases_for_export(date_from=date_from, date_to=date_to)
+    cases = await repo.list_cases_for_export(date_from=date_from, date_to=date_to)
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(CSV_HEADERS)
-    for case, journal, posted_by_email in rows:
-        writer.writerow(
-            [
-                case.case_number,
-                case.type,
-                case.status,
-                case.counterparty_name or "",
-                str(case.amount_value) if case.amount_value is not None else "",
-                case.amount_currency or "",
-                case.created_at.isoformat() if case.created_at else "",
-                case.completed_at.isoformat() if case.completed_at else "",
-                processing_time_minutes(case) if case.created_at else "",
-                posted_by_email or "",
-                (journal.reference or journal.entry_number) if journal else "",
-            ]
-        )
+    for case in cases:
+        writer.writerow(_case_export_row(case))
     return buffer.getvalue()
+
+
+def _case_export_row(case: Case) -> list[Any]:
+    return [
+        case.case_number,
+        case.counterparty_name or "",
+        _format_date_submitted(case.created_at),
+        case.type,
+        _document_number(case),
+        case.amount_currency or "",
+        str(case.amount_value) if case.amount_value is not None else "",
+        case.status,
+    ]

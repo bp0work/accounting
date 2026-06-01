@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.72-journal-account-edit",
+  "version": "0.14.75-export-columns",
   "private": true,
   "type": "module",
   "scripts": {
