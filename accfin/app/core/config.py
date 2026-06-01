@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.68-approval-tier-role-mapping"
+        return "0.14.69-login-portal-links"
 
     @property
     def edge_public_base_url(self) -> str:
