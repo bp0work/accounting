@@ -48,6 +48,9 @@ _STATUS_DISPLAY_LABELS: dict[str, str] = {
     "journal_posted": "Journal posted",
     "case_closed": "Closed",
     "validation_completed": "Validation complete",
+    "pending_reversal_approval": "Reversal awaiting CFO approval",
+    "reversed": "Reversed",
+    "reversal_rejected": "Reversal rejected",
 }
 
 _WORKFLOW_STEP_LABELS: dict[str, str] = {
@@ -76,6 +79,9 @@ _STATUS_AUTHORITATIVE = frozenset(
         "validation_completed",
         "case_rejected",
         "rejected",
+        "pending_reversal_approval",
+        "reversed",
+        "reversal_rejected",
     }
     | REJECTED_STATUSES
 )
@@ -137,7 +143,12 @@ def case_status_group(case: Case) -> str:
         return "rejected"
     if status in ATTENTION_STATUSES:
         return "attention"
-    if status in ("pending_approval", "approved", "journal_pending_approval"):
+    if status in (
+        "pending_approval",
+        "approved",
+        "journal_pending_approval",
+        "pending_reversal_approval",
+    ):
         return "approval"
     if status in (
         "posted",
@@ -145,6 +156,8 @@ def case_status_group(case: Case) -> str:
         "case_closed",
         "journal_posted",
         "validation_completed",
+        "reversed",
+        "reversal_rejected",
     ):
         return "completed"
     if status in (
@@ -187,6 +200,8 @@ def case_action_by(case: Case, assignee: User | None = None) -> str | None:
     """Dashboard 'Action by' — assignee override, else derived from state and approval tier."""
     if case.status == "pending_confirmation":
         return "ACC"
+    if case.status == "pending_reversal_approval":
+        return "CFO"
 
     if assignee is not None:
         return assignee_action_by(assignee)

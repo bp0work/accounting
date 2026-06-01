@@ -32,6 +32,13 @@ export type CaseItem = {
   pending_approval_id?: string | null;
   binding_escalated_to_cfo?: boolean;
   journal_entry?: JournalEntryApprovalDetail | null;
+  parent_case_id?: string | null;
+  parent_case_number?: string | null;
+  linked_reversal_case_id?: string | null;
+  linked_reversal_case_number?: string | null;
+  linked_reversal_status?: string | null;
+  reversal_gl_period_label?: string | null;
+  reversal_gl_period_closed?: boolean;
 };
 
 export type JournalEntryLineDetail = {
@@ -216,4 +223,48 @@ export function overrideGlPeriodPost(
 export function exportCasesCsv(dateFrom: string, dateTo: string) {
   const q = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
   return downloadCsv(`/cases/export?${q}`, `transactions_${dateFrom}_${dateTo}.csv`);
+}
+
+export type RaiseReversalResult = {
+  reversal_case_id: string;
+  reversal_case_number: string;
+};
+
+export function raiseCaseReversal(caseId: string, reason?: string) {
+  return apiFetch<RaiseReversalResult>(`/cases/${caseId}/raise-reversal`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+}
+
+export function approveCaseReversal(
+  caseId: string,
+  body: { comment?: string; gl_period_override_reason?: string }
+) {
+  return apiFetch<{ status: string; journal_entry_id: string }>(
+    `/cases/${caseId}/approve-reversal`,
+    { method: 'POST', body: JSON.stringify(body) }
+  );
+}
+
+export function rejectCaseReversal(caseId: string, comment: string) {
+  return apiFetch<{ status: string }>(`/cases/${caseId}/reject-reversal`, {
+    method: 'POST',
+    body: JSON.stringify({ comment }),
+  });
+}
+
+const POSTED_EXPENSE_STATUSES = new Set(['posted', 'case_closed', 'journal_posted']);
+
+export function isPostedExpenseCase(item: CaseItem): boolean {
+  return item.type === 'expense_claim' && POSTED_EXPENSE_STATUSES.has(item.status);
+}
+
+export function isReversalCase(item: CaseItem): boolean {
+  return (
+    item.status === 'pending_reversal_approval' ||
+    item.status === 'reversed' ||
+    item.status === 'reversal_rejected' ||
+    Boolean(item.parent_case_id)
+  );
 }

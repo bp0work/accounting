@@ -113,6 +113,24 @@ class CaseRepository:
         result = await self._session.execute(q)
         return list(result.scalars().all())
 
+    async def find_reversal_child(
+        self,
+        parent_case_id: UUID,
+        *,
+        statuses: tuple[str, ...] | None = None,
+    ) -> Case | None:
+        """Most recent child reversal case for a posted expense."""
+        q = (
+            select(Case)
+            .where(Case.parent_case_id == parent_case_id)
+            .order_by(Case.created_at.desc())
+            .limit(1)
+        )
+        if statuses:
+            q = q.where(Case.status.in_(statuses))
+        result = await self._session.execute(q)
+        return result.scalar_one_or_none()
+
     async def get_email(self, email_id: UUID) -> Email | None:
         result = await self._session.execute(select(Email).where(Email.id == email_id))
         return result.scalar_one_or_none()

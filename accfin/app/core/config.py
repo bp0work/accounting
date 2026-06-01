@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.15.03-requeue-button"
+        return "0.15.03-expense-reversal"
 
     @property
     def edge_public_base_url(self) -> str:

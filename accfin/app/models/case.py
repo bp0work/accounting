@@ -95,6 +95,9 @@ _CASE_STATUS = ENUM(
     "case_closed",
     "validation_completed",
     "pending_confirmation",
+    "pending_reversal_approval",
+    "reversed",
+    "reversal_rejected",
     name="case_status",
     create_type=False,
 )

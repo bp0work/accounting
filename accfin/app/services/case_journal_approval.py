@@ -16,7 +16,9 @@ from app.schemas.journal_entry import JournalEntryApprovalDetail, JournalEntryLi
 from app.services.binding_authority_service import BindingAuthorityService
 from app.utils.hermes_amounts import decimal_from_hermes_amount
 
-_APPROVAL_CASE_STATUSES = frozenset({"pending_approval", "journal_pending_approval"})
+_APPROVAL_CASE_STATUSES = frozenset(
+    {"pending_approval", "journal_pending_approval", "pending_reversal_approval"}
+)
 
 _DOCUMENT_TYPE_LABELS = {
     "invoice": "Invoice",

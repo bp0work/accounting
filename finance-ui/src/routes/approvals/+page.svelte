@@ -10,7 +10,8 @@
     listApprovals,
     type ApprovalItem,
   } from '$lib/api/approvals';
-  import { listCases, type CaseItem } from '$lib/api/cases';
+  import { isReversalCase, listCases, type CaseItem } from '$lib/api/cases';
+  import { hasPermission } from '$lib/permissions';
   import {
     canUseManualReviewActions,
     caseReasonCode,
@@ -40,6 +41,17 @@
         : 'Pending approvals';
 
   $: showManualReviewQueue = canUseManualReviewActions(role);
+  $: showReversalQueue =
+    role === 'cfo' || role === 'finance_director' || hasPermission('approvals:admin');
+  $: reversalApprovalCases = showReversalQueue
+    ? cases
+        .filter((c) => c.status === 'pending_reversal_approval')
+        .sort(
+          (a, b) =>
+            new Date(b.last_activity_at || b.created_at).getTime() -
+            new Date(a.last_activity_at || a.created_at).getTime()
+        )
+    : [];
   $: manualReviewCases = showManualReviewQueue
     ? cases
         .filter((c) => isManualReviewQueueCase(c, role))
@@ -164,6 +176,56 @@
     {/if}
   </section>
 
+  {#if showReversalQueue}
+    <section class="queue-section reversal-section">
+      <h2 class="section-heading">
+        Reversal approvals
+        <span class="count-badge">{formatCount(reversalApprovalCases.length)}</span>
+      </h2>
+      <p class="subtitle">Expense claim reversals awaiting CFO approval</p>
+      {#if reversalApprovalCases.length === 0}
+        <p class="empty-hint">No pending reversals.</p>
+      {:else}
+        <div class="table-wrap card">
+          <table>
+            <thead>
+              <tr>
+                <th>Case</th>
+                <th>Type</th>
+                <th>Original</th>
+                <th>Client / Vendor</th>
+                <th>Amount</th>
+                <th>Action by</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each reversalApprovalCases as item}
+                <tr>
+                  <td><a href={`/cases/${item.id}`}>{item.case_number}</a></td>
+                  <td>Reversal</td>
+                  <td>
+                    {#if item.parent_case_number && item.parent_case_id}
+                      <a href={`/cases/${item.parent_case_id}`}>{item.parent_case_number}</a>
+                    {:else if item.workflow_metadata?.reversal_of}
+                      {String(item.workflow_metadata.reversal_of)}
+                    {:else}
+                      —
+                    {/if}
+                  </td>
+                  <td>{clientVendorColumnValue(item)}</td>
+                  <td>{formatCaseAmount(item)}</td>
+                  <td>CFO</td>
+                  <td><a href={`/cases/${item.id}`}>Review</a></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </section>
+  {/if}
+
   {#if showManualReviewQueue}
     <section class="queue-section manual-review-section">
       <h2 class="section-heading">
@@ -194,7 +256,10 @@
               {#each manualReviewCases as item}
                 <tr class:overdue={item.is_overdue}>
                   <td><a href={`/cases/${item.id}`}>{item.case_number}</a></td>
-                  <td>{documentTypeLabel(item.type)}</td>
+                  <td>
+                {documentTypeLabel(item.type)}
+                {#if isReversalCase(item)}<span class="tag">Reversal</span>{/if}
+              </td>
                   <td>{caseStatusLabel(item)}</td>
                   <td>{caseReasonCode(item).replaceAll('_', ' ') || '—'}</td>
                   <td>{clientVendorColumnValue(item)}</td>
@@ -267,7 +332,10 @@
             <tr class:overdue={item.is_overdue}>
               <td class="indicator">{item.is_overdue ? '⚠' : '·'}</td>
               <td><a href={`/cases/${item.id}`}>{item.case_number}</a></td>
-              <td>{documentTypeLabel(item.type)}</td>
+              <td>
+                {documentTypeLabel(item.type)}
+                {#if isReversalCase(item)}<span class="tag">Reversal</span>{/if}
+              </td>
               <td>{caseStateColumnLabel(item)}</td>
               <td>{caseStatusLabel(item)}</td>
               <td>{item.from_address || '—'}</td>
@@ -304,9 +372,20 @@
   .queue-section {
     margin-bottom: 2rem;
   }
-  .manual-review-section {
+  .manual-review-section,
+  .reversal-section {
     padding-top: 1.25rem;
     border-top: 1px solid #e2e8f0;
+  }
+  .tag {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: #fef3c7;
+    color: #92400e;
   }
   .section-heading {
     display: flex;
