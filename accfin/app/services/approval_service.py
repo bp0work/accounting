@@ -365,7 +365,7 @@ class ApprovalService:
                     "You are not the designated approver",
                 )
 
-        role = (user.role_name or "").lower()
+        role = (user.role or "").lower()
         meta = case.workflow_metadata or {}
         escalated = bool(meta.get("binding_escalated_to_cfo"))
         tier = approval.tier
