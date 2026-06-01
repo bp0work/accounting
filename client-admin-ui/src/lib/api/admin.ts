@@ -28,21 +28,44 @@ export function patchTenantProfile(body: Record<string, unknown>) {
   });
 }
 
+export type CoaAccount = {
+  id: string;
+  account_code: string;
+  account_name: string;
+  account_type: string;
+  parent_id?: string | null;
+  is_active: boolean;
+  description?: string | null;
+};
+
+export type CoaAccountPatch = {
+  account_name?: string;
+  account_type?: string;
+  is_active?: boolean;
+  description?: string | null;
+};
+
 export function fetchCoaStatus() {
   return apiFetch<{ account_count: number; empty: boolean }>('/coa/status');
 }
 
 export function listCoa(q?: string) {
   const params = q ? `?q=${encodeURIComponent(q)}` : '';
-  return apiFetch<Array<Record<string, unknown>>>(`/coa${params}`);
+  return apiFetch<CoaAccount[]>(`/coa${params}`);
 }
 
-export function createCoa(body: Record<string, unknown>) {
-  return apiFetch('/coa', { method: 'POST', body: JSON.stringify(body) });
+export function createCoa(body: {
+  account_code: string;
+  account_name: string;
+  account_type: string;
+  parent_code?: string | null;
+  description?: string | null;
+}) {
+  return apiFetch<CoaAccount>('/coa', { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function patchCoa(id: string, body: Record<string, unknown>) {
-  return apiFetch(`/coa/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+export function patchCoa(id: string, body: CoaAccountPatch) {
+  return apiFetch<CoaAccount>(`/coa/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
 export async function importCoaCsv(file: File, replaceAll = false) {
