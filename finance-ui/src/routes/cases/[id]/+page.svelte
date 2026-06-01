@@ -65,8 +65,8 @@
   let expenseCoaLoading = false;
   let liabilityCoaAccounts: CoaAccountItem[] = [];
   let journalCoaLoading = false;
-  let journalExpenseAccountId = '';
-  let journalPayableAccountId = '';
+  /** Per-line COA selection keyed by journal line_number */
+  let journalLineAccountIds: Record<number, string> = {};
   let journalAccountSyncKey = '';
   let reviewCoaAccounts: CoaAccountItem[] = [];
 
@@ -139,17 +139,20 @@
     return line.account_code === '2011';
   }
 
-  function isPayableCreditLine(
-    line: JournalEntryLineDetail,
-    allLines: JournalEntryLineDetail[],
-  ): boolean {
-    if (!line.credit || parseJournalMoney(line.credit) <= 0) return false;
-    const creditLines = allLines.filter(
-      (l) => l.credit && parseJournalMoney(l.credit) > 0,
-    );
-    if (creditLines.length === 0) return false;
-    const maxLine = Math.max(...creditLines.map((l) => l.line_number));
-    return line.line_number === maxLine;
+  /** Expense debit (line 1) or payable credit; GST 2011 is read-only */
+  function journalLineCoaType(line: JournalEntryLineDetail): 'expense' | 'liability' | null {
+    if (isGstJournalLine(line)) return null;
+    if (line.line_number === 1 && line.debit) return 'expense';
+    if (line.credit && parseJournalMoney(line.credit) > 0) return 'liability';
+    return null;
+  }
+
+  function journalLineCoaOptions(type: 'expense' | 'liability'): CoaAccountItem[] {
+    return type === 'expense' ? expenseCoaAccounts : liabilityCoaAccounts;
+  }
+
+  function setJournalLineAccountId(lineNumber: number, accountId: string) {
+    journalLineAccountIds = { ...journalLineAccountIds, [lineNumber]: accountId };
   }
 
   $: role = ($sessionUser?.role_name ?? '').toLowerCase();
@@ -164,29 +167,17 @@
     const base = journalApproval?.lines ?? [];
     if (base.length === 0) return [];
     return base.map((line) => {
-      if (line.line_number === 1 && line.debit && journalExpenseAccountId) {
-        const acct = findCoaAccount(journalExpenseAccountId, expenseCoaAccounts);
-        if (acct) {
-          return {
-            ...line,
-            account_id: String(acct.id),
-            account_code: acct.account_code,
-            account_name: acct.account_name,
-          };
-        }
-      }
-      if (isPayableCreditLine(line, base) && journalPayableAccountId) {
-        const acct = findCoaAccount(journalPayableAccountId, liabilityCoaAccounts);
-        if (acct) {
-          return {
-            ...line,
-            account_id: String(acct.id),
-            account_code: acct.account_code,
-            account_name: acct.account_name,
-          };
-        }
-      }
-      return line;
+      const coaType = journalLineCoaType(line);
+      const selectedId = journalLineAccountIds[line.line_number];
+      if (!coaType || !selectedId) return line;
+      const acct = findCoaAccount(selectedId, journalLineCoaOptions(coaType));
+      if (!acct) return line;
+      return {
+        ...line,
+        account_id: String(acct.id),
+        account_code: acct.account_code,
+        account_name: acct.account_name,
+      };
     });
   })();
 
@@ -409,21 +400,25 @@
     }
   }
 
-  function syncJournalAccountSelections() {
-    if (!journalApproval) {
-      journalExpenseAccountId = '';
-      journalPayableAccountId = '';
+  function syncJournalLineAccountIds() {
+    if (!journalApproval?.lines?.length) {
+      journalLineAccountIds = {};
       return;
     }
-    journalExpenseAccountId = journalApproval.expense_account_id ?? '';
-    journalPayableAccountId = journalApproval.payable_account_id ?? '';
+    const next: Record<number, string> = {};
+    for (const line of journalApproval.lines) {
+      if (journalLineCoaType(line)) {
+        next[line.line_number] = line.account_id;
+      }
+    }
+    journalLineAccountIds = next;
   }
 
   $: if (journalApproval) {
     const syncKey = journalApproval.journal_entry_id ?? 'journal';
     if (syncKey !== journalAccountSyncKey) {
       journalAccountSyncKey = syncKey;
-      syncJournalAccountSelections();
+      syncJournalLineAccountIds();
     }
   }
 
@@ -809,20 +804,19 @@
     approvalMessage = '';
     error = '';
     try {
-      const approvePayload: {
-        note: string;
-        debit_account_id?: string;
-        credit_account_id?: string;
-      } = { note: approvalNote || 'Approved' };
-      const initialExpense = journalApproval?.expense_account_id ?? '';
-      const initialPayable = journalApproval?.payable_account_id ?? '';
-      if (journalExpenseAccountId && journalExpenseAccountId !== initialExpense) {
-        approvePayload.debit_account_id = journalExpenseAccountId;
+      const line_account_updates: { line_number: number; account_id: string }[] = [];
+      for (const line of journalApproval?.lines ?? []) {
+        const coaType = journalLineCoaType(line);
+        if (!coaType) continue;
+        const selected = journalLineAccountIds[line.line_number];
+        if (selected && selected !== line.account_id) {
+          line_account_updates.push({ line_number: line.line_number, account_id: selected });
+        }
       }
-      if (journalPayableAccountId && journalPayableAccountId !== initialPayable) {
-        approvePayload.credit_account_id = journalPayableAccountId;
-      }
-      await approve(item.pending_approval_id, approvePayload);
+      await approve(item.pending_approval_id, {
+        note: approvalNote || 'Approved',
+        ...(line_account_updates.length ? { line_account_updates } : {}),
+      });
       approvalMessage = 'Approved — journal posted.';
       approvalNote = '';
       await load();
@@ -1385,30 +1379,6 @@
               <dd>Tier {bindingTier}</dd>
             {/if}
           </dl>
-          <div class="journal-account-pickers">
-            <label>
-              Debit account (expense)
-              <select bind:value={journalExpenseAccountId} disabled={journalCoaLoading}>
-                <option value="">
-                  {journalCoaLoading ? 'Loading accounts…' : 'Select expense account…'}
-                </option>
-                {#each expenseCoaAccounts as acct (acct.id)}
-                  <option value={String(acct.id)}>{acct.account_code} — {acct.account_name}</option>
-                {/each}
-              </select>
-            </label>
-            <label>
-              Credit account (payable)
-              <select bind:value={journalPayableAccountId} disabled={journalCoaLoading}>
-                <option value="">
-                  {journalCoaLoading ? 'Loading accounts…' : 'Select liability account…'}
-                </option>
-                {#each liabilityCoaAccounts as acct (acct.id)}
-                  <option value={String(acct.id)}>{acct.account_code} — {acct.account_name}</option>
-                {/each}
-              </select>
-            </label>
-          </div>
           {#if displayedJournalLines.length > 0}
             <table class="journal-lines-table">
               <thead>
@@ -1422,11 +1392,27 @@
               </thead>
               <tbody>
                 {#each displayedJournalLines as line (line.line_number)}
+                  {@const coaType = journalLineCoaType(line)}
                   <tr>
                     <td>{line.line_number}</td>
                     <td>
-                      {#if line.account_code}
+                      {#if coaType}
+                        <select
+                          class="journal-line-account-select"
+                          value={journalLineAccountIds[line.line_number] ?? line.account_id}
+                          disabled={journalCoaLoading}
+                          onchange={(e) =>
+                            setJournalLineAccountId(line.line_number, e.currentTarget.value)}
+                        >
+                          {#each journalLineCoaOptions(coaType) as acct (acct.id)}
+                            <option value={String(acct.id)}
+                              >{acct.account_code} — {acct.account_name}</option
+                            >
+                          {/each}
+                        </select>
+                      {:else if line.account_code}
                         {line.account_code} — {line.account_name ?? ''}
+                        <span class="hint-inline">(GST — not editable)</span>
                       {:else}
                         {line.account_name ?? line.account_id}
                       {/if}
@@ -1902,23 +1888,20 @@
     box-sizing: border-box;
     margin-top: 0.35rem;
   }
-  .journal-account-pickers {
-    display: grid;
-    gap: 0.75rem;
-    margin: 1rem 0;
-  }
-
-  .journal-account-pickers label {
+  .journal-line-account-select {
     display: block;
+    width: 100%;
+    max-width: 22rem;
+    padding: 0.35rem 0.5rem;
+    box-sizing: border-box;
     font-size: 0.875rem;
   }
 
-  .journal-account-pickers select {
+  .hint-inline {
     display: block;
-    width: 100%;
-    margin-top: 0.25rem;
-    padding: 0.4rem;
-    box-sizing: border-box;
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 0.15rem;
   }
 
   .derived-field {

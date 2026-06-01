@@ -42,10 +42,14 @@ export function getApproval(id: string) {
   return apiFetch<ApprovalItem>(`/approvals/${id}`);
 }
 
+export type JournalLineAccountUpdate = {
+  line_number: number;
+  account_id: string;
+};
+
 export type ApprovePayload = {
   note: string;
-  debit_account_id?: string;
-  credit_account_id?: string;
+  line_account_updates?: JournalLineAccountUpdate[];
 };
 
 export function approve(id: string, payload: string | ApprovePayload) {
@@ -54,8 +58,9 @@ export function approve(id: string, payload: string | ApprovePayload) {
       ? { note: payload }
       : {
           note: payload.note,
-          ...(payload.debit_account_id ? { debit_account_id: payload.debit_account_id } : {}),
-          ...(payload.credit_account_id ? { credit_account_id: payload.credit_account_id } : {}),
+          ...(payload.line_account_updates?.length
+            ? { line_account_updates: payload.line_account_updates }
+            : {}),
         };
   return apiFetch(`/approvals/${id}/approve`, {
     method: 'POST',

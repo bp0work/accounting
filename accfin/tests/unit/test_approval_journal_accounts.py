@@ -85,11 +85,15 @@ async def test_approve_updates_draft_journal_line_accounts(db_session, test_user
     )
     await db_session.flush()
 
+    from app.schemas.approval import JournalLineAccountUpdate
+
     service = ApprovalService(db_session)
-    await service._apply_draft_journal_account_overrides(
+    await service._apply_draft_journal_line_updates(
         case.id,
-        debit_account_id=expense_alt.id,
-        credit_account_id=payable_alt.id,
+        line_account_updates=[
+            JournalLineAccountUpdate(line_number=1, account_id=expense_alt.id),
+            JournalLineAccountUpdate(line_number=2, account_id=payable_alt.id),
+        ],
     )
     await db_session.commit()
 
