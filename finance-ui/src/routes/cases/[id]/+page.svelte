@@ -69,6 +69,8 @@
   let journalCoaLoading = false;
   /** Per-line COA selection keyed by journal line_number */
   let journalLineAccountIds: Record<number, string> = {};
+  /** Original account_id per line when journal loaded — used for approve diff only */
+  let journalLineAccountDefaults: Record<number, string> = {};
   let journalAccountSyncKey = '';
   let reviewCoaAccounts: CoaAccountItem[] = [];
 
@@ -147,6 +149,28 @@
 
   function journalLineCoaOptions(type: 'expense' | 'liability'): CoaAccountItem[] {
     return type === 'expense' ? expenseCoaAccounts : liabilityCoaAccounts;
+  }
+
+  /** COA options for a line, always including the account already on the draft line. */
+  function journalLineCoaOptionsForLine(
+    line: JournalEntryLineDetail,
+    type: 'expense' | 'liability',
+  ): CoaAccountItem[] {
+    const list = journalLineCoaOptions(type);
+    const id = String(line.account_id ?? '');
+    if (!id) return list;
+    if (list.some((a) => String(a.id) === id)) return list;
+    if (line.account_code && line.account_name) {
+      return [
+        {
+          id,
+          account_code: line.account_code,
+          account_name: line.account_name,
+        },
+        ...list,
+      ];
+    }
+    return list;
   }
 
   function setJournalLineAccountId(lineNumber: number, accountId: string) {
@@ -407,21 +431,27 @@
       liabilityCoaAccounts = [];
     } finally {
       journalCoaLoading = false;
+      syncJournalLineAccountIds();
     }
   }
 
   function syncJournalLineAccountIds() {
     if (!journalApproval?.lines?.length) {
       journalLineAccountIds = {};
+      journalLineAccountDefaults = {};
       return;
     }
     const next: Record<number, string> = {};
+    const defaults: Record<number, string> = {};
     for (const line of journalApproval.lines) {
-      if (journalLineCoaType(line)) {
-        next[line.line_number] = line.account_id;
-      }
+      if (!journalLineCoaType(line)) continue;
+      const accountId = String(line.account_id ?? '');
+      if (!accountId) continue;
+      next[line.line_number] = accountId;
+      defaults[line.line_number] = accountId;
     }
     journalLineAccountIds = next;
+    journalLineAccountDefaults = defaults;
   }
 
   $: if (journalApproval) {
@@ -818,7 +848,9 @@
         const coaType = journalLineCoaType(line);
         if (!coaType) continue;
         const selected = journalLineAccountIds[line.line_number];
-        if (selected && selected !== line.account_id) {
+        const baseline =
+          journalLineAccountDefaults[line.line_number] ?? String(line.account_id ?? '');
+        if (selected && baseline && selected !== baseline) {
           line_account_updates.push({ line_number: line.line_number, account_id: selected });
         }
       }
@@ -1399,7 +1431,7 @@
               <dd>Tier {bindingTier}</dd>
             {/if}
           </dl>
-          {#if displayedJournalLines.length > 0}
+          {#if journalApproval.lines && journalApproval.lines.length > 0}
             <table class="journal-lines-table">
               <thead>
                 <tr>
@@ -1411,20 +1443,22 @@
                 </tr>
               </thead>
               <tbody>
-                {#each displayedJournalLines as line (line.line_number)}
+                {#each journalApproval.lines as line (line.line_number)}
                   {@const coaType = journalLineCoaType(line)}
+                  {@const lineAccountId =
+                    journalLineAccountIds[line.line_number] ?? String(line.account_id ?? '')}
                   <tr>
                     <td>{line.line_number}</td>
                     <td>
-                      {#if coaType}
+                      {#if coaType && lineAccountId}
                         <select
                           class="journal-line-account-select"
-                          value={journalLineAccountIds[line.line_number] ?? line.account_id}
+                          value={lineAccountId}
                           disabled={journalCoaLoading}
                           onchange={(e) =>
                             setJournalLineAccountId(line.line_number, e.currentTarget.value)}
                         >
-                          {#each journalLineCoaOptions(coaType) as acct (acct.id)}
+                          {#each journalLineCoaOptionsForLine(line, coaType) as acct (acct.id)}
                             <option value={String(acct.id)}
                               >{acct.account_code} — {acct.account_name}</option
                             >
