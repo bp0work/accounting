@@ -186,10 +186,29 @@ function toSentenceCaseFieldLabel(fieldKey: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
 }
 
+function isReversalSubmittedByCase(item: {
+  parent_case_id?: string | null;
+  workflow_metadata?: Record<string, unknown> | null;
+}): boolean {
+  if (item.parent_case_id) return true;
+  const meta = item.workflow_metadata;
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return false;
+  const reversalOf = meta.reversal_of;
+  return reversalOf != null && String(reversalOf).trim() !== '';
+}
+
+/** Inbound submitter — email `submitted_by` / `from_address`; reversal cases use `counterparty_name`. */
 export function submittedByDisplay(item: {
   submitted_by?: string | null;
   from_address?: string | null;
+  counterparty_name?: string | null;
+  parent_case_id?: string | null;
+  workflow_metadata?: Record<string, unknown> | null;
 }): string {
+  if (isReversalSubmittedByCase(item)) {
+    const vendor = item.counterparty_name?.trim();
+    if (vendor) return vendor;
+  }
   const label = item.submitted_by?.trim() || item.from_address?.trim();
   return label || '—';
 }

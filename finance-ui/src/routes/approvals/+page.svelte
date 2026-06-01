@@ -21,6 +21,7 @@
     caseStatusLabel,
     clientVendorColumnValue,
     documentTypeLabel,
+    submittedByDisplay,
   } from '$lib/case-labels';
   import { formatCount, formatCurrencyAmount } from '$lib/format';
   import { sessionUser } from '$lib/stores/session';
@@ -338,7 +339,7 @@
               </td>
               <td>{caseStateColumnLabel(item)}</td>
               <td>{caseStatusLabel(item)}</td>
-              <td>{item.from_address || '—'}</td>
+              <td>{submittedByDisplay(item)}</td>
               <td>{clientVendorColumnValue(item)}</td>
               <td>{formatCaseAmount(item)}</td>
               <td>{formatActivity(item)}</td>
