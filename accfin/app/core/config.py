@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.85-escalation-pending-sync"
+        return "0.14.86-escalation-retry-no-token"
 
     @property
     def edge_public_base_url(self) -> str:
