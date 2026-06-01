@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.15.01-reextract-fix",
+  "version": "0.15.02-vendor-hints-name-fix",
   "private": true,
   "type": "module",
   "scripts": {

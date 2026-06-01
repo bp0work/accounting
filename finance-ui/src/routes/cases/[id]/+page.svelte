@@ -314,26 +314,23 @@
 
   $: caseId = $page.params.id ?? '';
 
-  function resolveVendorName(caseItem: CaseItem): string {
-    const meta = caseItem.workflow_metadata ?? {};
-    const extracted = meta.extracted_fields;
-    if (extracted && typeof extracted === 'object' && !Array.isArray(extracted)) {
-      const vendor = (extracted as Record<string, unknown>).vendor_name;
-      if (vendor != null && String(vendor).trim()) return String(vendor).trim();
-    }
-    return (caseItem.counterparty_name ?? caseItem.client_vendor_name ?? '').trim();
-  }
+  $: extractedVendorName = (() => {
+    const raw = item?.workflow_metadata?.extracted_fields;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return '';
+    const vendor = (raw as Record<string, unknown>).vendor_name;
+    return vendor != null ? String(vendor).trim() : '';
+  })();
 
-  $: vendorName = item ? resolveVendorName(item) : '';
+  $: vendorName = (parsingForm.vendor_name || extractedVendorName || '').trim();
   $: reviewSnapshot = item ? manualReviewDetails(item) : { missing: [], confidence: null, extracted: {} };
   $: coaLabelResolutionKey = `${expenseCoaAccounts.length}:${reviewCoaAccounts.length}:${liabilityCoaAccounts.length}`;
   $: showTeachPanel =
-    vendorName.length > 0 &&
-    (item?.status === 'pending_confirmation' ||
-      ((item?.status === 'manual_review' || item?.status === 'on_hold') &&
-        reviewSnapshot.missing.length > 0 &&
-        (item.type !== 'expense_claim' ||
-          Boolean(item?.workflow_metadata?.parsing_confirmed_at))));
+    item?.status === 'pending_confirmation' ||
+    (vendorName.length > 0 &&
+      (item?.status === 'manual_review' || item?.status === 'on_hold') &&
+      reviewSnapshot.missing.length > 0 &&
+      (item?.type !== 'expense_claim' ||
+        Boolean(item?.workflow_metadata?.parsing_confirmed_at)));
   $: teachFieldNames = (() => {
     if (!item || !showTeachPanel) return [] as string[];
     if (item.status === 'pending_confirmation' && reviewSnapshot.missing.length === 0) {
@@ -356,22 +353,14 @@
 
   function canRunReExtract(caseItem: CaseItem | null): boolean {
     if (!caseItem || caseItem.status !== 'pending_confirmation') return false;
+    if (!vendorName.trim()) return false;
     if (!vendorHintsAvailable()) return false;
     return hasReExtractPermission(caseItem);
   }
 
   $: canReExtractWithHints = item ? canRunReExtract(item) : false;
 
-  let vendorHintsLoadKey = '';
-  $: if (item?.status === 'pending_confirmation' && vendorName) {
-    const key = `${item.id}:${vendorName}`;
-    if (key !== vendorHintsLoadKey) {
-      vendorHintsLoadKey = key;
-      void refreshVendorExistingHints(vendorName);
-    }
-  }
-
-  async function refreshVendorExistingHints(vendor: string) {
+  async function loadVendorHints(vendor: string) {
     const name = vendor.trim();
     if (!name) {
       vendorExistingHintCount = 0;
@@ -383,6 +372,12 @@
     } catch {
       vendorExistingHintCount = 0;
     }
+  }
+
+  $: if (vendorName) {
+    void loadVendorHints(vendorName);
+  } else {
+    vendorExistingHintCount = 0;
   }
   $: canWriteParsingConfirm = isExpenseConfirm
     ? hasPermission('expenses:write')
@@ -581,11 +576,6 @@
         liabilityCoaAccounts = [];
         reviewCoaAccounts = [];
       }
-      if (item?.status === 'pending_confirmation') {
-        await refreshVendorExistingHints(resolveVendorName(item));
-      } else {
-        vendorExistingHintCount = 0;
-      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
       vendorExistingHintCount = 0;
@@ -620,7 +610,7 @@
     try {
       await saveVendorExtractionHint(body);
       savedHintFields = new Set([...savedHintFields, row.field_name]);
-      await refreshVendorExistingHints(vendorName);
+      await loadVendorHints(vendorName);
       teachMessage = `Saved hint for ${row.field_name.replaceAll('_', ' ')}. Use Re-extract with hints to preview updated fields.`;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not save hint';
@@ -1481,15 +1471,22 @@
     {#if showTeachPanel}
       <section class="teach-box teach-box-secondary">
         <h2>Vendor extraction hints</h2>
-        <p class="hint teach-box-lead">
-          Help the agent find these fields on future documents from this vendor.
-          {#if item.status === 'pending_confirmation'}
-            Save hints before confirming if extraction missed labels on this vendor&apos;s layout.
-          {:else}
-            This is not the primary way to resolve a stuck case — use the parsing confirmation
-            form when the case is awaiting confirmation.
-          {/if}
-        </p>
+        {#if item.status === 'pending_confirmation'}
+          <p class="hint teach-box-lead">
+            {#if vendorName}
+              Hints for <strong>{vendorName}</strong>. These will be used on future invoices from
+              this vendor.
+            {:else}
+              Enter the vendor name in the form above to enable vendor hints for this vendor.
+            {/if}
+          </p>
+        {:else}
+          <p class="hint teach-box-lead">
+            Help the agent find these fields on future documents from this vendor. This is not the
+            primary way to resolve a stuck case — use the parsing confirmation form when the case is
+            awaiting confirmation.
+          </p>
+        {/if}
         <button
           type="button"
           class="teach-toggle"
@@ -1498,11 +1495,16 @@
           {teachPanelExpanded ? 'Hide hints' : 'Show hints for future documents'}
         </button>
         {#if teachPanelExpanded}
-          <p class="hint">
-            Vendor: <strong>{vendorName}</strong>. Map how each field appears on this vendor&apos;s
-            documents.
-          </p>
-          {#each teachFields as row}
+          {#if !vendorName}
+            <p class="hint">
+              Enter the vendor name in the form above to enable vendor hints for this vendor.
+            </p>
+          {:else}
+            <p class="hint">
+              Hints for <strong>{vendorName}</strong>. These will be used on future invoices from this
+              vendor. Map how each field appears on this vendor&apos;s documents.
+            </p>
+            {#each teachFields as row}
             <div class="teach-field">
               <h3>{row.field_name.replaceAll('_', ' ')}</h3>
               <label>
@@ -1540,23 +1542,24 @@
                 {row.saving ? 'Saving…' : 'Save hint'}
               </button>
             </div>
-          {/each}
-          {#if teachMessage}
-            <p class="hint success">{teachMessage}</p>
-          {/if}
-          {#if canReExtractWithHints}
-            <button
-              type="button"
-              class="retry"
-              disabled={reExtracting}
-              onclick={() => void handleReExtract()}
-            >
-              {reExtracting ? 'Re-extracting…' : 'Re-extract with hints'}
-            </button>
-          {:else if item.status === 'pending_confirmation' && vendorName && !vendorHintsAvailable()}
-            <p class="hint">
-              Save at least one field hint for this vendor to enable re-extraction.
-            </p>
+            {/each}
+            {#if teachMessage}
+              <p class="hint success">{teachMessage}</p>
+            {/if}
+            {#if canReExtractWithHints}
+              <button
+                type="button"
+                class="retry"
+                disabled={reExtracting}
+                onclick={() => void handleReExtract()}
+              >
+                {reExtracting ? 'Re-extracting…' : 'Re-extract with hints'}
+              </button>
+            {:else if item.status === 'pending_confirmation' && vendorName && !vendorHintsAvailable()}
+              <p class="hint">
+                Save at least one field hint for this vendor to enable re-extraction.
+              </p>
+            {/if}
           {/if}
         {/if}
       </section>
