@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.69-login-portal-links",
+  "version": "0.14.70-expense-journal-fix",
   "private": true,
   "type": "module",
   "scripts": {
