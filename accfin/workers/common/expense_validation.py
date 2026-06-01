@@ -157,10 +157,16 @@ def check_expense_policy(
 
     policy_name = CATEGORY_POLICY_NAME.get(category)
     limit: Decimal | None = None
+
+    if policy_name is None:
+        if (submission_date - (parse_document_date(extracted) or submission_date)).days > 365:
+            return False, category, None
+        return True, category, None
+
     for policy in policies:
         if not policy.is_active:
             continue
-        if policy_name and policy.name != policy_name:
+        if policy.name != policy_name:
             continue
         if policy.category and policy.category != category:
             continue
