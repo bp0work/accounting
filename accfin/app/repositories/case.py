@@ -8,9 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.case import Case, CaseTimeline
-from app.models.ledger import JournalEntry
 from app.models.mail import Email
-from app.models.user import User
 from app.models.workflow import WorkflowDefinition, WorkflowInstance, WorkflowTransition
 from app.services.case_metrics import TERMINAL_STATUSES
 
@@ -108,29 +106,12 @@ class CaseRepository:
         result = await self._session.execute(q)
         return list(result.scalars().all())
 
-    async def list_cases_for_export(
-        self, *, date_from: date, date_to: date
-    ) -> list[tuple[Case, JournalEntry | None, str | None]]:
-        """Cases in range with latest posted (or any) journal entry per case."""
+    async def list_cases_for_export(self, *, date_from: date, date_to: date) -> list[Case]:
+        """Cases in created_at range for CSV export."""
         q = select(Case).order_by(Case.created_at.asc())
         q = self._date_range_filter(q, date_from=date_from, date_to=date_to)
         result = await self._session.execute(q)
-        cases = list(result.scalars().all())
-        rows: list[tuple[Case, JournalEntry | None, str | None]] = []
-        for case in cases:
-            je_result = await self._session.execute(
-                select(JournalEntry, User.email)
-                .outerjoin(User, User.id == JournalEntry.posted_by)
-                .where(JournalEntry.case_id == case.id)
-                .order_by(JournalEntry.created_at.desc())
-                .limit(1)
-            )
-            row = je_result.first()
-            if row:
-                rows.append((case, row[0], row[1]))
-            else:
-                rows.append((case, None, None))
-        return rows
+        return list(result.scalars().all())
 
     async def get_email(self, email_id: UUID) -> Email | None:
         result = await self._session.execute(select(Email).where(Email.id == email_id))

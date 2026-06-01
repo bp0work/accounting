@@ -44,6 +44,7 @@ async def test_cases_dashboard_and_export(
         workflow_metadata={
             "extracted_fields": {
                 "vendor_name": "Accounting and Corporate Regulatory Authority",
+                "document_number": "DOC-EXPORT-001",
             }
         },
     )
@@ -65,8 +66,13 @@ async def test_cases_dashboard_and_export(
     assert export.status_code == 200
     assert "text/csv" in export.headers.get("content-type", "")
     assert "attachment" in export.headers.get("content-disposition", "")
-    assert "case_number" in export.text
+    assert "Case Number" in export.text
+    assert "Submitted By" in export.text
+    assert "Document Number" in export.text
+    assert "completed_at" not in export.text.split("\n")[0]
     assert case.case_number in export.text
+    assert "DOC-EXPORT-001" in export.text
+    assert "Marc Michelmann" in export.text
 
     listed = await async_client.get("/api/cases?limit=10", headers=auth_headers)
     assert listed.status_code == 200

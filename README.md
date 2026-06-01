@@ -1,6 +1,6 @@
 # AI Finance Operations Platform — Implementation Monorepo
 
-**Release version:** `0.14.74-tokendata-attr-fixes` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`). Finance UI: `0.14.73-journal-line-edit` (PR #101) or `0.14.72` until #101 is deployed. Client Admin: `0.14.69-login-portal-links`.
+**Release version:** `0.14.75-export-columns` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`). Finance UI: `0.14.75-export-columns`. Client Admin: `0.14.69-login-portal-links`.
 
 Runnable code for the bp0.work finance platform. **Application code** lives here; **release-synced specification excerpts** for the current deploy are under `platform_dox/` (canonical working copies may also exist as a sibling folder next to `application/` on the operator workstation).
 
