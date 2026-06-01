@@ -957,9 +957,9 @@ class ExecutiveMailService:
             },
         )
 
-        override_policy = (
-            case.type == "expense_claim" and ap_step_override_key == "override_policy"
-        )
+        override_kwargs: dict[str, bool] = {}
+        if ap_step_override_key and case.type == "expense_claim":
+            override_kwargs[ap_step_override_key] = True
         message_id = await enqueue_accounts(
             case_id=case.id,
             case_type=case.type,
@@ -970,10 +970,10 @@ class ExecutiveMailService:
             confidence_score=float(case.confidence_score or 0),
             source="manager-escalation-approve",
             override_po_check=override_po_check,
-            override_policy=override_policy,
             gl_period_override=override_gl_period,
             gl_period_override_reason=meta.get("gl_period_override_reason"),
             gl_period_posted_by=meta.get("gl_period_posted_by"),
+            **override_kwargs,
         )
         if email is not None:
             await self.queue_manager_approval_acknowledgement(
