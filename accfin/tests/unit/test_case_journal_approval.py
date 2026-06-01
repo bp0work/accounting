@@ -7,8 +7,10 @@ from app.schemas.journal_entry import JournalEntryApprovalDetail
 from app.services.case_journal_approval import (
     _detail_from_metadata,
     _document_type_label,
+    _stored_lines_usable,
     _tier_label,
 )
+from app.schemas.journal_entry import JournalEntryLineDetail
 
 
 def test_tier2_label_matches_finance_ui_copy() -> None:
@@ -40,3 +42,33 @@ def test_detail_from_workflow_metadata() -> None:
     assert isinstance(detail, JournalEntryApprovalDetail)
     assert detail.vendor == "ACRA"
     assert detail.total == "16.24"
+
+
+def test_stored_lines_usable_requires_account_id() -> None:
+    assert _stored_lines_usable([]) is False
+    assert (
+        _stored_lines_usable(
+            [
+                JournalEntryLineDetail(
+                    line_number=1,
+                    account_id="00000000-0000-0000-0000-000000000001",
+                    account_code="5010",
+                    debit="1.00",
+                )
+            ]
+        )
+        is True
+    )
+    assert (
+        _stored_lines_usable(
+            [
+                JournalEntryLineDetail(
+                    line_number=1,
+                    account_id="",
+                    account_code="5010",
+                    debit="1.00",
+                )
+            ]
+        )
+        is False
+    )

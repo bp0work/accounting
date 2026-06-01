@@ -165,6 +165,13 @@ def _detail_from_metadata(meta: dict) -> JournalEntryApprovalDetail | None:
         return None
 
 
+def _stored_lines_usable(lines: list[JournalEntryLineDetail]) -> bool:
+    """Cached workflow_metadata lines must include account_id for COA dropdowns."""
+    if not lines:
+        return False
+    return all(ln.account_id and str(ln.account_id).strip() for ln in lines)
+
+
 async def build_journal_entry_approval_detail(
     session: AsyncSession, case: Case
 ) -> JournalEntryApprovalDetail | None:
@@ -173,7 +180,7 @@ async def build_journal_entry_approval_detail(
 
     meta = _meta_dict(case)
     stored = _detail_from_metadata(meta)
-    if stored is not None and stored.lines:
+    if stored is not None and _stored_lines_usable(stored.lines):
         return stored
 
     extracted = meta.get("extracted_fields") or {}

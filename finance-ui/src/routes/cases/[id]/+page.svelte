@@ -40,6 +40,13 @@
   } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { formatAmount, formatCount, formatExtractedFieldValue } from '$lib/format';
+  import {
+    isGstJournalLine,
+    journalLineCoaOptionsForLine,
+    journalLineCoaType,
+    parseJournalMoney,
+    resolveJournalLineAccountId,
+  } from '$lib/journal-line-coa';
   import { hasPermission } from '$lib/permissions';
   import { sessionUser } from '$lib/stores/session';
 
@@ -72,6 +79,7 @@
   /** Original account_id per line when journal loaded — used for approve diff only */
   let journalLineAccountDefaults: Record<number, string> = {};
   let journalAccountSyncKey = '';
+  let journalCoaSyncKey = '';
   let reviewCoaAccounts: CoaAccountItem[] = [];
 
   const confirmParsingRoles = new Set([
@@ -129,48 +137,8 @@
     return undefined;
   }
 
-  function parseJournalMoney(value: string | null | undefined): number {
-    if (value == null || value === '') return 0;
-    const n = Number(String(value).replace(/,/g, ''));
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  function isGstJournalLine(line: JournalEntryLineDetail): boolean {
-    return line.account_code === '2011';
-  }
-
-  /** Expense debit (line 1) or payable credit; GST 2011 is read-only */
-  function journalLineCoaType(line: JournalEntryLineDetail): 'expense' | 'liability' | null {
-    if (isGstJournalLine(line)) return null;
-    if (line.line_number === 1 && line.debit) return 'expense';
-    if (line.credit && parseJournalMoney(line.credit) > 0) return 'liability';
-    return null;
-  }
-
   function journalLineCoaOptions(type: 'expense' | 'liability'): CoaAccountItem[] {
     return type === 'expense' ? expenseCoaAccounts : liabilityCoaAccounts;
-  }
-
-  /** COA options for a line, always including the account already on the draft line. */
-  function journalLineCoaOptionsForLine(
-    line: JournalEntryLineDetail,
-    type: 'expense' | 'liability',
-  ): CoaAccountItem[] {
-    const list = journalLineCoaOptions(type);
-    const id = String(line.account_id ?? '');
-    if (!id) return list;
-    if (list.some((a) => String(a.id) === id)) return list;
-    if (line.account_code && line.account_name) {
-      return [
-        {
-          id,
-          account_code: line.account_code,
-          account_name: line.account_name,
-        },
-        ...list,
-      ];
-    }
-    return list;
   }
 
   function setJournalLineAccountId(lineNumber: number, accountId: string) {
@@ -444,8 +412,15 @@
     const next: Record<number, string> = {};
     const defaults: Record<number, string> = {};
     for (const line of journalApproval.lines) {
-      if (!journalLineCoaType(line)) continue;
-      const accountId = String(line.account_id ?? '');
+      const coaType = journalLineCoaType(line);
+      if (!coaType) continue;
+      const accountId = resolveJournalLineAccountId(
+        line,
+        coaType,
+        expenseCoaAccounts,
+        liabilityCoaAccounts,
+        journalApproval,
+      );
       if (!accountId) continue;
       next[line.line_number] = accountId;
       defaults[line.line_number] = accountId;
@@ -458,6 +433,14 @@
     const syncKey = journalApproval.journal_entry_id ?? 'journal';
     if (syncKey !== journalAccountSyncKey) {
       journalAccountSyncKey = syncKey;
+      syncJournalLineAccountIds();
+    }
+  }
+
+  $: if (journalApproval && !journalCoaLoading) {
+    const coaKey = `${journalApproval.journal_entry_id ?? 'journal'}:${expenseCoaAccounts.length}:${liabilityCoaAccounts.length}`;
+    if (coaKey !== journalCoaSyncKey) {
+      journalCoaSyncKey = coaKey;
       syncJournalLineAccountIds();
     }
   }
@@ -1439,14 +1422,21 @@
                   <th>Account</th>
                   <th>Debit</th>
                   <th>Credit</th>
-                  <th>Description</th>
                 </tr>
               </thead>
               <tbody>
                 {#each journalApproval.lines as line (line.line_number)}
                   {@const coaType = journalLineCoaType(line)}
-                  {@const lineAccountId =
-                    journalLineAccountIds[line.line_number] ?? String(line.account_id ?? '')}
+                  {@const lineAccountId = coaType
+                    ? (journalLineAccountIds[line.line_number] ??
+                      resolveJournalLineAccountId(
+                        line,
+                        coaType,
+                        expenseCoaAccounts,
+                        liabilityCoaAccounts,
+                        journalApproval,
+                      ))
+                    : ''}
                   <tr>
                     <td>{line.line_number}</td>
                     <td>
@@ -1458,22 +1448,29 @@
                           onchange={(e) =>
                             setJournalLineAccountId(line.line_number, e.currentTarget.value)}
                         >
-                          {#each journalLineCoaOptionsForLine(line, coaType) as acct (acct.id)}
+                          {#each journalLineCoaOptionsForLine(
+                            line,
+                            coaType,
+                            expenseCoaAccounts,
+                            liabilityCoaAccounts,
+                            journalApproval,
+                          ) as acct (acct.id)}
                             <option value={String(acct.id)}
                               >{acct.account_code} — {acct.account_name}</option
                             >
                           {/each}
                         </select>
-                      {:else if line.account_code}
+                      {:else if isGstJournalLine(line) && line.account_code}
                         {line.account_code} — {line.account_name ?? ''}
                         <span class="hint-inline">(GST — not editable)</span>
+                      {:else if line.account_code}
+                        {line.account_code} — {line.account_name ?? ''}
                       {:else}
-                        {line.account_name ?? line.account_id}
+                        {line.account_name ?? line.account_id ?? '—'}
                       {/if}
                     </td>
                     <td>{formatAmount(line.debit)}</td>
                     <td>{formatAmount(line.credit)}</td>
-                    <td>{line.description ?? '—'}</td>
                   </tr>
                 {/each}
               </tbody>

@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.81-journal-line-prepopulate",
+  "version": "0.14.82-journal-lines-display",
   "private": true,
   "type": "module",
   "scripts": {
