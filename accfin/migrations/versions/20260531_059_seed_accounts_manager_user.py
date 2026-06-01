@@ -1,4 +1,4 @@
-"""seed_accounts_manager_user — provision accounts_clerk (Manager Accounts) login."""
+"""seed_accounts_manager_user — provision accounts_manager (Manager Accounts) login."""
 
 from alembic import op
 import sqlalchemy as sa
@@ -10,7 +10,7 @@ depends_on = None
 
 TENANT_MMLOGISTIX = "00000000-0000-0000-0000-000000000200"
 USER_ACCOUNTS_MANAGER = "00000000-0000-0000-0000-000000000105"
-ROLE_ACCOUNTS_CLERK = "00000000-0000-0000-0000-000000000005"
+ROLE_ACCOUNTS_MANAGER = "00000000-0000-0000-0000-000000000005"
 DEV_PASSWORD_HASH = (
     "$argon2id$v=19$m=65536,t=3,p=4$gnlhsND5BlHE/sF7f/hVoA$"
     "ZleXPrKHMAWstqbXATdCbmttGkmSbcbBugFf80fQTFw"
@@ -38,7 +38,7 @@ def upgrade() -> None:
         {
             "user_id": USER_ACCOUNTS_MANAGER,
             "password_hash": DEV_PASSWORD_HASH,
-            "role_id": ROLE_ACCOUNTS_CLERK,
+            "role_id": ROLE_ACCOUNTS_MANAGER,
             "tenant_id": TENANT_MMLOGISTIX,
         },
     )

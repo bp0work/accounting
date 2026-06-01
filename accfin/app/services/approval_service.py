@@ -24,7 +24,7 @@ from app.services.notification_dispatcher import NotificationDispatcher
 from app.services.event_bus import publish_user_event
 from fastapi import status
 
-TIER2_ROLES = frozenset({"accounts_clerk", "finance_officer"})
+TIER2_ROLES = frozenset({"accounts_manager", "finance_officer"})
 EXECUTIVE_ROLES = frozenset({"cfo", "finance_manager"})
 
 

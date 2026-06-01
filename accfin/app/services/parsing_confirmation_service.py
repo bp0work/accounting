@@ -27,7 +27,7 @@ from fastapi import status
 from workers.common.parsing_confirmation import normalize_extracted_fields
 
 CONFIRM_PARSING_ROLES = frozenset(
-    {"accounts_clerk", "finance_manager", "cfo", "finance_director"}
+    {"accounts_manager", "finance_manager", "cfo", "finance_director"}
 )
 
 
@@ -38,7 +38,7 @@ def _assert_confirm_role(user: TokenData) -> None:
     raise AppHTTPException(
         status.HTTP_403_FORBIDDEN,
         "INSUFFICIENT_PERMISSION",
-        "accounts_clerk, finance_manager, cfo, or finance_director role required",
+        "accounts_manager, finance_manager, cfo, or finance_director role required",
     )
 
 

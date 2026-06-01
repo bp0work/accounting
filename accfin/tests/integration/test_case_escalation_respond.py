@@ -13,10 +13,10 @@ from app.models.mail import MailGatewayConfig
 
 
 @pytest.fixture
-async def clerk_auth_headers(async_client: AsyncClient, clerk_user) -> dict[str, str]:
+async def clerk_auth_headers(async_client: AsyncClient, accounts_manager_user) -> dict[str, str]:
     response = await async_client.post(
         "/api/auth/login",
-        json={"username": clerk_user.username, "password": "CorrectHorseBattery1!"},
+        json={"username": accounts_manager_user.username, "password": "CorrectHorseBattery1!"},
     )
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['access_token']}"}

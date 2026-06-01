@@ -46,7 +46,7 @@ export function manualActionButtonClass(
   return 'secondary';
 }
 
-const MANUAL_REVIEW_ROLES = new Set(['accounts_clerk', 'finance_manager', 'cfo']);
+const MANUAL_REVIEW_ROLES = new Set(['accounts_manager', 'finance_manager', 'cfo']);
 
 export function canUseManualReviewActions(roleName: string | undefined | null): boolean {
   return MANUAL_REVIEW_ROLES.has((roleName ?? '').toLowerCase());

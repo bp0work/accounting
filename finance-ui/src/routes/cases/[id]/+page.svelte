@@ -73,7 +73,7 @@
   let reviewCoaAccounts: CoaAccountItem[] = [];
 
   const confirmParsingRoles = new Set([
-    'accounts_clerk',
+    'accounts_manager',
     'finance_manager',
     'cfo',
     'finance_director',
@@ -116,7 +116,7 @@
   ]);
 
   const overrideRoles = new Set(['cfo', 'finance_manager']);
-  const tier2Roles = new Set(['accounts_clerk', 'finance_officer', 'finance_manager']);
+  const tier2Roles = new Set(['accounts_manager', 'finance_officer', 'finance_manager']);
   const executiveRoles = new Set(['cfo', 'finance_director']);
 
   function findCoaAccount(id: string, ...lists: CoaAccountItem[][]): CoaAccountItem | undefined {

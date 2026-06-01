@@ -33,7 +33,7 @@ export function listApprovals(opts?: {
 
 export function bindingQueueForRole(roleName: string | null | undefined): BindingQueue | undefined {
   const r = (roleName ?? '').toLowerCase();
-  if (r === 'accounts_clerk' || r === 'finance_officer' || r === 'finance_manager') return 'acc';
+  if (r === 'accounts_manager' || r === 'finance_officer' || r === 'finance_manager') return 'acc';
   if (r === 'cfo' || r === 'finance_director') return 'cfo';
   return undefined;
 }

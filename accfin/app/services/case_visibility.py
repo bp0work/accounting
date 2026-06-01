@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 _CFO_ROLE_NAMES = frozenset({"cfo", "finance_director"})
-_ACC_ROLE_NAMES = frozenset({"accounts_clerk", "finance_officer", "finance_manager"})
+_ACC_ROLE_NAMES = frozenset({"accounts_manager", "finance_officer", "finance_manager"})
 
 REJECTED_STATUSES = frozenset({"rejected", "case_rejected"})
 ATTENTION_STATUSES = frozenset({"exception", "manual_review", "on_hold"})

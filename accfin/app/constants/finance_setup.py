@@ -8,7 +8,7 @@ FINANCE_SETUP_ROLE_NAMES = frozenset(
         "general_manager",
         "cfo",
         "finance_manager",
-        "accounts_clerk",
+        "accounts_manager",
         "financial_analyst",
         "ar_executive",
         "ap_executive",

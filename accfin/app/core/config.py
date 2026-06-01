@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.79-gateway-commit-before-enqueue"
+        return "0.14.80-accounts-manager-role-rename"
 
     @property
     def edge_public_base_url(self) -> str:
