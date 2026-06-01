@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.70-expense-journal-fix",
+  "version": "0.14.71-remove-review-link",
   "private": true,
   "type": "module",
   "scripts": {

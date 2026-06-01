@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.70-expense-journal-fix"
+        return "0.14.71-remove-review-link"
 
     @property
     def edge_public_base_url(self) -> str:
