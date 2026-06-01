@@ -117,8 +117,7 @@ async def approve_approval(
         user,
         note=body.note,
         journal_entry_id=body.journal_entry_id,
-        debit_account_id=body.debit_account_id,
-        credit_account_id=body.credit_account_id,
+        line_account_updates=body.line_account_updates,
     )
     await session.commit()
     return ApprovalActionResponse(
