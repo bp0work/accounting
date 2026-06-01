@@ -120,6 +120,41 @@ async def _lines_for_entry(
     return line_details, expense_account_id, payable_account_id, debit_name, credit_name
 
 
+def _parse_formatted_money(raw: str | None) -> Decimal | None:
+    if not raw:
+        return None
+    try:
+        return Decimal(str(raw).replace(",", "").strip())
+    except Exception:
+        return None
+
+
+def _amounts_from_journal_lines(
+    lines: list[JournalEntryLineDetail],
+) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
+    """Derive ex-GST, GST, and inclusive total from draft journal lines."""
+    net: Decimal | None = None
+    gst: Decimal | None = None
+    total_credit = Decimal("0")
+    has_credit = False
+    for line in lines:
+        if line.debit:
+            debit_val = _parse_formatted_money(line.debit)
+            if debit_val is None:
+                continue
+            if line.account_code == "2011":
+                gst = (gst or Decimal("0")) + debit_val
+            elif line.line_number == 1:
+                net = debit_val
+        if line.credit:
+            credit_val = _parse_formatted_money(line.credit)
+            if credit_val is not None:
+                total_credit += credit_val
+                has_credit = True
+    gross = total_credit if has_credit else None
+    return net, gst, gross
+
+
 def _detail_from_metadata(meta: dict) -> JournalEntryApprovalDetail | None:
     raw = meta.get("journal_entry")
     if not isinstance(raw, dict) or not raw:
@@ -216,15 +251,16 @@ async def build_journal_entry_approval_detail(
 
     gross = amount
     net = amount
-    if gross is not None and gst is not None and gst > 0 and gst < gross:
+    if lines:
+        line_net, line_gst, line_gross = _amounts_from_journal_lines(lines)
+        if line_net is not None:
+            net = line_net
+        if line_gst is not None and line_gst > 0:
+            gst = line_gst
+        if line_gross is not None:
+            gross = line_gross
+    elif gross is not None and gst is not None and gst > 0 and gst < gross:
         net = gross - gst
-    elif entry is not None and lines:
-        expense_line = next((ln for ln in lines if ln.debit and ln.account_id == expense_account_id), None)
-        if expense_line and expense_line.debit:
-            try:
-                net = Decimal(expense_line.debit.replace(",", ""))
-            except Exception:
-                pass
 
     return JournalEntryApprovalDetail(
         vendor=vendor,
