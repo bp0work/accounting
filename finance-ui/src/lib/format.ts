@@ -83,6 +83,12 @@ export function formatDateOnly(value: string | null | undefined): string {
   return `${day}/${month}/${year}`;
 }
 
+/** Trial balance debit/credit cells — null/zero → em dash. */
+export function formatTrialBalanceAmount(value: string | null | undefined): string {
+  if (value == null || value === '') return '—';
+  return value;
+}
+
 export function isNonZeroAmount(value: string | number | null | undefined): boolean {
   if (value == null || value === '') return false;
   const n =
