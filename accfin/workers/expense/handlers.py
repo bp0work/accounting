@@ -380,20 +380,19 @@ class ExpenseWorkerService:
         # ── Step 2G: COA mapping ───────────────────────────────────────
         expense_account = await self._resolve_expense_account(extracted)
 
-        if _resume_step_reached(resume_from, "2G") and not overrides.get("override_coa"):
-            if expense_account is None:
-                category = normalize_expense_category(extracted.get("expense_category"))
-                summary = (
-                    f"Could not map expense category {category} to a GL account. "
-                    "Please configure the chart of accounts."
-                )
-                return await self._escalate_step(
-                    case,
-                    email,
-                    reason_code=_REASON_COA,
-                    summary=summary,
-                    extracted_fields=extracted,
-                )
+        if expense_account is None and not overrides.get("override_coa"):
+            category = normalize_expense_category(extracted.get("expense_category"))
+            summary = (
+                f"Could not map expense category {category} to a GL account. "
+                "Please configure the chart of accounts."
+            )
+            return await self._escalate_step(
+                case,
+                email,
+                reason_code=_REASON_COA,
+                summary=summary,
+                extracted_fields=extracted,
+            )
 
         await self._add_timeline(
             case,
@@ -437,7 +436,20 @@ class ExpenseWorkerService:
         if staff and staff.extra_metadata.get("payable_gl_code"):
             payable_code = str(staff.extra_metadata["payable_gl_code"])
         payable_account = await self._ledger.get_account_by_code(payable_code)
-        gst_account = await self._ledger.get_account_by_code(GST_INPUT_ACCOUNT_CODE) if tax > 0 else None
+        gst_account = None
+        if tax > 0:
+            gst_account = await self._ledger.get_account_by_code(GST_INPUT_ACCOUNT_CODE)
+            if gst_account is None:
+                return await self._escalate_step(
+                    case,
+                    email,
+                    reason_code=_REASON_COA,
+                    summary=(
+                        f"GST input account {GST_INPUT_ACCOUNT_CODE} is not configured. "
+                        "Please add it to the chart of accounts."
+                    ),
+                    extracted_fields=extracted,
+                )
 
         if payable_account is None:
             return await self._route_failure(case, email, "ACCOUNT_NOT_FOUND", "Employee payable account missing")
@@ -665,10 +677,7 @@ class ExpenseWorkerService:
                 return account
         category = normalize_expense_category(extracted.get("expense_category"))
         expense_code = expense_account_code_for_category(category)
-        account = await self._ledger.get_account_by_code(expense_code)
-        if account is None:
-            account = await self._ledger.get_account_by_code("5500")
-        return account
+        return await self._ledger.get_account_by_code(expense_code)
 
     @staticmethod
     def _parse_gl_account_id(raw: object | None) -> UUID | None:
@@ -694,7 +703,9 @@ class ExpenseWorkerService:
     ) -> UUID | None:
         if expense_account is None or payable_account is None:
             return None
-        net = amount - gst if gst < amount else amount
+        if gst > 0 and gst_account is None:
+            return None
+        net = amount - gst if gst > 0 and gst < amount else amount
         status = "posted" if posted else "draft"
         entry = await self._ledger.create_journal_entry(
             case_id=case.id,
@@ -733,7 +744,7 @@ class ExpenseWorkerService:
             account_id=payable_account.id,
             debit=Decimal("0"),
             credit=amount,
-            description="Due to staff",
+            description="Due to employee",
         )
         return entry.id
 

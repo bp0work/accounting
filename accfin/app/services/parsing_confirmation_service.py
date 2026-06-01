@@ -60,7 +60,7 @@ async def execute_confirm_parsing(
     _assert_confirm_role(user)
     message_id = str(uuid4())
     confirmed_at = datetime.now(UTC)
-    fields_in = body.extracted_fields.model_dump()
+    fields_in = body.extracted_fields.model_dump(mode="json")
     normalized_new = normalize_extracted_fields(fields_in)
 
     factory = get_session_factory()
