@@ -77,6 +77,8 @@ class ActiveSessionResponse(BaseModel):
 
 
 class TokenData(BaseModel):
+    """JWT-derived identity for API handlers. Only these fields exist — do not use username, role_name, or display_name."""
+
     user_id: UUID
     role: str
     permissions: list[str]
