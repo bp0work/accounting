@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.75-export-columns"
+        return "0.14.76-number-formatting"
 
     @property
     def edge_public_base_url(self) -> str:

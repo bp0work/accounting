@@ -11,6 +11,7 @@
     processingAgentLabel,
     submittedByDisplay,
   } from '$lib/case-labels';
+  import { formatCount } from '$lib/format';
 
   let data: CaseDashboard | null = null;
   let recentCases: CaseItem[] = [];
@@ -29,8 +30,10 @@
 
   function formatMinutes(m: number | null | undefined) {
     if (m == null) return '—';
-    if (m < 60) return `${Math.round(m)} min`;
-    return `${(m / 60).toFixed(1)} h`;
+    const rounded = Math.round(m);
+    if (rounded < 60) return `${formatCount(rounded)} min`;
+    const hours = Math.round((rounded / 60) * 10) / 10;
+    return hours % 1 === 0 ? `${formatCount(hours)} h` : `${hours.toFixed(1)} h`;
   }
 
   function formatActivity(c: CaseItem) {
@@ -60,10 +63,10 @@
     <div class="card stat">
       <h2>Queue depths</h2>
       <ul>
-        <li>Intake: <strong>{data.queue_depths.intake_queue}</strong></li>
-        <li>Accounts: <strong>{data.queue_depths.accounts_queue}</strong></li>
-        <li>Dead letter: <strong>{data.queue_depths.dead_letter_queue}</strong></li>
-        <li>Retry pending: <strong>{data.queue_depths.retry_queue_pending}</strong></li>
+        <li>Intake: <strong>{formatCount(data.queue_depths.intake_queue)}</strong></li>
+        <li>Accounts: <strong>{formatCount(data.queue_depths.accounts_queue)}</strong></li>
+        <li>Dead letter: <strong>{formatCount(data.queue_depths.dead_letter_queue)}</strong></li>
+        <li>Retry pending: <strong>{formatCount(data.queue_depths.retry_queue_pending)}</strong></li>
       </ul>
     </div>
     <div class="card stat">
@@ -73,7 +76,7 @@
     </div>
     <div class="card stat">
       <h2>Overdue (SLA)</h2>
-      <p class="big overdue">{data.overdue_count}</p>
+      <p class="big overdue">{formatCount(data.overdue_count)}</p>
       <p class="hint">Active cases past SLA deadline</p>
     </div>
   </section>
@@ -89,7 +92,7 @@
         </thead>
         <tbody>
           {#each Object.entries(data.cases_by_status) as [status, count]}
-            <tr><td>{status}</td><td>{count}</td></tr>
+            <tr><td>{status}</td><td>{formatCount(count)}</td></tr>
           {/each}
         </tbody>
       </table>

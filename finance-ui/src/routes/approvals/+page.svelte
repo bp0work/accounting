@@ -21,6 +21,7 @@
     clientVendorColumnValue,
     documentTypeLabel,
   } from '$lib/case-labels';
+  import { formatCount, formatCurrencyAmount } from '$lib/format';
   import { sessionUser } from '$lib/stores/session';
 
   let tab: 'queue' | 'history' | 'cases' = 'queue';
@@ -91,14 +92,13 @@
     }
   }
 
-  function formatAmount(a?: ApprovalItem['amount']) {
+  function formatApprovalAmount(a?: ApprovalItem['amount']) {
     if (!a) return '—';
-    return `${a.currency} ${a.value}`;
+    return formatCurrencyAmount(a.currency, a.value);
   }
 
   function formatCaseAmount(c: CaseItem) {
-    if (c.amount_value == null) return '—';
-    return `${c.amount_currency} ${c.amount_value}`;
+    return formatCurrencyAmount(c.amount_currency, c.amount_value);
   }
 
   function formatActivity(c: CaseItem) {
@@ -127,7 +127,7 @@
   <section class="queue-section">
     <h2 class="section-heading">
       Pending approvals
-      <span class="count-badge">{pending.length}</span>
+        <span class="count-badge">{formatCount(pending.length)}</span>
     </h2>
     <p class="subtitle">{queueLabel}</p>
     {#if pending.length === 0}
@@ -152,7 +152,7 @@
                 <td>{item.case_type}</td>
                 <td>{tierLabel(item.tier)}</td>
                 <td>{item.subject || '—'}</td>
-                <td>{formatAmount(item.amount)}</td>
+                <td>{formatApprovalAmount(item.amount)}</td>
                 <td>
                   {item.sla_deadline ? new Date(item.sla_deadline).toLocaleString() : '—'}
                 </td>
@@ -168,7 +168,7 @@
     <section class="queue-section manual-review-section">
       <h2 class="section-heading">
         Manual review required
-        <span class="count-badge attention">{manualReviewCases.length}</span>
+        <span class="count-badge attention">{formatCount(manualReviewCases.length)}</span>
       </h2>
       <p class="subtitle">
         Cases on hold or in manual review with a pending manager escalation — use Take action to

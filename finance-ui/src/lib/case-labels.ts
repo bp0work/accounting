@@ -119,6 +119,8 @@ const EXTRACTED_FIELD_LABELS: Record<string, string> = {
   currency: 'Currency',
   tax_amount: 'Tax amount',
   total_amount: 'Total amount',
+  sgd_amount: 'SGD amount',
+  exchange_rate: 'Exchange rate',
   business_purpose: 'Business purpose',
   gl_account_id: 'GL account',
   sender_validated: 'Document validated',
@@ -127,7 +129,6 @@ const EXTRACTED_FIELD_LABELS: Record<string, string> = {
   invoice_number: 'Document number',
   merchant_name: 'Vendor name',
   gst_amount: 'Tax amount',
-  exchange_rate: 'Exchange rate',
 };
 
 /** Display order for parsing confirmation and manual review extracted fields. */
@@ -139,6 +140,8 @@ export const EXTRACTED_FIELD_DISPLAY_ORDER = [
   'currency',
   'tax_amount',
   'total_amount',
+  'sgd_amount',
+  'exchange_rate',
   'business_purpose',
   'gl_account_id',
   'sender_validated',

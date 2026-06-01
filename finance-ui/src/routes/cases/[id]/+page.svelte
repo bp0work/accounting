@@ -39,6 +39,7 @@
     submittedByDisplay,
   } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
+  import { formatAmount, formatCount, formatExtractedFieldValue } from '$lib/format';
   import { sessionUser } from '$lib/stores/session';
 
   let item: CaseItem | null = null;
@@ -131,10 +132,6 @@
     return Number.isFinite(n) ? n : 0;
   }
 
-  function formatJournalMoney(value: number): string {
-    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
   function isGstJournalLine(line: JournalEntryLineDetail): boolean {
     return line.account_code === '2011';
   }
@@ -184,7 +181,7 @@
   $: journalHeaderExGst = (() => {
     const expenseLine = displayedJournalLines.find((l) => l.line_number === 1 && l.debit);
     if (!expenseLine?.debit) return null;
-    return formatJournalMoney(parseJournalMoney(expenseLine.debit));
+    return formatAmount(parseJournalMoney(expenseLine.debit));
   })();
 
   $: journalHeaderGst = (() => {
@@ -196,7 +193,7 @@
         any = true;
       }
     }
-    return any && sum > 0 ? formatJournalMoney(sum) : null;
+    return any && sum > 0 ? formatAmount(sum) : null;
   })();
 
   $: journalHeaderTotal = (() => {
@@ -211,7 +208,7 @@
         }
       }
     }
-    return any ? formatJournalMoney(sum) : null;
+    return any ? formatAmount(sum) : null;
   })();
   $: showAccApprovalActions =
     awaitingJournalApproval &&
@@ -308,7 +305,7 @@
     const tax = Number(String(parsingForm.tax_amount).replace(/,/g, ''));
     if (!Number.isFinite(total) || total === 0) return '';
     const ex = total - (Number.isFinite(tax) ? tax : 0);
-    return formatJournalMoney(ex);
+    return formatAmount(ex);
   })();
 
   $: reasonCode = item ? caseReasonCode(item) : '';
@@ -719,8 +716,7 @@
   }
 
   function formatConfidence(value: number): string {
-    if (Number.isNaN(value)) return '—';
-    return value.toFixed(2);
+    return formatAmount(value);
   }
 
   function resolveCoaAccountLabel(accountId: string): string {
@@ -795,7 +791,7 @@
     if (key === 'document_type' && value) {
       return value.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     }
-    return value ?? '—';
+    return formatExtractedFieldValue(key, value);
   }
 
   async function handleApprove() {
@@ -1303,7 +1299,11 @@
     {/if}
     <p>{item.subject}</p>
     <p>Submitted by: {submittedByDisplay(item)}</p>
-    <p>Processing time: {item.processing_time_minutes != null ? `${item.processing_time_minutes} min` : '—'}</p>
+    <p>
+      Processing time: {item.processing_time_minutes != null
+        ? `${formatCount(item.processing_time_minutes)} min`
+        : '—'}
+    </p>
     <p>Created: {new Date(item.created_at).toLocaleString()}</p>
     {#if item.last_activity_at}
       <p>Last activity: {new Date(item.last_activity_at).toLocaleString()}</p>
@@ -1417,8 +1417,8 @@
                         {line.account_name ?? line.account_id}
                       {/if}
                     </td>
-                    <td>{line.debit ?? '—'}</td>
-                    <td>{line.credit ?? '—'}</td>
+                    <td>{formatAmount(line.debit)}</td>
+                    <td>{formatAmount(line.credit)}</td>
                     <td>{line.description ?? '—'}</td>
                   </tr>
                 {/each}

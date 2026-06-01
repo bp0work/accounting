@@ -10,6 +10,7 @@
     listDirectorAgreements,
     createDirectorAgreement,
   } from '$lib/api/finance-setup';
+  import { formatAmount } from '$lib/format';
 
   let tab = $state<'rental' | 'director'>('rental');
   let rental = $state<Array<Record<string, unknown>>>([]);
@@ -70,7 +71,7 @@
   </div>
   <ul>
     {#each rental as x}
-      <li>{x.property_address} — ${x.monthly_rent_sgd}/mo</li>
+      <li>{x.property_address} — SGD {formatAmount(x.monthly_rent_sgd as number)}/mo</li>
     {/each}
   </ul>
 {:else}
