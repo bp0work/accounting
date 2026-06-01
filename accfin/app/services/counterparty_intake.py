@@ -16,6 +16,7 @@ from app.models.case import Case
 from app.models.counterparty_master import CounterpartyAccount, PaymentTerm, TenantTaxCode
 from app.models.ledger import CoaAccount
 from app.schemas.hermes import ExtractedInvoice
+from app.utils.hermes_amounts import decimal_from_hermes_amount
 
 
 @dataclass
@@ -208,7 +209,7 @@ async def resolve_invoice_intake(
     tax_direction: str,
     account_code_hint: str | None = None,
 ) -> IntakeResolution:
-    amount = Decimal(inv.total_amount or "0")
+    amount = decimal_from_hermes_amount(inv.total_amount)
     sub = await resolve_subaccount(
         session,
         counterparty_id=case.counterparty_id,
@@ -229,7 +230,7 @@ async def resolve_invoice_intake(
         session,
         direction=tax_direction,
         tax_code_hint=getattr(inv, "tax_code", None),
-        tax_amount=Decimal(inv.tax_amount or "0"),
+        tax_amount=decimal_from_hermes_amount(inv.tax_amount),
     )
     warnings = list(term_warnings)
     if tax_gl and not await _coa_exists(session, tax_gl):

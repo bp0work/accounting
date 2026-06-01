@@ -15,6 +15,7 @@ from app.utils.expense_categories import (
     CATEGORY_EXPENSE_ACCOUNT_CODES,
     normalize_expense_category,
 )
+from app.utils.hermes_amounts import decimal_from_hermes_amount
 from workers.common.ap_validation import extract_sender_validation, resolve_ap_sgd_amount
 
 EXPENSE_DOCUMENT_TYPES = frozenset(
@@ -148,7 +149,9 @@ def check_expense_policy(
     """Return (within_policy, category_label, limit_amount)."""
     category = normalize_expense_category(extracted.get("expense_category"))
     try:
-        amount = Decimal(str(extracted.get("sgd_amount") or extracted.get("total_amount") or "0"))
+        amount = decimal_from_hermes_amount(
+            extracted.get("sgd_amount") or extracted.get("total_amount")
+        )
     except (InvalidOperation, ValueError):
         amount = Decimal("0")
 
@@ -182,7 +185,7 @@ def receipt_validity_issues(extracted: dict, *, today: date | None = None) -> li
     elif (ref - doc_date).days > 90:
         issues.append("receipt_older_than_90_days")
     try:
-        total = Decimal(str(extracted.get("total_amount") or "0"))
+        total = decimal_from_hermes_amount(extracted.get("total_amount"))
         if total <= 0:
             issues.append("invalid_amount")
     except (InvalidOperation, ValueError):

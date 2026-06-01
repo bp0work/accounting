@@ -6,6 +6,8 @@ import re
 from datetime import date
 from decimal import Decimal
 
+from app.utils.hermes_amounts import decimal_from_hermes_amount
+
 from app.schemas.hermes import (
     CheckDuplicateOutput,
     CheckDuplicateRequest,
@@ -139,7 +141,7 @@ def generate_soa_stub(request: GenerateSOARequest) -> GenerateSOAResponse:
     as_of = request.as_of_date or date.today()
     lines.append(f"As of: {as_of.isoformat()}")
     for item in request.open_invoices:
-        amt = Decimal(item.amount or "0")
+        amt = decimal_from_hermes_amount(item.amount)
         total += amt
         lines.append(f"  {item.case_number} / {item.document_number}: {item.currency} {amt}")
     lines.append(f"Total outstanding: SGD {total}")
@@ -157,8 +159,8 @@ def validate_po_match_stub(request: ValidatePOMatchRequest) -> ValidatePOMatchRe
     inv = request.extracted_invoice
     po = request.po_data
     differences: list[PODifference] = []
-    inv_total = Decimal(inv.total_amount or "0")
-    po_total = Decimal(str(po.get("total_amount", "0")))
+    inv_total = decimal_from_hermes_amount(inv.total_amount)
+    po_total = decimal_from_hermes_amount(po.get("total_amount"))
     tolerance = Decimal("0.01")
     partial_pct = Decimal("0.05")
 

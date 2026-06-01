@@ -14,6 +14,7 @@ from app.models.ledger import CoaAccount, JournalEntry
 from app.policies.binding_authority import BindingAuthorityThresholds
 from app.schemas.journal_entry import JournalEntryApprovalDetail, JournalEntryLineDetail
 from app.services.binding_authority_service import BindingAuthorityService
+from app.utils.hermes_amounts import decimal_from_hermes_amount
 
 _APPROVAL_CASE_STATUSES = frozenset({"pending_approval", "journal_pending_approval"})
 
@@ -124,7 +125,7 @@ def _parse_formatted_money(raw: str | None) -> Decimal | None:
     if not raw:
         return None
     try:
-        return Decimal(str(raw).replace(",", "").strip())
+        return decimal_from_hermes_amount(raw)
     except Exception:
         return None
 
@@ -211,14 +212,14 @@ async def build_journal_entry_approval_detail(
     if case.amount_value is not None:
         amount = Decimal(str(case.amount_value))
     elif extracted.get("total_amount") not in (None, ""):
-        amount = Decimal(str(extracted.get("total_amount")))
+        amount = decimal_from_hermes_amount(extracted.get("total_amount"))
     elif extracted.get("sgd_amount") not in (None, ""):
-        amount = Decimal(str(extracted.get("sgd_amount")))
+        amount = decimal_from_hermes_amount(extracted.get("sgd_amount"))
 
     tax_raw = extracted.get("tax_amount")
     if tax_raw not in (None, ""):
         try:
-            gst = Decimal(str(tax_raw))
+            gst = decimal_from_hermes_amount(tax_raw)
         except Exception:
             gst = None
 

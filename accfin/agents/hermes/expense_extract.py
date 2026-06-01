@@ -15,6 +15,7 @@ from app.schemas.hermes import (
     ExtractExpenseClaimOutput,
 )
 from app.utils.expense_categories import normalize_expense_category
+from app.utils.hermes_amounts import clean_decimal_amount_string
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ def _output_from_flat(data: dict, categories: list[str]) -> ExtractExpenseClaimO
                 description=str(row.get("description") or ""),
                 merchant=row.get("merchant"),
                 currency=str(row.get("currency") or data.get("currency") or "SGD"),
-                amount_claimed=str(row.get("amount_claimed") or "0"),
+                amount_claimed=clean_decimal_amount_string(row.get("amount_claimed")),
                 confidence=float(row.get("confidence") or 0.0),
             )
         )
@@ -71,7 +72,7 @@ def _output_from_flat(data: dict, categories: list[str]) -> ExtractExpenseClaimO
                 description=str(data.get("business_purpose") or data.get("purpose") or "Expense"),
                 merchant=row.get("merchant") or data.get("vendor_name"),
                 currency=str(data.get("currency") or "SGD"),
-                amount_claimed=str(data.get("total_amount") or "0"),
+                amount_claimed=clean_decimal_amount_string(data.get("total_amount")),
                 confidence=float(data.get("confidence_score") or 0.85),
             )
         )

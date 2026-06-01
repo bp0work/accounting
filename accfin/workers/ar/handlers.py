@@ -29,6 +29,7 @@ from app.services.approval_service import ApprovalService
 from app.services.email_context import build_extraction_context
 from app.services.counterparty_intake import apply_intake_to_case
 from app.services.executive_mail_service import ExecutiveMailService
+from app.utils.hermes_amounts import decimal_from_hermes_amount
 from workers.ar.extraction import (
     compute_invoice_risk_flags,
     compute_payment_risk_flags,
@@ -189,7 +190,7 @@ class ARWorkerService:
         )
         dup_score = dup.output.similarity_score if dup.output else 0.0
 
-        amount = Decimal(inv.total_amount or "0")
+        amount = decimal_from_hermes_amount(inv.total_amount)
         risk_flags = compute_invoice_risk_flags(
             duplicate_score=dup_score,
             amount=amount,
@@ -324,7 +325,10 @@ class ARWorkerService:
                 journal_entry_id=UUID(journal_id),
                 debits=[{"account": "1300", "amount": str(amount)}],
                 credits=[
-                    {"account": "4100", "amount": str(amount - Decimal(inv.tax_amount or "0"))},
+                    {
+                        "account": "4100",
+                        "amount": str(amount - decimal_from_hermes_amount(inv.tax_amount)),
+                    },
                 ],
                 actor_name="ar-worker",
             )
@@ -380,8 +384,8 @@ class ARWorkerService:
         if pa is None:
             return await self._route_manual(case, "Empty payment advice extraction")
 
-        amount = Decimal(pa.payment_amount or "0")
-        unallocated = Decimal(pa.unallocated_amount or "0")
+        amount = decimal_from_hermes_amount(pa.payment_amount)
+        unallocated = decimal_from_hermes_amount(pa.unallocated_amount)
         invoice_not_found = not pa.allocations
         risk_flags = compute_payment_risk_flags(
             unallocated=unallocated, invoice_not_found=invoice_not_found
@@ -513,7 +517,7 @@ class ARWorkerService:
             case.workflow_metadata = {**(case.workflow_metadata or {}), "error_type": "ACCOUNT_NOT_FOUND"}
             return None
 
-        tax = Decimal(inv.tax_amount or "0")
+        tax = decimal_from_hermes_amount(inv.tax_amount)
         net = amount - tax
         status = "posted" if posted else "draft"
         entry = await self._ledger.create_journal_entry(

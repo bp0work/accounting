@@ -37,6 +37,7 @@ from app.services.approval_service import ApprovalService
 from app.services.binding_authority_service import BindingAuthorityService, apply_binding_sla
 from app.services.email_context import build_extraction_context
 from app.services.executive_mail_service import ExecutiveMailService
+from app.utils.hermes_amounts import decimal_from_hermes_amount
 from workers.ap.extraction import (
     compute_ap_invoice_risk_flags,
     evaluate_extraction_path,
@@ -532,7 +533,7 @@ class APWorkerService:
         # ── Step 2: Duplicate check ───────────────────────────────────
         if _resume_step_reached(resume_from, "2B") and not overrides.get("override_duplicate"):
             doc_number = inv.document_number or ""
-            total_amount_dec = Decimal(str(inv.total_amount or "0"))
+            total_amount_dec = decimal_from_hermes_amount(inv.total_amount)
             vendor_name_str = inv.vendor_name or case.counterparty_name or ""
             if doc_number and vendor_name_str:
                 is_dup, dup_case_number = await check_duplicate_by_fields(
@@ -796,7 +797,9 @@ class APWorkerService:
             _update_meta(case, {"extraction": meta_extraction})
 
         # ── Step 2F: Currency conversion ───────────────────────────────
-        sgd_amount = Decimal(str(extracted.get("total_amount") or inv.total_amount or "0"))
+        sgd_amount = decimal_from_hermes_amount(
+            extracted.get("total_amount") or inv.total_amount
+        )
         if _resume_step_reached(resume_from, "2F"):
             sgd_amount, extracted, needs_fx = resolve_ap_sgd_amount(extracted)
             if needs_fx:
@@ -841,7 +844,7 @@ class APWorkerService:
                 description=f"SGD amount {sgd_amount:,.2f} ({extracted.get('currency', 'SGD')})",
             )
         elif extracted.get("sgd_amount"):
-            sgd_amount = Decimal(str(extracted["sgd_amount"]))
+            sgd_amount = decimal_from_hermes_amount(extracted["sgd_amount"])
 
         # ── Step 2G: COA mapping ───────────────────────────────────────
         expense_code = str((case.workflow_metadata or {}).get("expense_account_code") or "")
@@ -898,7 +901,7 @@ class APWorkerService:
         # ── Step 7: Document type routing + journal ───────────────────
         amount = sgd_amount
         tax_raw = extracted.get("tax_amount") or getattr(inv, "tax_amount", None)
-        tax = Decimal(str(tax_raw or "0"))
+        tax = decimal_from_hermes_amount(tax_raw)
         document_type = (
             str(extracted.get("document_type", "invoice"))
             .strip()
