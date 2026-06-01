@@ -212,7 +212,8 @@ async def test_case_escalation_respond_retry_exp_parsing_incomplete_on_hold(
     await db_session.refresh(case)
     assert case.status == "classified"
     assert case.workflow_metadata.get("manual_retry") is True
-    assert case.workflow_metadata.get("resume_from_step") == "2A"
+    assert "resume_from_step" not in (case.workflow_metadata or {})
+    assert "extracted_fields" not in (case.workflow_metadata or {})
 
 
 @pytest.mark.integration
@@ -268,6 +269,8 @@ async def test_case_escalation_respond_retry_without_wire_token_from_ui(
     await db_session.refresh(case)
     assert case.status == "classified"
     assert case.workflow_metadata.get("manual_retry") is True
+    assert "resume_from_step" not in (case.workflow_metadata or {})
+    assert "extracted_fields" not in (case.workflow_metadata or {})
 
 
 @pytest.mark.integration

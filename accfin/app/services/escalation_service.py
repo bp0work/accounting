@@ -50,6 +50,7 @@ _EXP_STEP_OVERRIDE_KEYS: dict[str, str] = {
 _STEP_OVERRIDE_KEYS: dict[str, str] = {**_AP_STEP_OVERRIDE_KEYS, **_EXP_STEP_OVERRIDE_KEYS}
 _REASON_VENDOR_NOT_FOUND = "AP_VENDOR_NOT_FOUND"
 _REASON_EXP_SUBMITTER_NOT_FOUND = "EXP_SUBMITTER_NOT_FOUND"
+_REASON_EXP_PARSING_INCOMPLETE = "EXP_PARSING_INCOMPLETE"
 _REASON_CURRENCY_CONVERSION = "AP_CURRENCY_CONVERSION_REQUIRED"
 _REASON_EXP_CURRENCY = "EXP_CURRENCY_CONVERSION_REQUIRED"
 
@@ -399,6 +400,9 @@ class EscalationService:
                     "reason",
                 ):
                     meta.pop(key, None)
+                if str(row.reason_code or "") == _REASON_EXP_PARSING_INCOMPLETE:
+                    meta.pop("resume_from_step", None)
+                    meta.pop("extracted_fields", None)
                 meta.update(
                     {
                         "current_stage": "processing",
@@ -410,13 +414,18 @@ class EscalationService:
                 previous_status = case.status
                 case.status = "classified"
                 message_id = str(uuid4())
+                timeline_desc = (
+                    "Escalation retry — requeued from parsing (fresh extraction)"
+                    if str(row.reason_code or "") == _REASON_EXP_PARSING_INCOMPLETE
+                    else "Escalation retry — requeued without override"
+                )
                 await self._cases.add_timeline(
                     case_id=case.id,
                     event_type="case_retry",
                     from_status=previous_status,
                     to_status="classified",
                     actor=responder,
-                    description="Escalation retry — requeued without override",
+                    description=timeline_desc,
                     metadata={"queue_message_id": message_id, "escalation_id": str(row.id)},
                 )
                 await self._executive_mail.log_step(
