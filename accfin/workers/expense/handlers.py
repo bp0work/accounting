@@ -106,6 +106,34 @@ def _pop_resume_from_step(case: Case) -> str | None:
     return str(step) if step else None
 
 
+def _gst_amount_in_sgd(extracted: dict) -> Decimal:
+    """Tax/GST in SGD — apply exchange_rate when receipt currency is not SGD."""
+    if extracted.get("sgd_tax") not in (None, ""):
+        try:
+            return decimal_from_hermes_amount(extracted.get("sgd_tax"))
+        except Exception:
+            pass
+    try:
+        tax = decimal_from_hermes_amount(extracted.get("tax_amount"))
+    except Exception:
+        return Decimal("0")
+    if tax <= 0:
+        return Decimal("0")
+    currency = str(extracted.get("currency") or "SGD").strip().upper()
+    if currency == "SGD":
+        return tax
+    rate_raw = extracted.get("exchange_rate")
+    if rate_raw in (None, ""):
+        return tax
+    try:
+        exchange_rate = decimal_from_hermes_amount(rate_raw)
+        if exchange_rate <= 0:
+            return tax
+        return (tax * exchange_rate).quantize(Decimal("0.01"))
+    except Exception:
+        return tax
+
+
 class ExpenseWorkerService:
     def __init__(self, session: AsyncSession, hermes: HermesClient | None = None) -> None:
         self._session = session
@@ -379,6 +407,16 @@ class ExpenseWorkerService:
                     extracted_fields=extracted,
                 )
             extracted["sgd_amount"] = str(sgd_amount)
+            currency = str(extracted.get("currency") or "SGD").strip().upper()
+            if currency != "SGD":
+                try:
+                    tax_foreign = decimal_from_hermes_amount(extracted.get("tax_amount"))
+                except Exception:
+                    tax_foreign = Decimal("0")
+                if tax_foreign > 0:
+                    exchange_rate = decimal_from_hermes_amount(extracted.get("exchange_rate"))
+                    sgd_tax = (tax_foreign * exchange_rate).quantize(Decimal("0.01"))
+                    extracted["sgd_tax"] = str(sgd_tax)
             _update_meta(case, {"extracted_fields": extracted})
             await self._add_timeline(
                 case,
@@ -414,10 +452,7 @@ class ExpenseWorkerService:
         sgd_amount = decimal_from_hermes_amount(
             extracted.get("sgd_amount") or extracted.get("total_amount")
         )
-        try:
-            tax = decimal_from_hermes_amount(extracted.get("tax_amount"))
-        except Exception:
-            tax = Decimal("0")
+        tax = _gst_amount_in_sgd(extracted)
 
         case.amount_value = sgd_amount
         case.amount_currency = "SGD"
