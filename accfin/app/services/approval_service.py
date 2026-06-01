@@ -99,7 +99,7 @@ class ApprovalService:
             binding = BindingAuthorityService(self._session)
             jid = await binding.complete_approval(
                 case,
-                actor_name=user.username or str(user.user_id),
+                actor_name=str(user.user_id),
                 manager_comment=note,
             )
             approval.status = "approved"
@@ -243,7 +243,7 @@ class ApprovalService:
             binding = BindingAuthorityService(self._session)
             await binding.reject_case(
                 case,
-                actor_name=user.username or str(user.user_id),
+                actor_name=str(user.user_id),
                 reason=reason,
             )
             approval.status = "rejected"
@@ -315,7 +315,7 @@ class ApprovalService:
         binding = BindingAuthorityService(self._session)
         await binding.escalate_tier2_to_cfo(
             case,
-            actor_name=user.username or str(user.user_id),
+            actor_name=str(user.user_id),
             comment=note,
         )
         approval.tier = 3
@@ -338,7 +338,7 @@ class ApprovalService:
             extraction_confidence=float(
                 (case.workflow_metadata or {}).get("extraction_confidence") or 0
             ),
-            actor_name=user.username or "finance-ui",
+            actor_name=str(user.user_id),
         )
         await self._session.flush()
         return approval
