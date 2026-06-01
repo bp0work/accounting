@@ -143,7 +143,6 @@
               <th>Subject</th>
               <th>Amount</th>
               <th>SLA</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -157,7 +156,6 @@
                 <td>
                   {item.sla_deadline ? new Date(item.sla_deadline).toLocaleString() : '—'}
                 </td>
-                <td><a href={`/approvals/${item.id}`}>Review</a></td>
               </tr>
             {/each}
           </tbody>
