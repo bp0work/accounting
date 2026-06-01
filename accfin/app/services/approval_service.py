@@ -15,6 +15,7 @@ from app.models.ledger import CoaAccount, JournalEntry
 from app.models.policy import Approval
 from app.repositories.approval import ApprovalRepository
 from app.repositories.case import CaseRepository
+from app.schemas.approval import JournalLineAccountUpdate
 from app.schemas.auth import TokenData
 from app.services.audit_service import AuditService
 from app.services.binding_authority_service import BindingAuthorityService
@@ -86,8 +87,7 @@ class ApprovalService:
         *,
         note: str | None = None,
         journal_entry_id: UUID | None = None,
-        debit_account_id: UUID | None = None,
-        credit_account_id: UUID | None = None,
+        line_account_updates: list[JournalLineAccountUpdate] | None = None,
     ) -> Approval:
         approval, case = await self._load_approval_case(approval_id)
         self._ensure_can_act(approval, case, user)
@@ -116,10 +116,9 @@ class ApprovalService:
             if journal_entry_id:
                 approval.journal_entry_id = journal_entry_id
 
-            await self._apply_draft_journal_account_overrides(
+            await self._apply_draft_journal_line_updates(
                 case.id,
-                debit_account_id=debit_account_id,
-                credit_account_id=credit_account_id,
+                line_account_updates=line_account_updates or [],
             )
             await self._cases_service.transition_case(
                 case.id, "approved", user=user, context={"user": user, "policy_pass": True}
@@ -149,20 +148,21 @@ class ApprovalService:
             metadata={
                 "note": note,
                 "journal_entry_id": str(journal_entry_id) if journal_entry_id else None,
-                "debit_account_id": str(debit_account_id) if debit_account_id else None,
-                "credit_account_id": str(credit_account_id) if credit_account_id else None,
+                "line_account_updates": [
+                    {"line_number": u.line_number, "account_id": str(u.account_id)}
+                    for u in (line_account_updates or [])
+                ],
             },
         )
         return approval
 
-    async def _apply_draft_journal_account_overrides(
+    async def _apply_draft_journal_line_updates(
         self,
         case_id: UUID,
         *,
-        debit_account_id: UUID | None,
-        credit_account_id: UUID | None,
+        line_account_updates: list[JournalLineAccountUpdate],
     ) -> None:
-        if debit_account_id is None and credit_account_id is None:
+        if not line_account_updates:
             return
         result = await self._session.execute(
             select(JournalEntry)
@@ -175,53 +175,60 @@ class ApprovalService:
         if entry is None or not entry.lines:
             return
 
-        account_ids: set[UUID] = set()
-        if debit_account_id:
-            account_ids.add(debit_account_id)
-        if credit_account_id:
-            account_ids.add(credit_account_id)
-        if account_ids:
-            rows = await self._session.execute(
-                select(CoaAccount).where(CoaAccount.id.in_(account_ids))
-            )
-            found = {row.id for row in rows.scalars().all()}
-            if debit_account_id and debit_account_id not in found:
-                raise AppHTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    "INVALID_DEBIT_ACCOUNT",
-                    "Debit account not found",
-                )
-            if credit_account_id and credit_account_id not in found:
-                raise AppHTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    "INVALID_CREDIT_ACCOUNT",
-                    "Credit account not found",
-                )
+        lines_by_number = {ln.line_number: ln for ln in entry.lines}
+        lookup_ids = {ln.account_id for ln in entry.lines}
+        lookup_ids.update(update.account_id for update in line_account_updates)
+        rows = await self._session.execute(
+            select(CoaAccount).where(CoaAccount.id.in_(lookup_ids))
+        )
+        accounts_by_id = {row.id: row for row in rows.scalars().all()}
 
-        lines = sorted(entry.lines, key=lambda ln: ln.line_number)
-        if debit_account_id:
-            expense_line = next(
-                (ln for ln in lines if ln.line_number == 1 and ln.debit > 0),
-                None,
-            )
-            if expense_line is None:
+        def _line_is_gst(line) -> bool:
+            acct = accounts_by_id.get(line.account_id)
+            return acct is not None and acct.account_code == "2011"
+
+        for update in line_account_updates:
+            line = lines_by_number.get(update.line_number)
+            if line is None:
                 raise AppHTTPException(
                     status.HTTP_422_UNPROCESSABLE_ENTITY,
                     "JOURNAL_LINE_NOT_FOUND",
-                    "Expense debit line (line 1) not found",
+                    f"Journal line {update.line_number} not found",
                 )
-            expense_line.account_id = debit_account_id
-
-        if credit_account_id:
-            credit_lines = [ln for ln in lines if ln.credit > 0]
-            if not credit_lines:
+            if _line_is_gst(line):
                 raise AppHTTPException(
                     status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    "JOURNAL_LINE_NOT_FOUND",
-                    "Payable credit line not found",
+                    "JOURNAL_LINE_NOT_EDITABLE",
+                    "GST input line cannot be changed",
                 )
-            payable_line = max(credit_lines, key=lambda ln: ln.line_number)
-            payable_line.account_id = credit_account_id
+            account = accounts_by_id.get(update.account_id)
+            if account is None:
+                raise AppHTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "INVALID_ACCOUNT",
+                    f"Account not found for line {update.line_number}",
+                )
+            if line.line_number == 1 and line.debit > 0:
+                if account.account_type != "expense":
+                    raise AppHTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        "INVALID_ACCOUNT_TYPE",
+                        "Line 1 requires an expense account",
+                    )
+            elif line.credit > 0:
+                if account.account_type != "liability":
+                    raise AppHTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        "INVALID_ACCOUNT_TYPE",
+                        f"Line {update.line_number} requires a liability account",
+                    )
+            else:
+                raise AppHTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "JOURNAL_LINE_NOT_EDITABLE",
+                    f"Journal line {update.line_number} cannot be changed",
+                )
+            line.account_id = update.account_id
 
         await self._session.flush()
 

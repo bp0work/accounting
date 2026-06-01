@@ -46,11 +46,15 @@ class ApprovalDetailResponse(ApprovalListItem):
     journal_entry_id: UUID | None = None
 
 
+class JournalLineAccountUpdate(BaseModel):
+    line_number: int = Field(ge=1)
+    account_id: UUID
+
+
 class ApproveRequest(BaseModel):
     note: str | None = None
     journal_entry_id: UUID | None = None
-    debit_account_id: UUID | None = None
-    credit_account_id: UUID | None = None
+    line_account_updates: list[JournalLineAccountUpdate] = Field(default_factory=list)
 
 
 class RejectRequest(BaseModel):
