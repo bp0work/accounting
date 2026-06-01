@@ -66,10 +66,7 @@ export function caseReasonCode(caseItem: CaseItem): string {
 
 export function hasPendingEscalation(caseItem: CaseItem): boolean {
   const meta = caseItem.workflow_metadata ?? {};
-  const escalationId = meta.escalation_id;
-  if (escalationId == null || String(escalationId).trim() === '') return false;
-  if (meta.escalation_pending === false) return false;
-  return true;
+  return Boolean(meta.escalation_pending && meta.escalation_id);
 }
 
 /** on_hold manager escalations — POST /cases/{id}/escalation-respond action retry, not /retry. */

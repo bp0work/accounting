@@ -119,6 +119,43 @@ class ExecutiveMailService:
         await self._session.flush()
         return existing
 
+    async def sync_pending_escalation_metadata(
+        self, case: Case, *, set_on_hold: bool = True
+    ) -> bool:
+        """
+        Align workflow_metadata with the pending CaseEscalation row.
+
+        Repairs stale ``escalation_pending: false`` while a manager escalation is still
+        open (e.g. after ``escalate_to_manager`` returned an existing row without
+        refreshing metadata).
+        """
+        pending = await self._pending_escalation(case.id)
+        meta = dict(case.workflow_metadata or {})
+        changed = False
+
+        if pending is not None:
+            esc_id = str(pending.id)
+            if meta.get("escalation_pending") is not True:
+                meta["escalation_pending"] = True
+                changed = True
+            if meta.get("escalation_id") != esc_id:
+                meta["escalation_id"] = esc_id
+                changed = True
+            if pending.reason_code and meta.get("reason_code") != pending.reason_code:
+                meta["reason_code"] = pending.reason_code
+                changed = True
+            if set_on_hold and case.status in ("manual_review", "classified", "validation"):
+                if case.status != "on_hold":
+                    case.status = "on_hold"
+                    changed = True
+        elif case.status in ("on_hold", "manual_review") and meta.get("escalation_pending"):
+            meta["escalation_pending"] = False
+            changed = True
+
+        if changed:
+            case.workflow_metadata = meta
+        return changed
+
     async def _inbound_attachment_count(self, email_id: UUID | None) -> int:
         if email_id is None:
             return 0
@@ -209,6 +246,9 @@ class ExecutiveMailService:
         """Step 1: manager review before any sender failure notification."""
         existing = await self._pending_escalation(case.id)
         if existing is not None:
+            await self.sync_pending_escalation_metadata(
+                case, set_on_hold=not preserve_case_status
+            )
             return existing
 
         mailbox_address = email.mailbox_address if email else None
