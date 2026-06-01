@@ -20,7 +20,7 @@ from app.services.queue_router import enqueue_accounts
 from app.services.timeline_actor import timeline_actor_label_for_user
 from fastapi import status
 
-RETRYABLE_STATUSES = frozenset({"exception", "manual_review"})
+RETRYABLE_STATUSES = frozenset({"exception", "manual_review", "classified"})
 RETRYABLE_HERMES_ON_HOLD_CODES = frozenset({"HERMES_TIMEOUT", "HERMES_UNAVAILABLE"})
 
 

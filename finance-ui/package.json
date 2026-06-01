@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.15.02-vendor-hints-name-fix",
+  "version": "0.15.03-requeue-button",
   "private": true,
   "type": "module",
   "scripts": {
