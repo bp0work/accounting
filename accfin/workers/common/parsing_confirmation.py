@@ -97,6 +97,8 @@ def normalize_extracted_fields(raw: dict[str, Any]) -> dict[str, str | None]:
     gl_id = raw.get("gl_account_id")
     if gl_id is not None and str(gl_id).strip():
         out["gl_account_id"] = str(gl_id).strip()
+    else:
+        out["gl_account_id"] = None
     return out
 
 

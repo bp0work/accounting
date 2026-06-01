@@ -62,6 +62,10 @@
   let manualActionMessage = '';
   let expenseCoaAccounts: CoaAccountItem[] = [];
   let expenseCoaLoading = false;
+  let liabilityCoaAccounts: CoaAccountItem[] = [];
+  let journalCoaLoading = false;
+  let journalExpenseAccountId = '';
+  let journalPayableAccountId = '';
   let reviewCoaAccounts: CoaAccountItem[] = [];
 
   const confirmParsingRoles = new Set([
@@ -279,6 +283,37 @@
     }
   }
 
+  async function loadJournalCoaAccounts() {
+    journalCoaLoading = true;
+    try {
+      const [expense, liability] = await Promise.all([
+        listCoaAccounts({ account_type: 'expense', is_active: true }),
+        listCoaAccounts({ account_type: 'liability', is_active: true }),
+      ]);
+      expenseCoaAccounts = expense;
+      liabilityCoaAccounts = liability;
+    } catch {
+      expenseCoaAccounts = [];
+      liabilityCoaAccounts = [];
+    } finally {
+      journalCoaLoading = false;
+    }
+  }
+
+  function syncJournalAccountSelections() {
+    if (!journalApproval) {
+      journalExpenseAccountId = '';
+      journalPayableAccountId = '';
+      return;
+    }
+    journalExpenseAccountId = journalApproval.expense_account_id ?? '';
+    journalPayableAccountId = journalApproval.payable_account_id ?? '';
+  }
+
+  $: if (journalApproval) {
+    syncJournalAccountSelections();
+  }
+
   async function load() {
     error = '';
     retryMessage = '';
@@ -290,8 +325,11 @@
       [item, timeline] = await Promise.all([fetchCase(caseId), fetchCaseTimeline(caseId)]);
       if (item?.status === 'pending_confirmation' && item.type === 'expense_claim') {
         await loadExpenseCoaAccounts();
+      } else if (item && journalApprovalStatuses.has(item.status)) {
+        await loadJournalCoaAccounts();
       } else {
         expenseCoaAccounts = [];
+        liabilityCoaAccounts = [];
       }
       if (
         item &&
@@ -1198,7 +1236,7 @@
               <dd>{journalApproval.document_type}</dd>
             {/if}
             {#if journalApproval.amount_sgd}
-              <dt>Amount (SGD)</dt>
+              <dt>Amount (ex-GST)</dt>
               <dd>{journalApproval.amount_sgd}</dd>
             {/if}
             {#if journalApproval.gst}
@@ -1206,16 +1244,8 @@
               <dd>{journalApproval.gst}</dd>
             {/if}
             {#if journalApproval.total}
-              <dt>Total</dt>
+              <dt>Total (inclusive)</dt>
               <dd>{journalApproval.total}</dd>
-            {/if}
-            {#if journalApproval.debit_account}
-              <dt>Debit account</dt>
-              <dd>{journalApproval.debit_account}</dd>
-            {/if}
-            {#if journalApproval.credit_account}
-              <dt>Credit account</dt>
-              <dd>{journalApproval.credit_account}</dd>
             {/if}
             {#if journalApproval.approval_tier_label}
               <dt>Approval tier</dt>
@@ -1225,6 +1255,60 @@
               <dd>Tier {bindingTier}</dd>
             {/if}
           </dl>
+          <div class="journal-account-pickers">
+            <label>
+              Debit account (expense)
+              <select bind:value={journalExpenseAccountId} disabled={journalCoaLoading}>
+                <option value="">
+                  {journalCoaLoading ? 'Loading accounts…' : 'Select expense account…'}
+                </option>
+                {#each expenseCoaAccounts as acct (acct.id)}
+                  <option value={String(acct.id)}>{acct.account_code} — {acct.account_name}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              Credit account (payable)
+              <select bind:value={journalPayableAccountId} disabled={journalCoaLoading}>
+                <option value="">
+                  {journalCoaLoading ? 'Loading accounts…' : 'Select liability account…'}
+                </option>
+                {#each liabilityCoaAccounts as acct (acct.id)}
+                  <option value={String(acct.id)}>{acct.account_code} — {acct.account_name}</option>
+                {/each}
+              </select>
+            </label>
+          </div>
+          {#if journalApproval.lines && journalApproval.lines.length > 0}
+            <table class="journal-lines-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Account</th>
+                  <th>Debit</th>
+                  <th>Credit</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each journalApproval.lines as line (line.line_number)}
+                  <tr>
+                    <td>{line.line_number}</td>
+                    <td>
+                      {#if line.account_code}
+                        {line.account_code} — {line.account_name ?? ''}
+                      {:else}
+                        {line.account_name ?? line.account_id}
+                      {/if}
+                    </td>
+                    <td>{line.debit ?? '—'}</td>
+                    <td>{line.credit ?? '—'}</td>
+                    <td>{line.description ?? '—'}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
         {:else if bindingTier != null}
           <p>Tier {bindingTier}</p>
         {/if}
@@ -1269,10 +1353,7 @@
             {/if}
           </div>
         {:else if item.pending_approval_id}
-          <p class="hint">
-            This case is awaiting approval by another role.
-            <a href={`/approvals/${item.pending_approval_id}`}>Open approval</a>
-          </p>
+          <p class="hint">This case is awaiting approval by another role.</p>
         {/if}
       </section>
     {/if}
@@ -1691,6 +1772,39 @@
     box-sizing: border-box;
     margin-top: 0.35rem;
   }
+  .journal-account-pickers {
+    display: grid;
+    gap: 0.75rem;
+    margin: 1rem 0;
+  }
+
+  .journal-account-pickers label {
+    display: block;
+    font-size: 0.875rem;
+  }
+
+  .journal-account-pickers select {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    padding: 0.4rem;
+    box-sizing: border-box;
+  }
+
+  .journal-lines-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    margin-top: 0.75rem;
+  }
+
+  .journal-lines-table th,
+  .journal-lines-table td {
+    text-align: left;
+    padding: 0.45rem 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
   .approval-actions {
     display: flex;
     flex-wrap: wrap;

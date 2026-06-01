@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.models.case import Case
 from app.models.ledger import CoaAccount, JournalEntry
 from app.policies.binding_authority import BindingAuthorityThresholds
-from app.schemas.journal_entry import JournalEntryApprovalDetail
+from app.schemas.journal_entry import JournalEntryApprovalDetail, JournalEntryLineDetail
 from app.services.binding_authority_service import BindingAuthorityService
 
 _APPROVAL_CASE_STATUSES = frozenset({"pending_approval", "journal_pending_approval"})
@@ -75,31 +75,49 @@ async def _load_draft_entry(session: AsyncSession, case_id: UUID) -> JournalEntr
     return result.scalar_one_or_none()
 
 
-async def _account_names_for_entry(
+async def _lines_for_entry(
     session: AsyncSession, entry: JournalEntry
-) -> tuple[str | None, str | None]:
+) -> tuple[list[JournalEntryLineDetail], str | None, str | None, str | None, str | None]:
+    """Build line details and primary expense (debit) / payable (credit) account labels."""
     if not entry.lines:
-        return None, None
+        return [], None, None, None, None
+
     account_ids = {line.account_id for line in entry.lines}
     result = await session.execute(select(CoaAccount).where(CoaAccount.id.in_(account_ids)))
     by_id = {row.id: row for row in result.scalars().all()}
 
+    line_details: list[JournalEntryLineDetail] = []
+    expense_account_id: str | None = None
+    payable_account_id: str | None = None
     debit_name: str | None = None
     credit_name: str | None = None
-    max_debit = Decimal("-1")
-    max_credit = Decimal("-1")
-    for line in entry.lines:
+
+    for line in sorted(entry.lines, key=lambda ln: ln.line_number):
         account = by_id.get(line.account_id)
+        code = account.account_code if account else None
+        name = account.account_name if account else None
+        line_details.append(
+            JournalEntryLineDetail(
+                line_number=line.line_number,
+                account_id=str(line.account_id),
+                account_code=code,
+                account_name=name,
+                debit=_format_money(line.debit) if line.debit else None,
+                credit=_format_money(line.credit) if line.credit else None,
+                description=line.description,
+            )
+        )
         if account is None:
             continue
         label = f"{account.account_code} — {account.account_name}"
-        if line.debit > max_debit:
-            max_debit = line.debit
-            debit_name = account.account_name
-        if line.credit > max_credit:
-            max_credit = line.credit
-            credit_name = account.account_name
-    return debit_name, credit_name
+        if line.debit > 0 and account.account_type == "expense" and expense_account_id is None:
+            expense_account_id = str(account.id)
+            debit_name = label
+        if line.credit > 0 and account.account_type == "liability" and payable_account_id is None:
+            payable_account_id = str(account.id)
+            credit_name = label
+
+    return line_details, expense_account_id, payable_account_id, debit_name, credit_name
 
 
 def _detail_from_metadata(meta: dict) -> JournalEntryApprovalDetail | None:
@@ -120,7 +138,7 @@ async def build_journal_entry_approval_detail(
 
     meta = _meta_dict(case)
     stored = _detail_from_metadata(meta)
-    if stored is not None:
+    if stored is not None and stored.lines:
         return stored
 
     extracted = meta.get("extracted_fields") or {}
@@ -164,6 +182,9 @@ async def build_journal_entry_approval_detail(
 
     debit_account: str | None = None
     credit_account: str | None = None
+    expense_account_id: str | None = None
+    payable_account_id: str | None = None
+    lines: list[JournalEntryLineDetail] = []
     journal_entry_id = _str_val(meta.get("journal_entry_id"))
     entry_number: str | None = None
 
@@ -173,7 +194,17 @@ async def build_journal_entry_approval_detail(
         entry_number = entry.entry_number
         if amount is None and entry.total_debit:
             amount = entry.total_debit
-        debit_account, credit_account = await _account_names_for_entry(session, entry)
+        lines, expense_account_id, payable_account_id, debit_account, credit_account = (
+            await _lines_for_entry(session, entry)
+        )
+        if gst is None:
+            for ld in lines:
+                if ld.account_code == "2011" and ld.debit:
+                    try:
+                        gst = Decimal(ld.debit.replace(",", ""))
+                    except Exception:
+                        pass
+                    break
 
     if debit_account is None:
         code = _str_val(meta.get("expense_account_code"))
@@ -181,12 +212,19 @@ async def build_journal_entry_approval_detail(
             debit_account = code
 
     if credit_account is None:
-        credit_account = "Trade Creditors"
+        credit_account = "Due to employee"
 
     gross = amount
     net = amount
-    if gross is not None and gst is not None and gst < gross:
+    if gross is not None and gst is not None and gst > 0 and gst < gross:
         net = gross - gst
+    elif entry is not None and lines:
+        expense_line = next((ln for ln in lines if ln.debit and ln.account_id == expense_account_id), None)
+        if expense_line and expense_line.debit:
+            try:
+                net = Decimal(expense_line.debit.replace(",", ""))
+            except Exception:
+                pass
 
     return JournalEntryApprovalDetail(
         vendor=vendor,
@@ -194,10 +232,13 @@ async def build_journal_entry_approval_detail(
         document_date=document_date,
         document_type=document_type,
         amount_sgd=_format_money(net, currency),
-        gst=_format_money(gst, currency),
+        gst=_format_money(gst, currency) if gst and gst > 0 else None,
         total=_format_money(gross, currency),
         debit_account=debit_account,
         credit_account=credit_account,
+        expense_account_id=expense_account_id,
+        payable_account_id=payable_account_id,
+        lines=lines,
         approval_tier_label=_tier_label(tier_int, thresholds, currency),
         journal_entry_id=journal_entry_id,
         entry_number=entry_number,

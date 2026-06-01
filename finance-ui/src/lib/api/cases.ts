@@ -34,6 +34,16 @@ export type CaseItem = {
   journal_entry?: JournalEntryApprovalDetail | null;
 };
 
+export type JournalEntryLineDetail = {
+  line_number: number;
+  account_id: string;
+  account_code?: string | null;
+  account_name?: string | null;
+  debit?: string | null;
+  credit?: string | null;
+  description?: string | null;
+};
+
 export type JournalEntryApprovalDetail = {
   vendor?: string | null;
   document_number?: string | null;
@@ -44,6 +54,9 @@ export type JournalEntryApprovalDetail = {
   total?: string | null;
   debit_account?: string | null;
   credit_account?: string | null;
+  expense_account_id?: string | null;
+  payable_account_id?: string | null;
+  lines?: JournalEntryLineDetail[];
   approval_tier_label?: string | null;
   journal_entry_id?: string | null;
   entry_number?: string | null;
