@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.93-step-override-queue-flags"
+        return "0.14.94-parsing-confirm-persist"
 
     @property
     def edge_public_base_url(self) -> str:

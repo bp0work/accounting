@@ -42,6 +42,7 @@ from workers.common.expense_validation import (
 )
 from workers.common.gl_period_check import ensure_gl_period_allows_posting
 from workers.common.parsing_confirmation import (
+    apply_confirmed_extracted_fields_from_message,
     expense_fields_to_confirmation,
     pause_for_parsing_confirmation,
     requires_parsing_confirmation,
@@ -126,6 +127,7 @@ class ExpenseWorkerService:
             return {"status": "skipped", "reason": "terminal_state", "case_status": case.status}
 
         email = await self._email_for_case(case)
+        apply_confirmed_extracted_fields_from_message(case, message)
         resume_from = _pop_resume_from_step(case)
         meta = case.workflow_metadata or {}
         overrides: dict = dict(meta.get("exp_step_overrides") or {})

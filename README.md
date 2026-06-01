@@ -1,6 +1,6 @@
 # AI Finance Operations Platform — Implementation Monorepo
 
-**Release version:** `0.14.93-step-override-queue-flags` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`). Finance UI: `0.14.91-parsing-incomplete-ux`. Client Admin: `0.14.69-login-portal-links`.
+**Release version:** `0.14.94-parsing-confirm-persist` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`). Finance UI: `0.14.91-parsing-incomplete-ux`. Client Admin: `0.14.69-login-portal-links`.
 
 Runnable code for the bp0.work finance platform. **Application code** lives here; **release-synced specification excerpts** for the current deploy are under `platform_dox/` (canonical working copies may also exist as a sibling folder next to `application/` on the operator workstation).
 

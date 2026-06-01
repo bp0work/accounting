@@ -60,6 +60,7 @@ from workers.common.policy_escalation import (
     route_po_not_found_escalation,
 )
 from workers.common.parsing_confirmation import (
+    apply_confirmed_extracted_fields_from_message,
     extracted_fields_to_invoice,
     invoice_to_confirmation_fields,
     pause_for_parsing_confirmation,
@@ -410,6 +411,7 @@ class APWorkerService:
             return {"status": "skipped", "reason": "case_not_found"}
 
         email = await self._email_for_case(case)
+        apply_confirmed_extracted_fields_from_message(case, message)
         resume_from = _pop_resume_from_step(case)
         overrides: dict = (case.workflow_metadata or {}).get("ap_step_overrides", {})
 
