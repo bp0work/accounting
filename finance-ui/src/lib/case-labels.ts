@@ -64,6 +64,33 @@ export function caseStateColumnLabel(
 }
 
 /** Client / Vendor column — AP shows extracted vendor; AR shows classified customer. */
+/** Dashboard "Action by" — prefer API value; fallback rules match `case_action_by`. */
+export function caseActionByLabel(
+  item: Pick<
+    CaseItem,
+    'status' | 'status_group' | 'status_group_label' | 'action_by' | 'type'
+  >,
+): string {
+  if (item.status === 'pending_confirmation') {
+    return 'ACC';
+  }
+  const state = item.status_group_label?.trim() ?? '';
+  if (
+    state === 'Rejected' ||
+    state === 'Completed' ||
+    item.status_group === 'rejected' ||
+    item.status_group === 'completed'
+  ) {
+    return '—';
+  }
+  const fromApi = item.action_by?.trim();
+  if (fromApi) return fromApi;
+  if (item.status_group === 'processing' || state === 'Processing') {
+    return processingAgentLabel(item.type);
+  }
+  return '—';
+}
+
 /** Worker/agent label for dashboard "Action by" when state is Processing. */
 export function processingAgentLabel(caseType: string): string {
   if (caseType.startsWith('treasury_')) return 'Treasury Agent';

@@ -6,9 +6,9 @@
   import { onMount } from 'svelte';
   import { fetchDashboard, listCases, type CaseDashboard, type CaseItem } from '$lib/api/cases';
   import {
+    caseActionByLabel,
     caseStateColumnLabel,
     isExcludedFromRecentCases,
-    processingAgentLabel,
     submittedByDisplay,
   } from '$lib/case-labels';
   import { formatCount } from '$lib/format';
@@ -41,16 +41,6 @@
     return new Date(ts).toLocaleString();
   }
 
-  function formatActionBy(c: CaseItem) {
-    const state = c.status_group_label ?? '';
-    if (state === 'Rejected' || state === 'Completed') return '—';
-    const fromApi = c.action_by?.trim();
-    if (fromApi) return fromApi;
-    if (state === 'Processing' || c.status_group === 'processing') {
-      return processingAgentLabel(c.type);
-    }
-    return '—';
-  }
 </script>
 
 <h1>Operations dashboard</h1>
@@ -120,7 +110,7 @@
               <td>{submittedByDisplay(c)}</td>
               <td>{c.type}</td>
               <td>{caseStateColumnLabel(c)}</td>
-              <td>{formatActionBy(c)}</td>
+              <td>{caseActionByLabel(c)}</td>
               <td>{formatActivity(c)}</td>
             </tr>
           {/each}
@@ -150,7 +140,7 @@
                 <td>{submittedByDisplay(c)}</td>
                 <td>{c.type}</td>
                 <td>{caseStateColumnLabel(c)}</td>
-                <td>{formatActionBy(c)}</td>
+                <td>{caseActionByLabel(c)}</td>
               </tr>
             {/each}
           </tbody>

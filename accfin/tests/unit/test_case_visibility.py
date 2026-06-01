@@ -165,6 +165,11 @@ def test_action_by_processing_is_blank():
     assert case_action_by(case) is None
 
 
+def test_action_by_pending_confirmation_is_acc():
+    case = _case(status="pending_confirmation", workflow_metadata={"current_stage": "parsing"})
+    assert case_action_by(case) == "ACC"
+
+
 def test_action_by_manual_review_is_acc():
     case = _case(status="manual_review", workflow_metadata={})
     assert case_action_by(case) == "ACC"
