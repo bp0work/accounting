@@ -306,6 +306,7 @@
   $: canRetryTransientHermes = item ? isTransientHermesCase(item) : false;
   $: showStandardRetry =
     item &&
+    item.status !== 'pending_confirmation' &&
     (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes);
 
   $: caseId = $page.params.id ?? '';
