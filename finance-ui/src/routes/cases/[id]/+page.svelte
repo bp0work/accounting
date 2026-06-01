@@ -306,8 +306,7 @@
   $: canRetryTransientHermes = item ? isTransientHermesCase(item) : false;
   $: showStandardRetry =
     item &&
-    (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes) &&
-    (!canRetryWithHints || canRetryTransientHermes);
+    (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes);
 
   $: caseId = $page.params.id ?? '';
 
@@ -338,7 +337,6 @@
     }
     return reviewSnapshot.missing;
   })();
-  $: canRetryWithHints = showTeachPanel && savedHintFields.size > 0;
   $: canReExtractWithHints =
     item?.status === 'pending_confirmation' &&
     savedHintFields.size > 0 &&
@@ -1497,19 +1495,6 @@
             >
               {reExtracting ? 'Re-extracting…' : 'Re-extract with hints'}
             </button>
-          {/if}
-          {#if canRetryWithHints}
-            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-              {retrying ? 'Requeuing…' : 'Retry with hints'}
-            </button>
-          {:else if canRetryTransientHermes}
-            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-              {retrying ? 'Requeuing…' : 'Retry processing'}
-            </button>
-            <p class="hint">
-              Hermes timed out or was temporarily unavailable. Retry requeues this case after Ollama
-              is healthy.
-            </p>
           {/if}
         {/if}
       </section>
