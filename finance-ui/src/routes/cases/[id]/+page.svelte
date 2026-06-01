@@ -613,14 +613,30 @@
     }
   }
 
+  async function requeueCaseForProcessing(): Promise<string> {
+    if (!item) throw new Error('No case loaded');
+    if (shouldRetryViaEscalationRespond(item)) {
+      const result = await respondToCaseEscalation(caseId, {
+        action: 'retry',
+        comment: escalationComment.trim() || null,
+      });
+      return (
+        result.message ??
+        'Retry recorded. Case requeued for processing.'
+      );
+    }
+    const result = await retryCase(caseId);
+    return `Requeued as ${result.status} (was ${result.previous_status}).`;
+  }
+
   async function handleRetry() {
     if (!item || retrying) return;
     retrying = true;
     retryMessage = '';
     error = '';
     try {
-      const result = await retryCase(caseId);
-      retryMessage = `Requeued as ${result.status} (was ${result.previous_status}).`;
+      retryMessage = await requeueCaseForProcessing();
+      escalationComment = '';
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Retry failed';
@@ -636,17 +652,8 @@
       manualActionMessage = '';
       error = '';
       try {
-        if (shouldRetryViaEscalationRespond(item)) {
-          const result = await respondToCaseEscalation(caseId, {
-            action: 'retry',
-            comment: escalationComment.trim() || null,
-          });
-          manualActionMessage = result.message ?? `${label} recorded.`;
-          escalationComment = '';
-        } else {
-          const result = await retryCase(caseId);
-          manualActionMessage = `Requeued as ${result.status} (was ${result.previous_status}).`;
-        }
+        manualActionMessage = await requeueCaseForProcessing();
+        escalationComment = '';
         await load();
       } catch (e) {
         error = e instanceof Error ? e.message : 'Retry failed';

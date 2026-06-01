@@ -69,8 +69,8 @@ export function hasPendingEscalation(caseItem: CaseItem): boolean {
   return Boolean(meta.escalation_pending && meta.escalation_id);
 }
 
-/** on_hold manager escalations — POST /cases/{id}/escalation-respond action retry, not /retry. */
-const ON_HOLD_ESCALATION_RETRY_REASONS = new Set([
+/** Manager escalation reason codes — retry via POST /cases/{id}/escalation-respond, not /retry. */
+const MANAGER_ESCALATION_RETRY_REASONS = new Set([
   'AP_CONTRACT_MISSING',
   'AP_VENDOR_INACTIVE',
   'AP_COA_NOT_FOUND',
@@ -92,12 +92,22 @@ const ON_HOLD_ESCALATION_RETRY_REASONS = new Set([
 
 export function shouldRetryViaEscalationRespond(caseItem: CaseItem): boolean {
   if (hasPendingEscalation(caseItem)) return true;
-  if (caseItem.status !== 'on_hold') return false;
+  const status = caseItem.status;
+  if (status !== 'manual_review' && status !== 'on_hold') return false;
+  const meta = caseItem.workflow_metadata ?? {};
+  const escalationId = meta.escalation_id;
+  if (
+    status === 'on_hold' &&
+    escalationId != null &&
+    String(escalationId).trim() !== ''
+  ) {
+    return true;
+  }
   const code = caseReasonCode(caseItem);
   if (code === 'HERMES_TIMEOUT' || code === 'HERMES_UNAVAILABLE') return false;
   if (code === 'PERIOD_CLOSED') return false;
   return (
-    ON_HOLD_ESCALATION_RETRY_REASONS.has(code) || code.startsWith('BINDING_AUTHORITY_')
+    MANAGER_ESCALATION_RETRY_REASONS.has(code) || code.startsWith('BINDING_AUTHORITY_')
   );
 }
 
