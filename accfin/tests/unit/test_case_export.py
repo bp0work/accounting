@@ -5,7 +5,12 @@ from decimal import Decimal
 from uuid import uuid4
 
 from app.models.case import Case
-from app.services.case_export import CSV_HEADERS, _case_export_row, _document_number
+from app.services.case_export import (
+    CSV_HEADERS,
+    _case_export_row,
+    _document_number,
+    _format_export_amount,
+)
 
 
 def test_export_headers() -> None:
@@ -41,8 +46,13 @@ def test_case_export_row_formats_date_and_extracted_fields() -> None:
     assert row[3] == "expense_claim"
     assert row[4] == "INV-42"
     assert row[5] == "SGD"
-    assert row[6] == "115.00"
+    assert row[6] == "115.00"  # Document Amount — always 2 dp
     assert row[7] == "posted"
+
+
+def test_format_export_amount_two_decimals() -> None:
+    assert _format_export_amount(Decimal("99.5")) == "99.50"
+    assert _format_export_amount(None) == ""
 
 
 def test_document_number_missing_metadata() -> None:

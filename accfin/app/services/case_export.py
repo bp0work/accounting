@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,12 @@ def _format_date_submitted(created_at: datetime | None) -> str:
     if created_at is None:
         return ""
     return created_at.strftime("%d/%m/%Y")
+
+
+def _format_export_amount(value: Decimal | None) -> str:
+    if value is None:
+        return ""
+    return f"{Decimal(str(value)):.2f}"
 
 
 def _document_number(case: Case) -> str:
@@ -62,6 +69,6 @@ def _case_export_row(case: Case) -> list[Any]:
         case.type,
         _document_number(case),
         case.amount_currency or "",
-        str(case.amount_value) if case.amount_value is not None else "",
+        _format_export_amount(case.amount_value),
         case.status,
     ]

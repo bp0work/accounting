@@ -21,6 +21,7 @@
     counterpartyTypeLabel,
     isSupplierType,
   } from '$lib/counterparty-labels';
+  import { formatCurrencyAmount } from '$lib/format';
 
   type Tab = 'subaccounts' | 'terms' | 'tax';
 
@@ -201,10 +202,8 @@
 
   function formatCredit(row: Record<string, unknown>) {
     const amt = row.credit_limit_amount;
-    if (amt == null || amt === '') return '—';
     const cur = String(row.credit_limit_currency ?? 'SGD');
-    const n = Number(amt);
-    return Number.isFinite(n) ? `${n.toLocaleString()} ${cur}` : `${amt} ${cur}`;
+    return formatCurrencyAmount(cur, amt as string | number | null);
   }
 
   async function addSubaccount() {
