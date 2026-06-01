@@ -48,6 +48,11 @@
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { formatAmount, formatCount, formatExtractedFieldValue } from '$lib/format';
   import {
+    hasExtractedGlAccountId,
+    normalizeExtractedFields,
+    trimExtractedOptional,
+  } from '$lib/extracted-fields-display';
+  import {
     isGstJournalLine,
     journalLineCoaOptionsForLine,
     journalLineCoaType,
@@ -288,6 +293,7 @@
 
   $: vendorName = item ? resolveVendorName(item) : '';
   $: reviewSnapshot = item ? manualReviewDetails(item) : { missing: [], confidence: null, extracted: {} };
+  $: coaLabelResolutionKey = `${expenseCoaAccounts.length}:${reviewCoaAccounts.length}:${liabilityCoaAccounts.length}`;
   $: showTeachPanel =
     (item?.status === 'manual_review' || item?.status === 'on_hold') &&
     reviewSnapshot.missing.length > 0 &&
@@ -461,24 +467,31 @@
     teachFieldsKey = '';
     try {
       [item, timeline] = await Promise.all([fetchCase(caseId), fetchCaseTimeline(caseId)]);
+      const extractedForCoa = item
+        ? normalizeExtractedFields(item.workflow_metadata?.extracted_fields)
+        : {};
+      const manualReviewNeedsCoa =
+        item != null &&
+        (item.status === 'manual_review' || item.status === 'on_hold') &&
+        hasExtractedGlAccountId(extractedForCoa);
+
       if (item?.status === 'pending_confirmation' && item.type === 'expense_claim') {
         await loadExpenseCoaAccounts();
+        reviewCoaAccounts = [];
       } else if (item && journalApprovalStatuses.has(item.status)) {
         await loadJournalCoaAccounts();
+        reviewCoaAccounts = [];
+      } else if (manualReviewNeedsCoa) {
+        await loadReviewCoaAccounts();
+        if (item.type === 'expense_claim') {
+          await loadExpenseCoaAccounts();
+        } else {
+          expenseCoaAccounts = [];
+          liabilityCoaAccounts = [];
+        }
       } else {
         expenseCoaAccounts = [];
         liabilityCoaAccounts = [];
-      }
-      if (
-        item &&
-        (item.status === 'manual_review' || item.status === 'on_hold') &&
-        item.workflow_metadata?.extracted_fields &&
-        typeof item.workflow_metadata.extracted_fields === 'object' &&
-        !Array.isArray(item.workflow_metadata.extracted_fields) &&
-        'gl_account_id' in (item.workflow_metadata.extracted_fields as Record<string, unknown>)
-      ) {
-        await loadReviewCoaAccounts();
-      } else {
         reviewCoaAccounts = [];
       }
     } catch (e) {
@@ -753,10 +766,14 @@
   }
 
   function resolveCoaAccountLabel(accountId: string): string {
-    const acct =
-      expenseCoaAccounts.find((a) => String(a.id) === accountId) ??
-      reviewCoaAccounts.find((a) => String(a.id) === accountId);
-    return acct ? `${acct.account_code} — ${acct.account_name}` : accountId;
+    const id = trimExtractedOptional(accountId) ?? accountId;
+    const acct = findCoaAccount(
+      id,
+      expenseCoaAccounts,
+      reviewCoaAccounts,
+      liabilityCoaAccounts,
+    );
+    return acct ? `${acct.account_code} — ${acct.account_name}` : id;
   }
 
   function getExtractedFieldValue(
@@ -807,15 +824,22 @@
       if (currency === 'SGD') return false;
       return trimOptional(value) != null;
     }
-    if (key === 'exchange_rate' || key === 'tax_amount' || key === 'gst_amount') {
+    if (
+      key === 'exchange_rate' ||
+      key === 'tax_amount' ||
+      key === 'gst_amount' ||
+      key === 'gl_account_id'
+    ) {
       return trimOptional(value) != null;
     }
     return true;
   }
 
   function formatExtractedReviewValue(key: string, value: string | null): string {
-    if (key === 'gl_account_id' && value) {
-      return resolveCoaAccountLabel(value);
+    if (key === 'gl_account_id') {
+      const accountId = trimOptional(value);
+      if (!accountId) return '—';
+      return resolveCoaAccountLabel(accountId);
     }
     if (key === 'sender_validated') {
       const normalized = String(value ?? 'false').trim().toLowerCase();
@@ -1040,12 +1064,14 @@
           {/if}
           {#if reviewExtractedRows.length > 0}
             <p><strong>Extracted:</strong></p>
-            <dl class="extracted">
-              {#each reviewExtractedRows as row (row.key)}
-                <dt>{extractedFieldLabel(row.key)}</dt>
-                <dd>{formatExtractedReviewValue(row.key, row.value)}</dd>
-              {/each}
-            </dl>
+            {#key coaLabelResolutionKey}
+              <dl class="extracted">
+                {#each reviewExtractedRows as row (row.key)}
+                  <dt>{extractedFieldLabel(row.key)}</dt>
+                  <dd>{formatExtractedReviewValue(row.key, row.value)}</dd>
+                {/each}
+              </dl>
+            {/key}
           {/if}
         </section>
       {/if}
@@ -1139,12 +1165,14 @@
       <section class="confirm-box">
         <h2>Confirm Parsing</h2>
         {#if parsingExtractedRows.length > 0}
-          <dl class="extracted">
-            {#each parsingExtractedRows as row (row.key)}
-              <dt>{extractedFieldLabel(row.key)}</dt>
-              <dd>{formatExtractedReviewValue(row.key, row.value)}</dd>
-            {/each}
-          </dl>
+          {#key coaLabelResolutionKey}
+            <dl class="extracted">
+              {#each parsingExtractedRows as row (row.key)}
+                <dt>{extractedFieldLabel(row.key)}</dt>
+                <dd>{formatExtractedReviewValue(row.key, row.value)}</dd>
+              {/each}
+            </dl>
+          {/key}
         {/if}
         {#if canConfirmParsing}
           <p class="hint">
