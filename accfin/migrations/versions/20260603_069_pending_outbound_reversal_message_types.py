@@ -1,19 +1,19 @@
-"""pending_outbound reversal message_type check — `0.15.03a-reversal-message-type`."""
+"""Ensure reversal_approved and reversal_rejected in outbound message_type check.
+
+Idempotent re-apply of migration 068 constraint — safe when 068 already ran without
+the full reversal type list. Revision 068 file is the canonical definition; this
+revision guarantees deployed databases pick up reversal_approved / reversal_rejected.
+"""
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260603_068"
-down_revision = "20260602_067"
+revision = "20260603_069"
+down_revision = "20260603_068"
 branch_labels = None
 depends_on = None
 
-# Existing production values + approval/escalation mail types + expense reversal.
-# Reversal mail (all required in CHECK — app and legacy rows):
-#   reversal_approval  — CFO queue on raise
-#   reversal_approved  — ACC notify on CFO approve
-#   reversal_rejected  — ACC notify on CFO reject
-#   reversal_notification — alias retained for compatibility
+# Keep in sync with 20260603_068_pending_outbound_reversal_message_type.py
 _MESSAGE_TYPES = (
     "clarification",
     "acknowledgement",
@@ -50,7 +50,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Restore original migration 046 constraint (reversal types will fail if still in use).
+    # Match migration 068 downgrade.
     conn = op.get_bind()
     conn.execute(
         sa.text(

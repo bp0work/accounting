@@ -463,7 +463,7 @@ async def execute_approve_reversal(
                 f"Reversal {reversal.case_number} for original case {original.case_number} "
                 "has been approved and posted to the GL."
             ),
-            message_type="reversal_notification",
+            message_type="reversal_approved",
         )
 
         await session.commit()
@@ -549,7 +549,7 @@ async def execute_reject_reversal(
                 f"Reversal {reversal.case_number} for original case {orig_no} was rejected.\n\n"
                 f"Reason: {reason}"
             ),
-            message_type="reversal_notification",
+            message_type="reversal_rejected",
         )
 
         await session.commit()
