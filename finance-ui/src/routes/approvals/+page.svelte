@@ -35,7 +35,7 @@
   $: queueLabel =
     role === 'cfo' || role === 'finance_director'
       ? 'Tier 3 and escalated Tier 2'
-      : role === 'accounts_clerk' || role === 'finance_officer' || role === 'finance_manager'
+      : role === 'accounts_manager' || role === 'finance_officer' || role === 'finance_manager'
         ? 'Tier 2 pending'
         : 'Pending approvals';
 

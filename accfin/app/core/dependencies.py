@@ -62,7 +62,7 @@ def require_finance_setup_access():
     return _check
 
 
-MANUAL_REVIEW_ESCALATION_ROLES = frozenset({"accounts_clerk", "finance_manager", "cfo"})
+MANUAL_REVIEW_ESCALATION_ROLES = frozenset({"accounts_manager", "finance_manager", "cfo"})
 
 
 def require_manual_review_escalation():
@@ -73,7 +73,7 @@ def require_manual_review_escalation():
             raise AppHTTPException(
                 status.HTTP_403_FORBIDDEN,
                 "INSUFFICIENT_PERMISSION",
-                "Accounts Clerk, Finance Manager, or CFO access is required.",
+                "Accounts Manager, Finance Manager, or CFO access is required.",
             )
         return user
 

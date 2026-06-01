@@ -44,7 +44,7 @@ if not os.getenv("FINANCE_HASH_SECRET") or os.getenv("FINANCE_HASH_SECRET", "").
 get_settings.cache_clear()
 
 ROLE_FINANCE_OFFICER = uuid.UUID("00000000-0000-0000-0000-000000000004")
-ROLE_ACCOUNTS_CLERK = uuid.UUID("00000000-0000-0000-0000-000000000005")
+ROLE_ACCOUNTS_MANAGER = uuid.UUID("00000000-0000-0000-0000-000000000005")
 ROLE_AUDITOR = uuid.UUID("00000000-0000-0000-0000-000000000006")
 
 TEST_PASSWORD = "CorrectHorseBattery1!"
@@ -126,15 +126,15 @@ async def test_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
-async def clerk_user(db_session: AsyncSession) -> User:
+async def accounts_manager_user(db_session: AsyncSession) -> User:
     suffix = uuid.uuid4().hex[:8]
     user = User(
         id=uuid.uuid4(),
-        username=f"clerk_{suffix}",
-        display_name="Clerk User",
-        email=f"clerk_{suffix}@example.com",
+        username=f"acc_mgr_{suffix}",
+        display_name="Accounts Manager User",
+        email=f"acc_mgr_{suffix}@example.com",
         password_hash=hash_password(TEST_PASSWORD),
-        role_id=ROLE_ACCOUNTS_CLERK,
+        role_id=ROLE_ACCOUNTS_MANAGER,
         status="active",
         two_factor_enabled=False,
     )

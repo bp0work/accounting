@@ -103,14 +103,14 @@ async def test_2fa_setup_verify_disable(async_client: AsyncClient, auth_headers:
 
 @pytest.mark.asyncio
 async def test_approvals_approve_guard(
-    async_client: AsyncClient, auth_headers: dict, clerk_user: User
+    async_client: AsyncClient, auth_headers: dict, accounts_manager_user: User
 ):
     ok = await async_client.get("/api/auth/session/me", headers=auth_headers)
     assert ok.status_code == 200
 
     clerk_login = await async_client.post(
         "/api/auth/login",
-        json={"username": clerk_user.username, "password": TEST_PASSWORD},
+        json={"username": accounts_manager_user.username, "password": TEST_PASSWORD},
     )
     clerk_token = clerk_login.json()["access_token"]
     denied = await async_client.get(

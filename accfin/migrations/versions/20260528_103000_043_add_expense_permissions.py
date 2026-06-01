@@ -11,7 +11,7 @@ depends_on = None
 ROLE_CFO = "00000000-0000-0000-0000-000000000002"
 ROLE_FINANCE_MANAGER = "00000000-0000-0000-0000-000000000003"
 ROLE_FINANCE_OFFICER = "00000000-0000-0000-0000-000000000004"
-ROLE_ACCOUNTS_CLERK = "00000000-0000-0000-0000-000000000005"
+ROLE_ACCOUNTS_MANAGER = "00000000-0000-0000-0000-000000000005"
 ROLE_AUDITOR = "00000000-0000-0000-0000-000000000006"
 ROLE_FINANCIAL_ANALYST = "00000000-0000-0000-0000-000000000009"
 
@@ -30,7 +30,7 @@ def upgrade() -> None:
         (ROLE_CFO, ("expenses:read", "expenses:write", "expenses:approve")),
         (ROLE_FINANCE_MANAGER, ("expenses:read", "expenses:write", "expenses:approve")),
         (ROLE_FINANCE_OFFICER, ("expenses:read", "expenses:write", "expenses:approve")),
-        (ROLE_ACCOUNTS_CLERK, ("expenses:read", "expenses:write")),
+        (ROLE_ACCOUNTS_MANAGER, ("expenses:read", "expenses:write")),
         (ROLE_AUDITOR, ("expenses:read",)),
         (ROLE_FINANCIAL_ANALYST, ("expenses:read",)),
     ]

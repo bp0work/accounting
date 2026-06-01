@@ -45,9 +45,9 @@ async def test_upsert_accounts_manager_by_role(
     client_admin_headers: dict[str, str],
     db_session,
 ) -> None:
-    """PUT /admin/users/by-role/accounts_clerk creates contact when no active user."""
+    """PUT /admin/users/by-role/accounts_manager creates contact when no active user."""
     role_id = (
-        await db_session.execute(select(Role.id).where(Role.name == "accounts_clerk"))
+        await db_session.execute(select(Role.id).where(Role.name == "accounts_manager"))
     ).scalar_one()
     existing = (
         await db_session.execute(
@@ -59,7 +59,7 @@ async def test_upsert_accounts_manager_by_role(
     await db_session.commit()
 
     resp = await async_client.put(
-        "/api/users/by-role/accounts_clerk",
+        "/api/users/by-role/accounts_manager",
         headers=client_admin_headers,
         json={
             "display_name": "mmlogistix Manager Accounts",
@@ -68,7 +68,7 @@ async def test_upsert_accounts_manager_by_role(
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["role_name"] == "accounts_clerk"
+    assert data["role_name"] == "accounts_manager"
     assert data["email"] == "acc.mmlogistix@bp0.work"
     assert data["display_name"] == "mmlogistix Manager Accounts"
     assert data["configured"] is True
@@ -76,6 +76,6 @@ async def test_upsert_accounts_manager_by_role(
 
     listed = await async_client.get("/api/users", headers=client_admin_headers)
     assert listed.status_code == 200
-    acc_row = next(r for r in listed.json() if r["role_name"] == "accounts_clerk")
+    acc_row = next(r for r in listed.json() if r["role_name"] == "accounts_manager")
     assert acc_row["id"] == data["id"]
     assert acc_row["email"] == "acc.mmlogistix@bp0.work"

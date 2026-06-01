@@ -11,7 +11,7 @@ from tests.conftest import TEST_PASSWORD
 @pytest.mark.integration
 async def test_list_coa_accounts_filters_expense_type(
     async_client: AsyncClient,
-    clerk_user,
+    accounts_manager_user,
     db_session: AsyncSession,
 ):
     db_session.add(
@@ -33,7 +33,7 @@ async def test_list_coa_accounts_filters_expense_type(
 
     login = await async_client.post(
         "/api/auth/login",
-        json={"username": clerk_user.username, "password": TEST_PASSWORD},
+        json={"username": accounts_manager_user.username, "password": TEST_PASSWORD},
     )
     token = login.json()["access_token"]
     response = await async_client.get(

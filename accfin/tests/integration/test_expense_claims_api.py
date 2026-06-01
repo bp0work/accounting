@@ -61,14 +61,14 @@ async def test_submit_expense_claim_requires_permission(async_client: AsyncClien
 @pytest.mark.integration
 async def test_submit_and_list_expense_claim(
     async_client: AsyncClient,
-    clerk_user,
+    accounts_manager_user,
     db_session: AsyncSession,
 ):
-    receipt_id = await _create_receipt_attachment(db_session, uploaded_by=clerk_user.id)
+    receipt_id = await _create_receipt_attachment(db_session, uploaded_by=accounts_manager_user.id)
 
     login = await async_client.post(
         "/api/auth/login",
-        json={"username": clerk_user.username, "password": TEST_PASSWORD},
+        json={"username": accounts_manager_user.username, "password": TEST_PASSWORD},
     )
     assert login.status_code == 200
     token = login.json()["access_token"]

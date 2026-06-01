@@ -15,7 +15,7 @@ ROLE_PROVISION: dict[str, tuple[str, str]] = {
     "general_manager": ("ceo.mmlogistix", "00000000-0000-0000-0000-000000000104"),
     "cfo": ("cfo.mmlogistix", "00000000-0000-0000-0000-000000000102"),
     "finance_manager": ("finmanager.mmlogistix", "00000000-0000-0000-0000-000000000103"),
-    "accounts_clerk": ("acc.mmlogistix", "00000000-0000-0000-0000-000000000105"),
+    "accounts_manager": ("acc.mmlogistix", "00000000-0000-0000-0000-000000000105"),
 }
 
 REGULATORY_CATALOG: list[tuple[str, str, str]] = [
@@ -30,7 +30,7 @@ ROLE_ORDER: list[tuple[str, str]] = [
     ("general_manager", "CEO / Managing Director"),
     ("cfo", "CFO / Finance Director"),
     ("finance_manager", "Finance Manager (fin)"),
-    ("accounts_clerk", "Accounts Manager (acc)"),
+    ("accounts_manager", "Accounts Manager (acc)"),
 ]
 
 ROLE_ADMIN_NAMES = tuple(r[0] for r in ROLE_ORDER)

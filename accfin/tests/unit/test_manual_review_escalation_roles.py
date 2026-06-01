@@ -5,5 +5,5 @@ from app.core.dependencies import MANUAL_REVIEW_ESCALATION_ROLES
 
 def test_manual_review_escalation_roles() -> None:
     assert MANUAL_REVIEW_ESCALATION_ROLES == frozenset(
-        {"accounts_clerk", "finance_manager", "cfo"}
+        {"accounts_manager", "finance_manager", "cfo"}
     )

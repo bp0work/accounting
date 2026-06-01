@@ -55,7 +55,7 @@ class ApprovalRepository:
             )
         if binding_queue == "acc" or (
             binding_queue is None
-            and role_name in ("accounts_clerk", "finance_officer", "finance_manager")
+            and role_name in ("accounts_manager", "finance_officer", "finance_manager")
         ):
             q = q.where(
                 Approval.status == "pending",
