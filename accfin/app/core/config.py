@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.15.03-expense-reversal"
+        return "0.15.03a-reversal-message-type"
 
     @property
     def edge_public_base_url(self) -> str:
