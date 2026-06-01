@@ -187,6 +187,18 @@ export function rejectParsing(caseId: string, reason: string) {
   );
 }
 
+export type ReExtractResult = {
+  case_id: string;
+  case_number: string;
+  status: string;
+  extracted_fields: Record<string, string | null>;
+  extraction_confidence?: number | null;
+};
+
+export function reExtractCase(caseId: string) {
+  return apiFetch<ReExtractResult>(`/cases/${caseId}/re-extract`, { method: 'POST' });
+}
+
 export function overrideGlPeriodPost(
   periodId: string,
   caseId: string,

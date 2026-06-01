@@ -44,6 +44,8 @@ from app.schemas.parsing_confirmation import (
     RejectParsingRequest,
     RejectParsingResponse,
 )
+from app.schemas.case_re_extract import ReExtractResponse
+from app.services.case_re_extract import execute_case_re_extract
 from app.services.parsing_confirmation_service import (
     execute_confirm_parsing,
     execute_reject_parsing,
@@ -395,6 +397,15 @@ async def reject_parsing(
     user: TokenData = Depends(require_permission("cases:write")),
 ) -> RejectParsingResponse:
     return await execute_reject_parsing(case_id, user=user, body=body)
+
+
+@router.post("/cases/{case_id}/re-extract", response_model=ReExtractResponse)
+async def re_extract_case(
+    case_id: UUID,
+    user: TokenData = Depends(require_permission("cases:write")),
+) -> ReExtractResponse:
+    """Re-run Hermes extraction with vendor hints; updates extracted_fields only."""
+    return await execute_case_re_extract(case_id, user=user)
 
 
 @router.get("/cases/{case_id}/timeline")
