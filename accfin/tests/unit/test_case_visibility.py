@@ -130,6 +130,15 @@ def test_pending_confirmation_state_is_processing():
     case = _case(status="pending_confirmation", workflow_metadata={})
     assert case_status_group(case) == "processing"
     assert case_status_group_label(case) == "Processing"
+    assert case_status_label(case) == "Awaiting parsing confirmation"
+
+
+def test_on_hold_pending_escalation_status_label():
+    case = _case(
+        status="on_hold",
+        workflow_metadata={"escalation_pending": True, "escalation_id": "esc-1"},
+    )
+    assert case_status_label(case) == "On hold — action required"
 
 
 def test_pending_approval_state_is_awaiting_approval():

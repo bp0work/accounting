@@ -14,9 +14,13 @@
   import {
     canUseManualReviewActions,
     caseReasonCode,
-    showManualReviewPanel,
+    isManualReviewQueueCase,
   } from '$lib/ap-escalation-actions';
-  import { documentTypeLabel, clientVendorColumnValue } from '$lib/case-labels';
+  import {
+    caseStatusLabel,
+    clientVendorColumnValue,
+    documentTypeLabel,
+  } from '$lib/case-labels';
   import { sessionUser } from '$lib/stores/session';
 
   let tab: 'queue' | 'history' | 'cases' = 'queue';
@@ -37,11 +41,7 @@
   $: showManualReviewQueue = canUseManualReviewActions(role);
   $: manualReviewCases = showManualReviewQueue
     ? cases
-        .filter(
-          (c) =>
-            (c.status === 'manual_review' || c.status === 'on_hold') &&
-            showManualReviewPanel(c, role)
-        )
+        .filter((c) => isManualReviewQueueCase(c, role))
         .sort(
           (a, b) =>
             new Date(b.last_activity_at || b.created_at).getTime() -
@@ -173,8 +173,8 @@
         <span class="count-badge attention">{manualReviewCases.length}</span>
       </h2>
       <p class="subtitle">
-        Cases awaiting action in the case detail Action Required panel (resubmit, accept, reject, or
-        retry).
+        Cases on hold or in manual review with a pending manager escalation — use Take action to
+        approve, reject, or retry from the case detail panel.
       </p>
       {#if manualReviewCases.length === 0}
         <p class="empty-hint">No cases need manual review right now.</p>
@@ -197,7 +197,7 @@
                 <tr class:overdue={item.is_overdue}>
                   <td><a href={`/cases/${item.id}`}>{item.case_number}</a></td>
                   <td>{documentTypeLabel(item.type)}</td>
-                  <td>{item.status_label || item.status}</td>
+                  <td>{caseStatusLabel(item)}</td>
                   <td>{caseReasonCode(item).replaceAll('_', ' ') || '—'}</td>
                   <td>{clientVendorColumnValue(item)}</td>
                   <td>{formatActivity(item)}</td>
@@ -270,8 +270,8 @@
               <td class="indicator">{item.is_overdue ? '⚠' : '·'}</td>
               <td><a href={`/cases/${item.id}`}>{item.case_number}</a></td>
               <td>{documentTypeLabel(item.type)}</td>
-              <td>{item.status_group_label || '—'}</td>
-              <td>{item.status_label || item.status}</td>
+              <td>{caseStateColumnLabel(item)}</td>
+              <td>{caseStatusLabel(item)}</td>
               <td>{item.from_address || '—'}</td>
               <td>{clientVendorColumnValue(item)}</td>
               <td>{formatCaseAmount(item)}</td>

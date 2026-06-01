@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.66-coa-account-edit-save"
+        return "0.14.67-cases-approvals-display"
 
     @property
     def edge_public_base_url(self) -> str:

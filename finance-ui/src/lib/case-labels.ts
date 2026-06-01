@@ -1,3 +1,6 @@
+import { hasPendingEscalation } from '$lib/ap-escalation-actions';
+import type { CaseItem } from '$lib/api/cases';
+
 /** Human-readable labels for `case.type` values from the API. */
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   ap_invoice: 'AP Invoice',
@@ -26,6 +29,38 @@ const AR_CASE_TYPES = new Set([
 
 export function documentTypeLabel(caseType: string): string {
   return DOCUMENT_TYPE_LABELS[caseType] ?? caseType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Status column / case header — overrides API `status_label` for key workflow states. */
+export function caseStatusLabel(
+  item: Pick<CaseItem, 'status' | 'status_label' | 'workflow_metadata'>
+): string {
+  if (item.status === 'on_hold' && hasPendingEscalation(item)) {
+    return 'On hold — action required';
+  }
+  if (item.status === 'pending_confirmation') {
+    return 'Awaiting parsing confirmation';
+  }
+  if (item.status === 'manual_review') {
+    return 'Manual review';
+  }
+  const fromApi = item.status_label?.trim();
+  if (fromApi) return fromApi;
+  return item.status.replace(/_/g, ' ');
+}
+
+/** Dashboard / list “State” column — prefer workflow status label when defined. */
+export function caseStateColumnLabel(
+  item: Pick<CaseItem, 'status' | 'status_label' | 'status_group_label' | 'workflow_metadata'>
+): string {
+  if (
+    item.status === 'pending_confirmation' ||
+    item.status === 'manual_review' ||
+    (item.status === 'on_hold' && hasPendingEscalation(item))
+  ) {
+    return caseStatusLabel(item);
+  }
+  return item.status_group_label?.trim() || caseStatusLabel(item);
 }
 
 /** Client / Vendor column — AP shows extracted vendor; AR shows classified customer. */

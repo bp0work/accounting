@@ -6,6 +6,7 @@
   import { onMount } from 'svelte';
   import { fetchDashboard, listCases, type CaseDashboard, type CaseItem } from '$lib/api/cases';
   import {
+    caseStateColumnLabel,
     isExcludedFromRecentCases,
     processingAgentLabel,
     submittedByDisplay,
@@ -115,7 +116,7 @@
               <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
               <td>{submittedByDisplay(c)}</td>
               <td>{c.type}</td>
-              <td>{c.status_group_label || '—'}</td>
+              <td>{caseStateColumnLabel(c)}</td>
               <td>{formatActionBy(c)}</td>
               <td>{formatActivity(c)}</td>
             </tr>
@@ -145,7 +146,7 @@
                 <td><a href={`/cases/${c.id}`}>{c.case_number}</a></td>
                 <td>{submittedByDisplay(c)}</td>
                 <td>{c.type}</td>
-                <td>{c.status_group_label || '—'}</td>
+                <td>{caseStateColumnLabel(c)}</td>
                 <td>{formatActionBy(c)}</td>
               </tr>
             {/each}

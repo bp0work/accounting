@@ -33,7 +33,7 @@ _STATUS_DISPLAY_LABELS: dict[str, str] = {
     "classified": "Waiting for worker",
     "processing": "In progress",
     "validation": "Validating",
-    "pending_confirmation": "Confirm extracted fields",
+    "pending_confirmation": "Awaiting parsing confirmation",
     "pending_approval": "Awaiting approval",
     "approved": "Approved",
     "posted": "Posted to GL",
@@ -220,7 +220,7 @@ def case_status_label(case: Case) -> str:
     if status == "on_hold":
         meta = case.workflow_metadata or {}
         if meta.get("escalation_pending"):
-            return "On hold — awaiting escalation response"
+            return "On hold — action required"
         code = meta.get("reason_code") or meta.get("error_type")
         if code:
             return f"On hold ({code})"

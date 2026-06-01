@@ -1,6 +1,6 @@
 # AI Finance Operations Platform — Implementation Monorepo
 
-**Release version:** `0.14.66-coa-account-edit-save` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`). Finance UI: `0.14.60-exp-submitter-escalation-ui`. Client Admin: `0.14.66-coa-account-edit-save`.
+**Release version:** `0.14.67-cases-approvals-display` (see `accfin/app/core/config.py` → `Settings.version` and `/api/health`). Finance UI: `0.14.67-cases-approvals-display`. Client Admin: `0.14.66-coa-account-edit-save`.
 
 Runnable code for the bp0.work finance platform. **Application code** lives here; **release-synced specification excerpts** for the current deploy are under `platform_dox/` (canonical working copies may also exist as a sibling folder next to `application/` on the operator workstation).
 
