@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.95-tb-review-ux"
+        return "0.14.96-receipt-age-18months"
 
     @property
     def edge_public_base_url(self) -> str:
