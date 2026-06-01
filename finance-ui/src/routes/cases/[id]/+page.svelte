@@ -31,6 +31,12 @@
     saveVendorExtractionHint,
     type VendorExtractionHintCreate,
   } from '$lib/api/vendor-hints';
+  import {
+    vendorHintDateFormatInputLabel,
+    vendorHintExampleValueInputLabel,
+    vendorHintFieldLabelInputLabel,
+    vendorHintFieldLabelRequiredMessage,
+  } from '$lib/vendor-hint-labels';
   import { listCoaAccounts, type CoaAccountItem } from '$lib/api/coa';
   import {
     caseStatusLabel,
@@ -489,7 +495,7 @@
     if (!item || !vendorName || row.saving) return;
     const field_label = row.field_label.trim();
     if (!field_label) {
-      teachMessage = 'Field label on document is required.';
+      teachMessage = vendorHintFieldLabelRequiredMessage(row.field_name);
       return;
     }
     setTeachRowSaving(row.field_name, true);
@@ -1066,7 +1072,7 @@
               <div class="teach-field">
                 <h3>{row.field_name.replaceAll('_', ' ')}</h3>
                 <label>
-                  Field label on document
+                  {vendorHintFieldLabelInputLabel(row.field_name)}
                   <input
                     type="text"
                     bind:value={row.field_label}
@@ -1074,7 +1080,7 @@
                   />
                 </label>
                 <label>
-                  Example value
+                  {vendorHintExampleValueInputLabel(row.field_name)}
                   <input
                     type="text"
                     bind:value={row.example_value}
@@ -1083,7 +1089,7 @@
                 </label>
                 {#if DATE_FIELD_NAMES.has(row.field_name)}
                   <label>
-                    Date format
+                    {vendorHintDateFormatInputLabel(row.field_name)}
                     <input
                       type="text"
                       bind:value={row.date_format}
