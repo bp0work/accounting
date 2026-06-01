@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.15.04-role-permissions-migration"
+        return "0.15.05-reversal-cleanup"
 
     @property
     def edge_public_base_url(self) -> str:
