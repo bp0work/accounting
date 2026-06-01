@@ -49,6 +49,8 @@ class ApprovalDetailResponse(ApprovalListItem):
 class ApproveRequest(BaseModel):
     note: str | None = None
     journal_entry_id: UUID | None = None
+    debit_account_id: UUID | None = None
+    credit_account_id: UUID | None = None
 
 
 class RejectRequest(BaseModel):

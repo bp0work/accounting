@@ -8,9 +8,10 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AppHTTPException
-from app.models.ledger import JournalEntry
+from app.models.ledger import CoaAccount, JournalEntry
 from app.models.policy import Approval
 from app.repositories.approval import ApprovalRepository
 from app.repositories.case import CaseRepository
@@ -85,6 +86,8 @@ class ApprovalService:
         *,
         note: str | None = None,
         journal_entry_id: UUID | None = None,
+        debit_account_id: UUID | None = None,
+        credit_account_id: UUID | None = None,
     ) -> Approval:
         approval, case = await self._load_approval_case(approval_id)
         self._ensure_can_act(approval, case, user)
@@ -113,6 +116,11 @@ class ApprovalService:
             if journal_entry_id:
                 approval.journal_entry_id = journal_entry_id
 
+            await self._apply_draft_journal_account_overrides(
+                case.id,
+                debit_account_id=debit_account_id,
+                credit_account_id=credit_account_id,
+            )
             await self._cases_service.transition_case(
                 case.id, "approved", user=user, context={"user": user, "policy_pass": True}
             )
@@ -138,9 +146,84 @@ class ApprovalService:
             user_id=user.user_id,
             before_state={"status": "pending"},
             after_state={"status": "approved"},
-            metadata={"note": note, "journal_entry_id": str(journal_entry_id) if journal_entry_id else None},
+            metadata={
+                "note": note,
+                "journal_entry_id": str(journal_entry_id) if journal_entry_id else None,
+                "debit_account_id": str(debit_account_id) if debit_account_id else None,
+                "credit_account_id": str(credit_account_id) if credit_account_id else None,
+            },
         )
         return approval
+
+    async def _apply_draft_journal_account_overrides(
+        self,
+        case_id: UUID,
+        *,
+        debit_account_id: UUID | None,
+        credit_account_id: UUID | None,
+    ) -> None:
+        if debit_account_id is None and credit_account_id is None:
+            return
+        result = await self._session.execute(
+            select(JournalEntry)
+            .where(JournalEntry.case_id == case_id, JournalEntry.status == "draft")
+            .order_by(JournalEntry.created_at.desc())
+            .limit(1)
+            .options(selectinload(JournalEntry.lines))
+        )
+        entry = result.scalar_one_or_none()
+        if entry is None or not entry.lines:
+            return
+
+        account_ids: set[UUID] = set()
+        if debit_account_id:
+            account_ids.add(debit_account_id)
+        if credit_account_id:
+            account_ids.add(credit_account_id)
+        if account_ids:
+            rows = await self._session.execute(
+                select(CoaAccount).where(CoaAccount.id.in_(account_ids))
+            )
+            found = {row.id for row in rows.scalars().all()}
+            if debit_account_id and debit_account_id not in found:
+                raise AppHTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "INVALID_DEBIT_ACCOUNT",
+                    "Debit account not found",
+                )
+            if credit_account_id and credit_account_id not in found:
+                raise AppHTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "INVALID_CREDIT_ACCOUNT",
+                    "Credit account not found",
+                )
+
+        lines = sorted(entry.lines, key=lambda ln: ln.line_number)
+        if debit_account_id:
+            expense_line = next(
+                (ln for ln in lines if ln.line_number == 1 and ln.debit > 0),
+                None,
+            )
+            if expense_line is None:
+                raise AppHTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "JOURNAL_LINE_NOT_FOUND",
+                    "Expense debit line (line 1) not found",
+                )
+            expense_line.account_id = debit_account_id
+
+        if credit_account_id:
+            credit_lines = [ln for ln in lines if ln.credit > 0]
+            if not credit_lines:
+                raise AppHTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "JOURNAL_LINE_NOT_FOUND",
+                    "Payable credit line not found",
+                )
+            payable_line = max(credit_lines, key=lambda ln: ln.line_number)
+            payable_line.account_id = credit_account_id
+
+        await self._session.flush()
 
     async def reject(
         self,

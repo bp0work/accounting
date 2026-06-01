@@ -113,7 +113,12 @@ async def approve_approval(
 ) -> ApprovalActionResponse:
     service = ApprovalService(session)
     approval = await service.approve(
-        approval_id, user, note=body.note, journal_entry_id=body.journal_entry_id
+        approval_id,
+        user,
+        note=body.note,
+        journal_entry_id=body.journal_entry_id,
+        debit_account_id=body.debit_account_id,
+        credit_account_id=body.credit_account_id,
     )
     await session.commit()
     return ApprovalActionResponse(
