@@ -59,6 +59,11 @@
     </label>
     <button type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
   </form>
+  <p class="portal-link">
+    <a href="https://finance.mmlogistix.bp0.work" target="_blank" rel="noopener noreferrer">
+      Finance portal → finance.mmlogistix.bp0.work
+    </a>
+  </p>
 </div>
 
 <style>
@@ -111,5 +116,21 @@
     color: #64748b;
     display: block;
     margin-top: 0.25rem;
+  }
+
+  .portal-link {
+    margin: 1rem 0 0;
+    text-align: center;
+    font-size: 0.875rem;
+  }
+
+  .portal-link a {
+    color: #64748b;
+    text-decoration: none;
+  }
+
+  .portal-link a:hover {
+    color: #475569;
+    text-decoration: underline;
   }
 </style>

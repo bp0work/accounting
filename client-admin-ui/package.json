@@ -1,6 +1,6 @@
 {
   "name": "client-admin-ui",
-  "version": "0.14.66-coa-account-edit-save",
+  "version": "0.14.69-login-portal-links",
   "private": true,
   "type": "module",
   "scripts": {
