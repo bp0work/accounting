@@ -66,7 +66,42 @@ export function caseReasonCode(caseItem: CaseItem): string {
 
 export function hasPendingEscalation(caseItem: CaseItem): boolean {
   const meta = caseItem.workflow_metadata ?? {};
-  return Boolean(meta.escalation_pending && meta.escalation_id);
+  const escalationId = meta.escalation_id;
+  if (escalationId == null || String(escalationId).trim() === '') return false;
+  if (meta.escalation_pending === false) return false;
+  return true;
+}
+
+/** on_hold manager escalations — POST /cases/{id}/escalation-respond action retry, not /retry. */
+const ON_HOLD_ESCALATION_RETRY_REASONS = new Set([
+  'AP_CONTRACT_MISSING',
+  'AP_VENDOR_INACTIVE',
+  'AP_COA_NOT_FOUND',
+  'AP_PARSING_INCOMPLETE',
+  'AP_VENDOR_NOT_FOUND',
+  'AP_PAYMENT_TERMS_MISMATCH',
+  'AP_SENDER_NOT_VALIDATED',
+  'AP_CURRENCY_CONVERSION_REQUIRED',
+  'AP_DUPLICATE_FOUND',
+  'EXP_SUBMITTER_NOT_FOUND',
+  'EXP_SUBMITTER_INACTIVE',
+  'EXP_POLICY_EXCEEDED',
+  'EXP_RECEIPT_INVALID',
+  'EXP_CURRENCY_CONVERSION_REQUIRED',
+  'EXP_COA_NOT_FOUND',
+  'EXP_PARSING_INCOMPLETE',
+  'EXP_DUPLICATE',
+]);
+
+export function shouldRetryViaEscalationRespond(caseItem: CaseItem): boolean {
+  if (hasPendingEscalation(caseItem)) return true;
+  if (caseItem.status !== 'on_hold') return false;
+  const code = caseReasonCode(caseItem);
+  if (code === 'HERMES_TIMEOUT' || code === 'HERMES_UNAVAILABLE') return false;
+  if (code === 'PERIOD_CLOSED') return false;
+  return (
+    ON_HOLD_ESCALATION_RETRY_REASONS.has(code) || code.startsWith('BINDING_AUTHORITY_')
+  );
 }
 
 /** Cases & Approvals — manual review queue (manager escalation awaiting Finance UI action). */
