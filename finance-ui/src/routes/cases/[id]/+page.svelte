@@ -11,6 +11,7 @@
     retryCase,
     respondToCaseEscalation,
     confirmParsing,
+    reExtractCase,
     rejectParsing,
     overrideGlPeriodPost,
     type CaseItem,
@@ -81,6 +82,7 @@
   let overrideReason = '';
   let overrideSubmitting = false;
   let savedHintFields = new Set<string>();
+  let reExtracting = false;
   let teachMessage = '';
   let parsingLoadingAction: 'confirm' | 'reject' | null = null;
   let parsingMessage = '';
@@ -337,6 +339,10 @@
     return reviewSnapshot.missing;
   })();
   $: canRetryWithHints = showTeachPanel && savedHintFields.size > 0;
+  $: canReExtractWithHints =
+    item?.status === 'pending_confirmation' &&
+    savedHintFields.size > 0 &&
+    hasPermission('cases:write');
   $: isExpenseConfirm = item?.type === 'expense_claim';
   $: canWriteParsingConfirm = isExpenseConfirm
     ? hasPermission('expenses:write')
@@ -375,28 +381,31 @@
     reasonCode === 'EXP_SUBMITTER_NOT_FOUND' ||
     reasonCode === 'EXP_SUBMITTER_INACTIVE';
 
+  function applyParsingFormFromExtracted(f: Record<string, string | null>) {
+    if (!item) return;
+    parsingFormKey = `${item.id}:${JSON.stringify(f)}`;
+    parsingForm = {
+      document_type: String(f.document_type ?? (isExpenseConfirm ? 'receipt' : 'invoice')),
+      document_number: f.document_number != null ? String(f.document_number) : '',
+      document_date: String(f.document_date ?? ''),
+      due_date: f.due_date != null ? String(f.due_date) : '',
+      vendor_name: String(f.vendor_name ?? ''),
+      total_amount: f.total_amount != null ? String(f.total_amount) : '',
+      tax_amount: String(f.tax_amount ?? ''),
+      currency: String(f.currency ?? 'SGD'),
+      exchange_rate: f.exchange_rate != null ? String(f.exchange_rate) : '',
+      payment_terms: f.payment_terms != null ? String(f.payment_terms) : '',
+      business_purpose: f.business_purpose != null ? String(f.business_purpose) : '',
+      gl_account_id: f.gl_account_id != null ? String(f.gl_account_id) : '',
+      sender_validated: String(f.sender_validated ?? 'false').toLowerCase() === 'true',
+    };
+  }
+
   $: if (item?.status === 'pending_confirmation') {
     const raw = item.workflow_metadata?.extracted_fields;
     const key = `${item.id}:${JSON.stringify(raw ?? {})}`;
     if (key !== parsingFormKey && raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      parsingFormKey = key;
-      const f = raw as Record<string, unknown>;
-      parsingForm = {
-        document_type: String(f.document_type ?? (isExpenseConfirm ? 'receipt' : 'invoice')),
-        document_number: f.document_number != null ? String(f.document_number) : '',
-        document_date: String(f.document_date ?? f.invoice_date ?? ''),
-        due_date: f.due_date != null ? String(f.due_date) : '',
-        vendor_name: String(f.vendor_name ?? f.merchant_name ?? ''),
-        total_amount: f.total_amount != null ? String(f.total_amount) : '',
-        tax_amount: String(f.tax_amount ?? f.gst_amount ?? ''),
-        currency: String(f.currency ?? 'SGD'),
-        exchange_rate: f.exchange_rate != null ? String(f.exchange_rate) : '',
-        payment_terms: f.payment_terms != null ? String(f.payment_terms) : '',
-        business_purpose: f.business_purpose != null ? String(f.business_purpose) : '',
-        gl_account_id: f.gl_account_id != null ? String(f.gl_account_id) : '',
-        sender_validated:
-          String(f.sender_validated ?? 'false').toLowerCase() === 'true',
-      };
+      applyParsingFormFromExtracted(raw as Record<string, string | null>);
     }
   }
 
@@ -565,11 +574,38 @@
     try {
       await saveVendorExtractionHint(body);
       savedHintFields = new Set([...savedHintFields, row.field_name]);
-      teachMessage = `Saved hint for ${row.field_name.replaceAll('_', ' ')}. You can retry processing with hints below.`;
+      teachMessage = `Saved hint for ${row.field_name.replaceAll('_', ' ')}. Use Re-extract with hints to preview updated fields.`;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not save hint';
     } finally {
       setTeachRowSaving(row.field_name, false);
+    }
+  }
+
+  async function handleReExtract() {
+    if (!item || reExtracting || !canReExtractWithHints) return;
+    reExtracting = true;
+    error = '';
+    teachMessage = '';
+    try {
+      const result = await reExtractCase(caseId);
+      applyParsingFormFromExtracted(result.extracted_fields);
+      if (item.workflow_metadata) {
+        item = {
+          ...item,
+          workflow_metadata: {
+            ...item.workflow_metadata,
+            extracted_fields: result.extracted_fields,
+            extraction_confidence: result.extraction_confidence ?? undefined,
+          },
+        };
+      }
+      teachMessage =
+        'Re-extraction complete — review the updated parsing confirmation fields below.';
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Re-extract failed';
+    } finally {
+      reExtracting = false;
     }
   }
 
@@ -1451,6 +1487,16 @@
           {/each}
           {#if teachMessage}
             <p class="hint success">{teachMessage}</p>
+          {/if}
+          {#if canReExtractWithHints}
+            <button
+              type="button"
+              class="retry"
+              disabled={reExtracting}
+              onclick={handleReExtract}
+            >
+              {reExtracting ? 'Re-extracting…' : 'Re-extract with hints'}
+            </button>
           {/if}
           {#if canRetryWithHints}
             <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>

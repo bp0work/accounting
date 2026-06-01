@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.99-vendor-hints-in-extraction"
+        return "0.15.00-reextract-with-hints"
 
     @property
     def edge_public_base_url(self) -> str:
