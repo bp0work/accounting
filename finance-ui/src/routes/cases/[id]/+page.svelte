@@ -108,8 +108,8 @@
   ]);
 
   const overrideRoles = new Set(['cfo', 'finance_manager']);
-  const tier2Roles = new Set(['accounts_clerk', 'finance_officer']);
-  const executiveRoles = new Set(['cfo', 'finance_manager']);
+  const tier2Roles = new Set(['accounts_clerk', 'finance_officer', 'finance_manager']);
+  const executiveRoles = new Set(['cfo', 'finance_director']);
 
   $: role = ($sessionUser?.role_name ?? '').toLowerCase();
   $: bindingTier = item?.current_approval_tier ?? null;
@@ -127,8 +127,7 @@
   $: showCfoApprovalActions =
     awaitingJournalApproval &&
     executiveRoles.has(role) &&
-    bindingTier != null &&
-    bindingTier >= 2 &&
+    (bindingEscalated || (bindingTier != null && bindingTier >= 3)) &&
     !!item?.pending_approval_id;
 
   $: periodClosedHold =

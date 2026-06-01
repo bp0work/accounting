@@ -32,9 +32,9 @@
 
   $: role = ($sessionUser?.role_name ?? '').toLowerCase();
   $: queueLabel =
-    role === 'cfo' || role === 'finance_manager'
+    role === 'cfo' || role === 'finance_director'
       ? 'Tier 3 and escalated Tier 2'
-      : role === 'accounts_clerk' || role === 'finance_officer'
+      : role === 'accounts_clerk' || role === 'finance_officer' || role === 'finance_manager'
         ? 'Tier 2 pending'
         : 'Pending approvals';
 

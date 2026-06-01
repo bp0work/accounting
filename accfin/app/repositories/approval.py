@@ -55,7 +55,7 @@ class ApprovalRepository:
             )
         if binding_queue == "acc" or (
             binding_queue is None
-            and role_name in ("accounts_clerk", "finance_officer")
+            and role_name in ("accounts_clerk", "finance_officer", "finance_manager")
         ):
             q = q.where(
                 Approval.status == "pending",
@@ -63,13 +63,11 @@ class ApprovalRepository:
                 ~Case.workflow_metadata.contains({"binding_escalated_to_cfo": True}),
             )
         elif binding_queue == "cfo" or (
-            binding_queue is None and role_name in ("cfo", "finance_manager")
+            binding_queue is None and role_name in ("cfo", "finance_director")
         ):
-            from sqlalchemy import or_ as sa_or
-
             q = q.where(
                 Approval.status == "pending",
-                sa_or(
+                or_(
                     Approval.tier >= 3,
                     Case.workflow_metadata.contains({"binding_escalated_to_cfo": True}),
                 ),
