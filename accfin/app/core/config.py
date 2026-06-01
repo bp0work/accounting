@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.96a-receipt-age-fix"
+        return "0.15.03-requeue-button"
 
     @property
     def edge_public_base_url(self) -> str:

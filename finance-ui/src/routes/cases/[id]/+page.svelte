@@ -312,6 +312,20 @@
     item.status !== 'pending_confirmation' &&
     (retryableStatuses.has(item.status) || canRetryAfterReopen || canRetryTransientHermes);
 
+  function minutesSinceActivity(iso: string | null | undefined): number | null {
+    if (!iso) return null;
+    const t = new Date(iso).getTime();
+    if (Number.isNaN(t)) return null;
+    return (Date.now() - t) / 60_000;
+  }
+
+  $: showReenqueueButton = (() => {
+    if (!item || role !== 'accounts_manager' || item.status !== 'classified') return false;
+    const activityAt = item.last_activity_at || item.created_at;
+    const minutes = minutesSinceActivity(activityAt);
+    return minutes != null && minutes > 2;
+  })();
+
   $: caseId = $page.params.id ?? '';
 
   $: extractedVendorName = (() => {
@@ -765,6 +779,23 @@
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Retry failed';
+    } finally {
+      retrying = false;
+    }
+  }
+
+  async function handleReenqueue() {
+    if (!item || retrying || !showReenqueueButton) return;
+    if (!confirm('Re-queue this case for processing?')) return;
+    retrying = true;
+    retryMessage = '';
+    error = '';
+    try {
+      await retryCase(caseId);
+      retryMessage = 'Case re-queued';
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Re-queue failed';
     } finally {
       retrying = false;
     }
@@ -1588,6 +1619,16 @@
         Override &amp; post
       </button>
       <p class="hint">This case is blocked because the posting date falls in a closed GL period.</p>
+    {/if}
+    {#if showReenqueueButton}
+      <button
+        type="button"
+        class="retry"
+        disabled={retrying}
+        onclick={() => void handleReenqueue()}
+      >
+        {retrying ? 'Requeuing…' : 'Re-enqueue'}
+      </button>
     {/if}
     {#if showStandardRetry}
       <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
