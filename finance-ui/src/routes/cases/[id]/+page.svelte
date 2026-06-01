@@ -40,6 +40,7 @@
   } from '$lib/case-labels';
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { formatAmount, formatCount, formatExtractedFieldValue } from '$lib/format';
+  import { hasPermission } from '$lib/permissions';
   import { sessionUser } from '$lib/stores/session';
 
   let item: CaseItem | null = null;
@@ -295,9 +296,21 @@
     (item.type !== 'expense_claim' ||
       Boolean(item?.workflow_metadata?.parsing_confirmed_at));
   $: canRetryWithHints = showTeachPanel && savedHintFields.size > 0;
-  $: canConfirmParsing =
-    item?.status === 'pending_confirmation' && confirmParsingRoles.has(role);
   $: isExpenseConfirm = item?.type === 'expense_claim';
+  $: canWriteParsingConfirm = isExpenseConfirm
+    ? hasPermission('expenses:write')
+    : hasPermission('cases:write');
+  $: canConfirmParsing =
+    item?.status === 'pending_confirmation' &&
+    confirmParsingRoles.has(role) &&
+    canWriteParsingConfirm;
+  $: parsingConfirmReadOnly =
+    item?.status === 'pending_confirmation' &&
+    confirmParsingRoles.has(role) &&
+    !canWriteParsingConfirm &&
+    (isExpenseConfirm
+      ? hasPermission('expenses:read')
+      : hasPermission('cases:read'));
 
   $: parsingAmountExTax = (() => {
     if (!isExpenseConfirm) return '';
@@ -1291,6 +1304,11 @@
               {parsingLoadingAction === 'reject' ? 'Working…' : 'Reject'}
             </button>
           </div>
+        {:else if parsingConfirmReadOnly}
+          <p class="hint">
+            Extracted fields are read-only. You need {isExpenseConfirm ? 'expenses:write' : 'cases:write'}
+            permission to confirm or reject.
+          </p>
         {:else}
           <p class="hint">Awaiting confirmation by Accounts or Finance leadership.</p>
         {/if}
