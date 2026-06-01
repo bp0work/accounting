@@ -50,6 +50,10 @@
   import { approve, escalateToCfo, reject } from '$lib/api/approvals';
   import { formatAmount, formatCount, formatExtractedFieldValue } from '$lib/format';
   import {
+    formatJournalHeaderForeignLine,
+    journalFxFromExtracted,
+  } from '$lib/fx-display';
+  import {
     hasExtractedGlAccountId,
     normalizeExtractedFields,
     trimExtractedOptional,
@@ -219,6 +223,26 @@
     }
     return any ? formatAmount(sum) : null;
   })();
+
+  $: journalFxExtracted = (() => {
+    const raw = item?.workflow_metadata?.extracted_fields;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const extracted: Record<string, string | null> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      extracted[k] = v == null ? null : String(v);
+    }
+    return journalFxFromExtracted(extracted);
+  })();
+
+  $: journalHeaderExGstForeign = formatJournalHeaderForeignLine(
+    journalFxExtracted,
+    'exGst',
+  );
+  $: journalHeaderGstForeign = formatJournalHeaderForeignLine(journalFxExtracted, 'gst');
+  $: journalHeaderTotalForeign = formatJournalHeaderForeignLine(
+    journalFxExtracted,
+    'total',
+  );
   $: showAccApprovalActions =
     awaitingJournalApproval &&
     tier2Roles.has(role) &&
@@ -1496,15 +1520,34 @@
             {/if}
             {#if journalHeaderExGst}
               <dt>Amount (ex-GST)</dt>
-              <dd>{journalHeaderExGst}</dd>
+              <dd>
+                {journalHeaderExGst}
+                {#if journalHeaderExGstForeign}
+                  <span class="fx-foreign">({journalHeaderExGstForeign})</span>
+                {/if}
+              </dd>
             {/if}
             {#if journalHeaderGst}
               <dt>GST</dt>
-              <dd>{journalHeaderGst}</dd>
+              <dd>
+                {journalHeaderGst}
+                {#if journalHeaderGstForeign}
+                  <span class="fx-foreign">({journalHeaderGstForeign})</span>
+                {/if}
+              </dd>
             {/if}
             {#if journalHeaderTotal}
               <dt>Total (inclusive)</dt>
-              <dd>{journalHeaderTotal}</dd>
+              <dd>
+                {journalHeaderTotal}
+                {#if journalHeaderTotalForeign}
+                  <span class="fx-foreign">({journalHeaderTotalForeign})</span>
+                {/if}
+              </dd>
+            {/if}
+            {#if journalFxExtracted?.exchangeRateLabel}
+              <dt>Exchange rate</dt>
+              <dd>{journalFxExtracted.exchangeRateLabel}</dd>
             {/if}
             {#if journalApproval.approval_tier_label}
               <dt>Approval tier</dt>
@@ -2022,6 +2065,12 @@
   }
   .extracted dd {
     margin: 0;
+  }
+  .fx-foreign {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.9em;
+    color: #64748b;
   }
   .approval-box {
     margin-top: 1rem;

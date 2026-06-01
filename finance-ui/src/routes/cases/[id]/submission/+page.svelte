@@ -15,10 +15,15 @@
   import { submissionSubmittedByDisplay } from '$lib/case-labels';
   import {
     documentTypeTitleCase,
-    formatAmount,
     formatDateOnly,
     isNonZeroAmount,
   } from '$lib/format';
+  import {
+    formatExchangeRateLabel,
+    formatForeignAmountWithSgd,
+    isForeignCurrency,
+    normalizedCurrency,
+  } from '$lib/fx-display';
 
   type DetailRow = { label: string; value: string };
 
@@ -106,21 +111,42 @@
       value: formatDateOnly(docDate),
     });
 
+    const currency = normalizedCurrency(extracted.currency);
     rows.push({
       label: 'Currency',
-      value: trimOptional(extracted.currency) ?? '—',
+      value: currency,
     });
 
     const tax = extracted.tax_amount ?? extracted.gst_amount ?? null;
     if (isNonZeroAmount(tax)) {
-      rows.push({ label: 'Tax amount', value: formatAmount(tax) });
+      rows.push({
+        label: 'Tax amount',
+        value: formatForeignAmountWithSgd(
+          currency,
+          tax,
+          extracted.sgd_tax,
+          extracted.exchange_rate,
+        ),
+      });
     }
 
     const total = extracted.total_amount ?? extracted.amount ?? null;
     rows.push({
       label: 'Total amount (incl. tax)',
-      value: formatAmount(total),
+      value: formatForeignAmountWithSgd(
+        currency,
+        total,
+        extracted.sgd_amount,
+        extracted.exchange_rate,
+      ),
     });
+
+    if (isForeignCurrency(currency)) {
+      const rateLabel = formatExchangeRateLabel(currency, extracted.exchange_rate);
+      if (rateLabel) {
+        rows.push({ label: 'Exchange rate', value: rateLabel });
+      }
+    }
 
     const purpose = trimOptional(extracted.business_purpose);
     rows.push({ label: 'Business purpose', value: purpose ?? '—' });
