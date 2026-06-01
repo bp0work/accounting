@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.crypto import decrypt_field
@@ -147,43 +148,58 @@ async def _handle_resubmission(
     await session.flush()
 
 
-async def _enqueue_intake_for_email(
-    session: AsyncSession,
-    email: Email,
-    mailbox_address: str,
-) -> None:
-    """Push parsed email to Redis; log success/failure for manual recovery."""
-    if email.status == "duplicate":
-        return
+@dataclass(frozen=True)
+class _PendingIntake:
+    email_id: UUID
+    mailbox_address: str
+    subject: str | None
 
+
+async def _enqueue_intake_after_commit(
+    session_factory: async_sessionmaker[AsyncSession],
+    pending: _PendingIntake,
+) -> None:
+    """Push to Redis only after the email row is committed (visible to workers)."""
     try:
-        await enqueue_intake(email_id=email.id, mailbox=mailbox_address)
+        await enqueue_intake(email_id=pending.email_id, mailbox=pending.mailbox_address)
     except Exception:
         logger.exception(
             "Failed to enqueue email %s (%s) to intake_queue — requeue manually with email_id=%s",
-            email.id,
-            email.subject,
-            email.id,
+            pending.email_id,
+            pending.subject,
+            pending.email_id,
         )
-        meta = dict(email.processing_metadata or {})
-        meta["intake_enqueue_failed"] = True
-        meta["intake_enqueue_failed_at"] = datetime.now(UTC).isoformat()
-        email.processing_metadata = meta
-        await session.flush()
+        async with session_factory() as session:
+            result = await session.execute(select(Email).where(Email.id == pending.email_id))
+            email = result.scalar_one_or_none()
+            if email is None:
+                return
+            meta = dict(email.processing_metadata or {})
+            meta["intake_enqueue_failed"] = True
+            meta["intake_enqueue_failed_at"] = datetime.now(UTC).isoformat()
+            email.processing_metadata = meta
+            await session.commit()
         return
 
-    email.status = "queued"
-    email.processed_at = datetime.now(UTC)
-    await session.flush()
+    async with session_factory() as session:
+        result = await session.execute(select(Email).where(Email.id == pending.email_id))
+        email = result.scalar_one_or_none()
+        if email is None:
+            return
+        email.status = "queued"
+        email.processed_at = datetime.now(UTC)
+        await session.commit()
     logger.info(
         "Enqueued email %s (%s) to intake_queue",
-        email.id,
-        email.subject,
+        pending.email_id,
+        pending.subject,
     )
 
 
 async def _poll_mailbox_in_session(
-    session: AsyncSession, mailbox_id: UUID
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    mailbox_id: UUID,
 ) -> int:
     repo = MailRepository(session)
     mailbox = await repo.get_mailbox_by_id(mailbox_id)
@@ -195,19 +211,30 @@ async def _poll_mailbox_in_session(
 
     ingest = MailIngestService(session)
     processed = 0
+    pending_intakes: list[_PendingIntake] = []
     for raw in raw_messages:
         parsed = parse_rfc822(raw, mailbox_address=mailbox.email_address)
         email = await ingest.ingest(mailbox=mailbox, parsed=parsed)
         if email.linked_case_id is not None:
             await _handle_resubmission(session, email, mailbox)
-        else:
-            await _enqueue_intake_for_email(session, email, mailbox.email_address)
+        elif email.status != "duplicate":
+            pending_intakes.append(
+                _PendingIntake(
+                    email_id=email.id,
+                    mailbox_address=mailbox.email_address,
+                    subject=email.subject,
+                )
+            )
         processed += 1
 
     mailbox.last_poll_at = datetime.now(UTC)
     mailbox.last_error = None
     mailbox.error_count = 0
     await session.commit()
+
+    for pending in pending_intakes:
+        await _enqueue_intake_after_commit(session_factory, pending)
+
     return processed
 
 
@@ -230,7 +257,7 @@ async def _record_poll_failure(
 async def poll_mailbox(mailbox_id: UUID) -> int:
     session_factory = get_session_factory()
     async with session_factory() as session:
-        return await _poll_mailbox_in_session(session, mailbox_id)
+        return await _poll_mailbox_in_session(session, session_factory, mailbox_id)
 
 
 async def poll_all_executive_mailboxes() -> dict[str, int]:
