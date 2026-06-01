@@ -83,8 +83,8 @@
   let overrideReason = '';
   let overrideSubmitting = false;
   let savedHintFields = new Set<string>();
-  /** Active hints already stored for this vendor (any session). */
-  let vendorExistingHintCount = 0;
+  /** Active hints loaded from API for the current vendor name. */
+  let vendorHintCount = 0;
   let reExtracting = false;
   let teachMessage = '';
   let parsingLoadingAction: 'confirm' | 'reject' | null = null;
@@ -347,37 +347,35 @@
     );
   }
 
-  function vendorHintsAvailable(): boolean {
-    return savedHintFields.size > 0 || vendorExistingHintCount > 0;
-  }
+  /** Hints saved this session or loaded from API — drives re-extract button visibility. */
+  $: hasVendorHints = savedHintFields.size > 0 || vendorHintCount > 0;
 
-  function canRunReExtract(caseItem: CaseItem | null): boolean {
-    if (!caseItem || caseItem.status !== 'pending_confirmation') return false;
-    if (!vendorName.trim()) return false;
-    if (!vendorHintsAvailable()) return false;
-    return hasReExtractPermission(caseItem);
-  }
-
-  $: canReExtractWithHints = item ? canRunReExtract(item) : false;
+  $: canReExtractWithHints =
+    !!item &&
+    item.status === 'pending_confirmation' &&
+    !!vendorName.trim() &&
+    hasVendorHints &&
+    hasReExtractPermission(item);
 
   async function loadVendorHints(vendor: string) {
     const name = vendor.trim();
     if (!name) {
-      vendorExistingHintCount = 0;
+      vendorHintCount = 0;
       return;
     }
     try {
       const rows = await listVendorExtractionHints(name);
-      vendorExistingHintCount = rows.filter((h) => h.is_active).length;
+      const fromApi = rows.filter((h) => h.is_active).length;
+      vendorHintCount = Math.max(fromApi, savedHintFields.size);
     } catch {
-      vendorExistingHintCount = 0;
+      vendorHintCount = savedHintFields.size > 0 ? savedHintFields.size : 0;
     }
   }
 
   $: if (vendorName) {
     void loadVendorHints(vendorName);
   } else {
-    vendorExistingHintCount = 0;
+    vendorHintCount = 0;
   }
   $: canWriteParsingConfirm = isExpenseConfirm
     ? hasPermission('expenses:write')
@@ -578,7 +576,7 @@
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Not found';
-      vendorExistingHintCount = 0;
+      vendorHintCount = 0;
     }
   }
 
@@ -610,7 +608,8 @@
     try {
       await saveVendorExtractionHint(body);
       savedHintFields = new Set([...savedHintFields, row.field_name]);
-      await loadVendorHints(vendorName);
+      vendorHintCount = Math.max(vendorHintCount, savedHintFields.size);
+      void loadVendorHints(vendorName);
       teachMessage = `Saved hint for ${row.field_name.replaceAll('_', ' ')}. Use Re-extract with hints to preview updated fields.`;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not save hint';
@@ -626,7 +625,13 @@
       error = 'Case id is missing.';
       return;
     }
-    if (!canRunReExtract(item)) {
+    if (
+      !item ||
+      item.status !== 'pending_confirmation' ||
+      !vendorName.trim() ||
+      !hasVendorHints ||
+      !hasReExtractPermission(item)
+    ) {
       teachMessage = 'Save a vendor hint first, or ensure hints exist for this vendor.';
       return;
     }
@@ -1555,7 +1560,7 @@
               >
                 {reExtracting ? 'Re-extracting…' : 'Re-extract with hints'}
               </button>
-            {:else if item.status === 'pending_confirmation' && vendorName && !vendorHintsAvailable()}
+            {:else if item.status === 'pending_confirmation' && vendorName && !hasVendorHints}
               <p class="hint">
                 Save at least one field hint for this vendor to enable re-extraction.
               </p>
