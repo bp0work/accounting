@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import get_settings
 from app.models.case import Case
@@ -141,6 +142,29 @@ def expense_claim_to_confirmation_fields(claim: Any) -> dict[str, str | None]:
             "sender_validated": "false",
         }
     )
+
+
+def apply_confirmed_extracted_fields_from_message(
+    case: Case, message: dict
+) -> dict[str, str | None] | None:
+    """
+    When Finance UI confirms parsing, persist confirmed fields from the queue payload.
+
+    Covers worker read-after-enqueue races where ``cases.workflow_metadata`` was not yet
+    visible when the consumer loaded the row.
+    """
+    if not message.get("parsing_confirmed"):
+        return None
+    raw = message.get("confirmed_extracted_fields")
+    if not isinstance(raw, dict) or not raw:
+        return None
+    fields = normalize_extracted_fields(raw)
+    meta = dict(case.workflow_metadata or {})
+    meta["extracted_fields"] = fields
+    meta.pop("pending_parsing_confirmation", None)
+    case.workflow_metadata = meta
+    flag_modified(case, "workflow_metadata")
+    return fields
 
 
 def expense_fields_to_confirmation(extracted: dict) -> dict[str, str | None]:

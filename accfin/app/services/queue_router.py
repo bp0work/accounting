@@ -49,6 +49,7 @@ async def enqueue_accounts(
     gl_period_posted_by: str | None = None,
     message_id: str | None = None,
     parsing_confirmed: bool = False,
+    confirmed_extracted_fields: dict[str, str | None] | None = None,
     **expense_step_override_kwargs: Any,
 ) -> str:
     message_id = message_id or str(uuid4())
@@ -92,6 +93,8 @@ async def enqueue_accounts(
             payload["gl_period_posted_by"] = gl_period_posted_by
     if parsing_confirmed:
         payload["parsing_confirmed"] = True
+        if confirmed_extracted_fields:
+            payload["confirmed_extracted_fields"] = confirmed_extracted_fields
     redis = get_redis()
     await redis.rpush(get_settings().accounts_queue_name, json.dumps(payload))
     return message_id

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.database import get_session_factory
 from app.core.exceptions import AppHTTPException
@@ -87,6 +88,7 @@ async def execute_confirm_parsing(
         meta.pop("pending_parsing_confirmation", None)
         meta["current_stage"] = "processing"
         case.workflow_metadata = meta
+        flag_modified(case, "workflow_metadata")
         previous_status = case.status
         case.status = "classified"
 
@@ -107,6 +109,7 @@ async def execute_confirm_parsing(
             },
             actor_user_id=user.user_id,
         )
+        await session.flush()
         await session.commit()
 
         snap = _case_enqueue_snapshot(case, message_id)
@@ -122,6 +125,7 @@ async def execute_confirm_parsing(
         source="parsing-confirmation",
         message_id=message_id,
         parsing_confirmed=True,
+        confirmed_extracted_fields=normalized_new,
     )
 
     return ConfirmParsingResponse(
