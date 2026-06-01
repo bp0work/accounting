@@ -6,10 +6,12 @@
   import { ensureValidAccessToken } from '$lib/api/client';
   import {
     listAccountingPeriods,
+    submitTrialBalanceReview,
     approveTrialBalance,
     closeGlPeriod,
     reopenGlPeriod,
   } from '$lib/api/finance-setup';
+  import { sessionUser } from '$lib/stores/session';
 
   const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -30,6 +32,10 @@
     sign_off_date: '',
   };
 
+  $: role = ($sessionUser?.role_name ?? '').toLowerCase();
+  $: isFinanceManager = role === 'finance_manager';
+  $: isCfo = role === 'cfo';
+
   onMount(async () => {
     if (!(await ensureValidAccessToken())) return;
     await refresh();
@@ -47,10 +53,32 @@
     });
   }
 
-  async function approve(id: string) {
-    await approveTrialBalance(id);
-    msg = 'Trial balance approved.';
-    await refresh();
+  async function submitForReview(id: string) {
+    error = '';
+    try {
+      await submitTrialBalanceReview(id);
+      msg = 'Submitted for trial balance review.';
+      await refresh();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Submit failed';
+    }
+  }
+
+  async function approveTb(id: string) {
+    error = '';
+    try {
+      await approveTrialBalance(id);
+      msg = 'Trial balance approved.';
+      await refresh();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Approve failed';
+    }
+  }
+
+  function exportTbHref(p: Record<string, unknown>): string {
+    const y = Number(p.period_year);
+    const m = Number(p.period_month);
+    return `/export?period_year=${y}&period_month=${m}`;
   }
 
   function openClose(p: Record<string, unknown>) {
@@ -62,6 +90,26 @@
       auditor_firm: '',
       sign_off_date: '',
     };
+  }
+
+  async function closePeriodDirect(p: Record<string, unknown>) {
+    error = '';
+    try {
+      await closeGlPeriod(String(p.id));
+      msg = 'Period closed.';
+      await refresh();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Close failed';
+    }
+  }
+
+  function onClosePeriodClick(p: Record<string, unknown>) {
+    const ptype = String(p.period_type || 'monthly');
+    if (ptype === 'audit' || ptype === 'year_end') {
+      openClose(p);
+      return;
+    }
+    void closePeriodDirect(p);
   }
 
   function openReopen(p: Record<string, unknown>) {
@@ -94,7 +142,7 @@
         auditor_firm: closeForm.auditor_firm || undefined,
         sign_off_date: closeForm.sign_off_date || undefined,
       });
-      msg = 'GL period closed.';
+      msg = 'Period closed.';
       closeTarget = null;
       await refresh();
     } catch (e) {
@@ -136,19 +184,41 @@
   <tbody>
     {#each periods as p}
       {@const badge = typeBadge(String(p.period_type || 'monthly'))}
+      {@const status = String(p.status)}
       <tr>
         <td>{periodLabel(p)}</td>
         <td><span class="badge {badge.class}">{badge.label}</span></td>
         <td>{p.gl_cutoff_date}</td>
         <td>{p.trial_balance_reviewer}</td>
-        <td><span class="status status-{p.status}">{p.status}</span></td>
+        <td><span class="status status-{status}">{status}</span></td>
         <td class="actions">
-          {#if p.status === 'open'}
-            <button type="button" on:click={() => approve(String(p.id))}>Approve TB</button>
-          {:else if p.status === 'review'}
-            <button type="button" on:click={() => openClose(p)}>Close GL</button>
-          {:else if p.status === 'closed'}
-            <button type="button" class="reopen" title="Reopen period" on:click={() => openReopen(p)}>🔓</button>
+          {#if status === 'open' && isFinanceManager}
+            <button type="button" on:click={() => submitForReview(String(p.id))}>
+              Submit for TB Review
+            </button>
+          {:else if status === 'review'}
+            <div class="action-row">
+              {#if isFinanceManager}
+                <button type="button" on:click={() => approveTb(String(p.id))}>
+                  Approve TB
+                </button>
+              {/if}
+              <a class="tb-link" href={exportTbHref(p)}>View Trial Balance →</a>
+              {#if isCfo}
+                <button type="button" class="close-period" on:click={() => onClosePeriodClick(p)}>
+                  Close Period
+                </button>
+              {/if}
+            </div>
+          {:else if status === 'closed'}
+            <button
+              type="button"
+              class="reopen"
+              title="Reopen period"
+              on:click={() => openReopen(p)}
+            >
+              🔓
+            </button>
           {:else}
             —
           {/if}
@@ -181,7 +251,7 @@
 {#if closeTarget}
   <div class="modal-backdrop" role="presentation">
     <div class="modal card">
-      <h2>Close GL — {periodLabel(closeTarget)}</h2>
+      <h2>Close period — {periodLabel(closeTarget)}</h2>
       <p>Trial balance must already be approved.</p>
       {#if closeTarget.period_type === 'audit'}
         <label><input type="checkbox" bind:checked={closeForm.audit_adjustments_completed} /> Audit adjustments completed</label>
@@ -218,6 +288,10 @@
   .hint { color: #64748b; font-size: 0.875rem; }
   .err { color: #b91c1c; }
   .ok { color: #15803d; }
+  .actions .action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+  .tb-link { font-size: 0.875rem; color: #1d4ed8; text-decoration: none; }
+  .tb-link:hover { text-decoration: underline; }
+  button.close-period { background: #1e293b; color: #fff; border: none; }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal { max-width: 420px; width: 90%; }
   .modal-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }

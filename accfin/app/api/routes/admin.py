@@ -1439,20 +1439,60 @@ async def override_post_closed_period(
     return GlPeriodOverridePostResponse(**result)
 
 
+@router.post(
+    "/accounting-periods/{period_id}/submit-trial-balance-review",
+    response_model=AccountingPeriodResponse,
+)
+async def submit_trial_balance_review(
+    period_id: UUID,
+    user: TokenData = Depends(require_finance_setup_access()),
+    session: AsyncSession = Depends(get_db_session),
+) -> AccountingPeriodResponse:
+    """Move period from open → review so Finance can review trial balance before approval."""
+    if user.role != "finance_manager":
+        raise AppHTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Finance Manager role required",
+        )
+    period = await session.get(AccountingPeriod, period_id)
+    if period is None:
+        raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Period not found")
+    if period.status != "open":
+        raise AppHTTPException(
+            status.HTTP_409_CONFLICT,
+            "INVALID_PERIOD_STATUS",
+            f"Period must be open to submit for TB review (current: {period.status})",
+        )
+    period.status = "review"
+    await session.commit()
+    await session.refresh(period)
+    return AccountingPeriodResponse.model_validate(period)
+
+
 @router.post("/accounting-periods/{period_id}/approve-trial-balance", response_model=AccountingPeriodResponse)
 async def approve_trial_balance(
     period_id: UUID,
     user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> AccountingPeriodResponse:
-    if user.role not in ("financial_analyst", "client_admin", "finance_manager", "cfo"):
-        raise AppHTTPException(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "Finance role required")
+    if user.role != "finance_manager":
+        raise AppHTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Finance Manager role required",
+        )
     period = await session.get(AccountingPeriod, period_id)
     if period is None:
         raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Period not found")
+    if period.status != "review":
+        raise AppHTTPException(
+            status.HTTP_409_CONFLICT,
+            "INVALID_PERIOD_STATUS",
+            f"Period must be in review to approve trial balance (current: {period.status})",
+        )
     period.trial_balance_approved_at = utcnow()
     period.trial_balance_approved_by = user.user_id
-    period.status = "review"
     await session.commit()
     await session.refresh(period)
     return AccountingPeriodResponse.model_validate(period)
@@ -1465,11 +1505,17 @@ async def close_accounting_period(
     user: TokenData = Depends(require_finance_setup_access()),
     session: AsyncSession = Depends(get_db_session),
 ) -> AccountingPeriodResponse:
-    if user.role not in ("finance_manager", "client_admin", "cfo"):
-        raise AppHTTPException(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "Finance Manager role required")
+    if user.role != "cfo":
+        raise AppHTTPException(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "CFO role required")
     period = await session.get(AccountingPeriod, period_id)
     if period is None:
         raise AppHTTPException(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "Period not found")
+    if period.status != "review":
+        raise AppHTTPException(
+            status.HTTP_409_CONFLICT,
+            "INVALID_PERIOD_STATUS",
+            f"Period must be in review to close (current: {period.status})",
+        )
     if period.trial_balance_approved_at is None:
         raise AppHTTPException(status.HTTP_409_CONFLICT, "TB_NOT_APPROVED", "Trial balance must be approved first")
     req = body or AccountingPeriodCloseRequest()

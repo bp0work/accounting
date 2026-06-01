@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.94-parsing-confirm-persist"
+        return "0.14.95-tb-review-ux"
 
     @property
     def edge_public_base_url(self) -> str:

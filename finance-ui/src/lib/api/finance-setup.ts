@@ -79,6 +79,12 @@ export function generateAccountingPeriods(months = 13) {
   );
 }
 
+export function submitTrialBalanceReview(periodId: string) {
+  return apiFetch(`/accounting-periods/${periodId}/submit-trial-balance-review`, {
+    method: 'POST',
+  });
+}
+
 export function approveTrialBalance(periodId: string) {
   return apiFetch(`/accounting-periods/${periodId}/approve-trial-balance`, { method: 'POST' });
 }
