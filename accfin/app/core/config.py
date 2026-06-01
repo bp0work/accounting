@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.14.65-expense-account-codes"
+        return "0.14.66-coa-account-edit-save"
 
     @property
     def edge_public_base_url(self) -> str:

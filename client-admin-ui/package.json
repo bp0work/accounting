@@ -1,6 +1,6 @@
 {
   "name": "client-admin-ui",
-  "version": "0.14.38-login-logo",
+  "version": "0.14.66-coa-account-edit-save",
   "private": true,
   "type": "module",
   "scripts": {

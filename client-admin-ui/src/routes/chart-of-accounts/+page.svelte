@@ -4,9 +4,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ensureValidAccessToken } from '$lib/api/client';
-  import { fetchCoaStatus, listCoa, createCoa, patchCoa, importCoaCsv } from '$lib/api/admin';
+  import {
+    fetchCoaStatus,
+    listCoa,
+    createCoa,
+    patchCoa,
+    importCoaCsv,
+    type CoaAccount,
+  } from '$lib/api/admin';
 
-  let items = $state<Array<Record<string, unknown>>>([]);
+  const ACCOUNT_TYPES = ['asset', 'liability', 'equity', 'revenue', 'expense'] as const;
+
+  let items = $state<CoaAccount[]>([]);
   let accountCount = $state(0);
   let empty = $state(true);
   let q = $state('');
@@ -17,6 +26,11 @@
   let code = $state('');
   let name = $state('');
   let type = $state('expense');
+
+  let editingId = $state<string | null>(null);
+  let editName = $state('');
+  let editType = $state<string>('expense');
+  let savingEdit = $state(false);
 
   async function load(opts?: { searchOnly?: boolean }) {
     const term = q.trim();
@@ -66,6 +80,7 @@
   }
 
   async function deactivate(id: string) {
+    if (editingId === id) cancelEdit();
     error = '';
     try {
       await patchCoa(id, { is_active: false });
@@ -75,10 +90,49 @@
     }
   }
 
+  function startEdit(account: CoaAccount) {
+    editingId = account.id;
+    editName = account.account_name;
+    editType = account.account_type;
+    error = '';
+    msg = '';
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    editName = '';
+    editType = 'expense';
+  }
+
+  async function saveEdit(id: string) {
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      error = 'Account name is required';
+      return;
+    }
+    error = '';
+    msg = '';
+    savingEdit = true;
+    try {
+      await patchCoa(id, {
+        account_name: trimmedName,
+        account_type: editType,
+      });
+      msg = 'Account updated.';
+      cancelEdit();
+      await load({ searchOnly: true });
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Save failed';
+    } finally {
+      savingEdit = false;
+    }
+  }
+
   async function applySearch() {
     error = '';
     searching = true;
     try {
+      if (editingId) cancelEdit();
       await load({ searchOnly: true });
     } catch (e) {
       error = e instanceof Error ? e.message : 'Search failed';
@@ -92,6 +146,7 @@
     error = '';
     searching = true;
     try {
+      if (editingId) cancelEdit();
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Load failed';
@@ -152,11 +207,9 @@
   <input placeholder="Code" bind:value={code} />
   <input placeholder="Name" bind:value={name} />
   <select bind:value={type}>
-    <option value="asset">asset</option>
-    <option value="liability">liability</option>
-    <option value="equity">equity</option>
-    <option value="revenue">revenue</option>
-    <option value="expense">expense</option>
+    {#each ACCOUNT_TYPES as t}
+      <option value={t}>{t}</option>
+    {/each}
   </select>
   <button type="button" onclick={() => void add()}>Add</button>
 </div>
@@ -167,12 +220,49 @@
   <table>
     <thead><tr><th>Code</th><th>Name</th><th>Type</th><th></th></tr></thead>
     <tbody>
-      {#each items as a}
-        <tr>
+      {#each items as a (a.id)}
+        <tr class:editing={editingId === a.id}>
           <td>{a.account_code}</td>
-          <td>{a.account_name}</td>
-          <td>{a.account_type}</td>
-          <td><button type="button" onclick={() => void deactivate(String(a.id))}>Deactivate</button></td>
+          <td>
+            {#if editingId === a.id}
+              <input
+                class="edit-input"
+                bind:value={editName}
+                disabled={savingEdit}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void saveEdit(a.id);
+                  }
+                  if (e.key === 'Escape') cancelEdit();
+                }}
+              />
+            {:else}
+              {a.account_name}
+            {/if}
+          </td>
+          <td>
+            {#if editingId === a.id}
+              <select class="edit-select" bind:value={editType} disabled={savingEdit}>
+                {#each ACCOUNT_TYPES as t}
+                  <option value={t}>{t}</option>
+                {/each}
+              </select>
+            {:else}
+              {a.account_type}
+            {/if}
+          </td>
+          <td class="actions">
+            {#if editingId === a.id}
+              <button type="button" onclick={() => void saveEdit(a.id)} disabled={savingEdit}>
+                {savingEdit ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" class="muted" onclick={cancelEdit} disabled={savingEdit}>Cancel</button>
+            {:else}
+              <button type="button" onclick={() => startEdit(a)}>Edit</button>
+              <button type="button" onclick={() => void deactivate(a.id)}>Deactivate</button>
+            {/if}
+          </td>
         </tr>
       {/each}
     </tbody>
@@ -184,7 +274,12 @@
   .meta { color: #64748b; }
   .card { background: #fff; border: 1px solid #e2e8f0; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e2e8f0; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+  tr.editing { background: #f0f7ff; }
+  .edit-input { width: 100%; min-width: 10rem; padding: 0.35rem 0.5rem; box-sizing: border-box; }
+  .edit-select { padding: 0.35rem 0.5rem; }
+  .actions { white-space: nowrap; }
+  .actions button { margin-right: 0.35rem; }
   .err { color: #b91c1c; }
   .ok { color: #15803d; margin-bottom: 0.5rem; }
   .replace { display: block; margin: 0.5rem 0; font-size: 0.875rem; }
