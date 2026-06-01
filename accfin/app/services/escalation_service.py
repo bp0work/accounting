@@ -127,6 +127,7 @@ class EscalationService:
         case = await self._cases.get(case_id)
         if case is None:
             raise AppHTTPException(status.HTTP_404_NOT_FOUND, "CASE_NOT_FOUND", "Case not found")
+        await self._executive_mail.sync_pending_escalation_metadata(case)
         if case.status not in ("manual_review", "on_hold"):
             raise AppHTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,

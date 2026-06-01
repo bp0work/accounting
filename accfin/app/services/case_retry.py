@@ -15,6 +15,7 @@ from app.models.user import User
 from app.repositories.case import CaseRepository
 from app.schemas.auth import TokenData
 from app.schemas.case import CaseRetryResponse
+from app.services.executive_mail_service import ExecutiveMailService
 from app.services.queue_router import enqueue_accounts
 from app.services.timeline_actor import timeline_actor_label_for_user
 from fastapi import status
@@ -78,6 +79,18 @@ async def _persist_case_retry(case_id: UUID, user: TokenData) -> _CaseRetrySnaps
         if case is None:
             raise AppHTTPException(
                 status.HTTP_404_NOT_FOUND, "CASE_NOT_FOUND", "Case not found"
+            )
+
+        mail = ExecutiveMailService(session)
+        if await mail.sync_pending_escalation_metadata(case):
+            await session.flush()
+        pending_escalation = await mail._pending_escalation(case_id)
+        if pending_escalation is not None:
+            raise AppHTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "ESCALATION_PENDING",
+                "Manager escalation is open for this case — use POST "
+                "/api/cases/{id}/escalation-respond with action retry",
             )
 
         retryable = case.status in RETRYABLE_STATUSES

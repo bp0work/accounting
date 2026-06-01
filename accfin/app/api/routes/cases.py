@@ -53,6 +53,7 @@ from app.services.case_export import build_cases_csv
 from app.services.case_metrics import is_case_overdue, processing_time_minutes
 from app.services.case_journal_approval import build_journal_entry_approval_detail
 from app.services.case_retry import execute_case_retry
+from app.services.executive_mail_service import ExecutiveMailService
 from app.services.escalation_service import EscalationService
 from app.services.case_service import CaseService
 from app.services.timeline_actor import resolve_timeline_actor_display
@@ -150,6 +151,9 @@ async def _case_response(
     assignee: User | None = None,
     include_journal_entry: bool = False,
 ) -> CaseResponse:
+    mail = ExecutiveMailService(session)
+    if await mail.sync_pending_escalation_metadata(case):
+        await session.flush()
     base = CaseResponse.model_validate(case)
     if from_address is None:
         meta = case.classification_metadata or {}
