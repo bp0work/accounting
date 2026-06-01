@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.14.83-vendor-hints-labels",
+  "version": "0.14.84-parsing-incomplete-retry-fix",
   "private": true,
   "type": "module",
   "scripts": {

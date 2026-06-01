@@ -22,6 +22,7 @@
     caseReasonCode,
     escalationActionConfig,
     hasPendingEscalation,
+    shouldRetryViaEscalationRespond,
     manualActionButtonClass,
     normalizeEscalationDisplayCopy,
     showManualReviewPanel,
@@ -622,7 +623,7 @@
       manualActionMessage = '';
       error = '';
       try {
-        if (pendingEscalation) {
+        if (shouldRetryViaEscalationRespond(item)) {
           const result = await respondToCaseEscalation(caseId, {
             action: 'retry',
             comment: escalationComment.trim() || null,
@@ -1010,7 +1011,7 @@
             </button>
           {/if}
         </div>
-        {#if !pendingEscalation && manualActionConfig.primary?.action !== 'retry' && !manualActionConfig.retry}
+        {#if !shouldRetryViaEscalationRespond(item) && manualActionConfig.primary?.action !== 'retry' && !manualActionConfig.retry}
           <p class="hint">
             Email escalation is not pending — fix setup in Finance, then use Retry processing below.
           </p>

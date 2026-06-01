@@ -148,3 +148,68 @@ async def test_case_escalation_respond_retry(
     assert case.workflow_metadata.get("escalation_pending") is False
     assert case.workflow_metadata.get("resume_from_step") == "2C"
     assert case.workflow_metadata.get("manual_retry") is True
+
+
+@pytest.mark.integration
+async def test_case_escalation_respond_retry_exp_parsing_incomplete_on_hold(
+    db_session, async_client: AsyncClient, clerk_auth_headers: dict[str, str]
+) -> None:
+    """EXP_PARSING_INCOMPLETE stays on_hold — Finance UI must use escalation-respond, not /retry."""
+    mailbox = (await db_session.execute(select(MailGatewayConfig).limit(1))).scalar_one()
+
+    case = Case(
+        id=uuid4(),
+        case_number=f"CAS-UI-PARSE-{uuid4().hex[:8]}",
+        type="expense_claim",
+        status="on_hold",
+        subject="pytest parsing incomplete",
+        workflow_metadata={
+            "escalation_pending": True,
+            "reason_code": "EXP_PARSING_INCOMPLETE",
+            "missing_fields": ["document_date"],
+            "resume_from_step": "2A",
+        },
+    )
+    db_session.add(case)
+    await db_session.flush()
+
+    esc_id = uuid4()
+    wire, token_hash, expires = issue_escalation_token(escalation_id=esc_id, case_id=case.id)
+    escalation = CaseEscalation(
+        id=esc_id,
+        case_id=case.id,
+        originating_mailbox_id=mailbox.id,
+        target_email=mailbox.email_address,
+        status="pending",
+        reason_code="EXP_PARSING_INCOMPLETE",
+        summary="Parsing incomplete",
+        context={"notification": {"wire_token": wire}},
+        response_token_hash=token_hash,
+        token_expires_at=expires,
+    )
+    db_session.add(escalation)
+    meta = dict(case.workflow_metadata or {})
+    meta["escalation_id"] = str(esc_id)
+    case.workflow_metadata = meta
+    await db_session.commit()
+
+    retry_direct = await async_client.post(
+        f"/api/cases/{case.id}/retry",
+        headers=clerk_auth_headers,
+    )
+    assert retry_direct.status_code == 422
+    assert retry_direct.json()["error"]["code"] == "CASE_NOT_RETRYABLE"
+
+    response = await async_client.post(
+        f"/api/cases/{case.id}/escalation-respond",
+        headers=clerk_auth_headers,
+        json={"action": "retry", "comment": "Vendor hint saved"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["action"] == "retry"
+
+    await db_session.refresh(case)
+    assert case.status == "classified"
+    assert case.workflow_metadata.get("manual_retry") is True
+    assert case.workflow_metadata.get("resume_from_step") == "2A"
