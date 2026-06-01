@@ -17,6 +17,18 @@ from app.models.case import Case
 
 logger = logging.getLogger(__name__)
 
+# Expense worker exp_step_overrides keys allowed on accounts_queue payloads.
+EXPENSE_STEP_OVERRIDE_QUEUE_KEYS = frozenset(
+    {
+        "override_parsing",
+        "override_duplicate",
+        "override_submitter",
+        "override_policy",
+        "override_receipt",
+        "override_coa",
+    }
+)
+
 
 async def enqueue_accounts(
     *,
@@ -31,11 +43,13 @@ async def enqueue_accounts(
     source: str = "accounts-worker",
     override_po_check: bool = False,
     override_policy: bool = False,
+    override_receipt: bool = False,
     gl_period_override: bool = False,
     gl_period_override_reason: str | None = None,
     gl_period_posted_by: str | None = None,
     message_id: str | None = None,
     parsing_confirmed: bool = False,
+    **expense_step_override_kwargs: Any,
 ) -> str:
     message_id = message_id or str(uuid4())
     payload = {
@@ -58,8 +72,18 @@ async def enqueue_accounts(
     }
     if override_po_check:
         payload["override_po_check"] = True
+    step_override_flags: dict[str, bool] = {
+        key: bool(expense_step_override_kwargs.get(key))
+        for key in EXPENSE_STEP_OVERRIDE_QUEUE_KEYS
+        if key in expense_step_override_kwargs
+    }
     if override_policy:
-        payload["override_policy"] = True
+        step_override_flags["override_policy"] = True
+    if override_receipt:
+        step_override_flags["override_receipt"] = True
+    for key, enabled in step_override_flags.items():
+        if enabled and key in EXPENSE_STEP_OVERRIDE_QUEUE_KEYS:
+            payload[key] = True
     if gl_period_override:
         payload["gl_period_override"] = True
         if gl_period_override_reason:

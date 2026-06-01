@@ -21,6 +21,7 @@ from app.repositories.expense import ExpenseRepository
 from app.repositories.ledger import LedgerRepository
 from app.schemas.hermes import ExtractExpenseClaimRequest
 from app.services.approval_service import ApprovalService
+from app.services.queue_router import EXPENSE_STEP_OVERRIDE_QUEUE_KEYS
 from app.services.binding_authority_service import BindingAuthorityService, apply_binding_sla
 from app.services.email_context import ensure_attachment_texts
 from app.services.executive_mail_service import ExecutiveMailService
@@ -128,8 +129,9 @@ class ExpenseWorkerService:
         resume_from = _pop_resume_from_step(case)
         meta = case.workflow_metadata or {}
         overrides: dict = dict(meta.get("exp_step_overrides") or {})
-        if message.get("override_policy"):
-            overrides["override_policy"] = True
+        for key in EXPENSE_STEP_OVERRIDE_QUEUE_KEYS:
+            if message.get(key):
+                overrides[key] = True
 
         if resume_from:
             await self._add_timeline(

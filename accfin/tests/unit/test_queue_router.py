@@ -71,3 +71,27 @@ async def test_enqueue_accounts_includes_override_policy_when_set():
     payload = json.loads(redis.rpush.await_args.args[1])
     assert payload["override_policy"] is True
     assert payload["case_id"] == str(case_id)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_accounts_includes_override_receipt_and_kwargs():
+    case_id = uuid.uuid4()
+    redis = AsyncMock()
+    redis.rpush = AsyncMock()
+
+    with (
+        patch("app.services.queue_router.get_redis", return_value=redis),
+        patch("app.services.queue_router.get_settings") as mock_settings,
+    ):
+        mock_settings.return_value.accounts_queue_name = "accounts_queue"
+        await enqueue_accounts(
+            case_id=case_id,
+            case_type="expense_claim",
+            case_number="CAS-EXP-0002",
+            override_receipt=True,
+            override_parsing=True,
+        )
+
+    payload = json.loads(redis.rpush.await_args.args[1])
+    assert payload["override_receipt"] is True
+    assert payload["override_parsing"] is True
