@@ -185,6 +185,9 @@ def assignee_action_by(assignee: User) -> str:
 
 def case_action_by(case: Case, assignee: User | None = None) -> str | None:
     """Dashboard 'Action by' — assignee override, else derived from state and approval tier."""
+    if case.status == "pending_confirmation":
+        return "ACC"
+
     if assignee is not None:
         return assignee_action_by(assignee)
 
