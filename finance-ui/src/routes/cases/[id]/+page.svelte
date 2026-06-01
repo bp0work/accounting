@@ -23,7 +23,9 @@
     escalationActionConfig,
     hasPendingEscalation,
     shouldRetryViaEscalationRespond,
+    isParsingIncompleteReasonCode,
     manualActionButtonClass,
+    parsingIncompleteCommentLabel,
     normalizeEscalationDisplayCopy,
     showManualReviewPanel,
     type EscalationUiAction,
@@ -82,6 +84,8 @@
   let escalationComment = '';
   let manualLoadingAction: EscalationUiAction | null = null;
   let manualActionMessage = '';
+  /** Last focused/clicked escalation action — drives comment label on parsing-incomplete panel. */
+  let manualCommentFocusAction: EscalationUiAction | null = null;
   let expenseCoaAccounts: CoaAccountItem[] = [];
   let expenseCoaLoading = false;
   let liabilityCoaAccounts: CoaAccountItem[] = [];
@@ -329,6 +333,8 @@
   $: reasonCode = item ? caseReasonCode(item) : '';
   $: showActionRequiredPanel = item ? showManualReviewPanel(item, role) : false;
   $: manualActionConfig = item && showActionRequiredPanel ? escalationActionConfig(reasonCode, item) : null;
+  $: isParsingIncompleteEscalation = isParsingIncompleteReasonCode(reasonCode);
+  $: parsingIncompleteMissingFields = item ? manualReviewDetails(item).missing : [];
   $: pendingEscalation = item ? hasPendingEscalation(item) : false;
   $: showCounterpartyLink =
     reasonCode === 'AP_CONTRACT_MISSING' ||
@@ -645,8 +651,13 @@
     }
   }
 
+  function focusManualComment(action: EscalationUiAction) {
+    manualCommentFocusAction = action;
+  }
+
   async function runManualAction(action: EscalationUiAction, label: string) {
     if (!item || manualLoadingAction !== null || retrying || !manualActionConfig) return;
+    focusManualComment(action);
     if (action === 'retry') {
       manualLoadingAction = 'retry';
       manualActionMessage = '';
@@ -965,12 +976,20 @@
           <p class="reason-code"><strong>Reason:</strong> {reasonCode.replaceAll('_', ' ')}</p>
         {/if}
         <p class="action-context">{manualActionConfig.contextMessage}</p>
+        {#if isParsingIncompleteEscalation && parsingIncompleteMissingFields.length > 0}
+          <p class="missing-fields-heading"><strong>Missing fields:</strong></p>
+          <ul class="missing-fields-list">
+            {#each parsingIncompleteMissingFields as field}
+              <li>{extractedFieldLabel(field)}</li>
+            {/each}
+          </ul>
+        {/if}
         {#if showCounterpartyLink}
           <p class="hint">
             <a href="/counterparty-accounts">Open Counterparty Accounts</a>
           </p>
         {/if}
-        {#if manualActionConfig.primary?.action === 'retry' || manualActionConfig.retry || manualActionConfig.primary || manualActionConfig.secondary}
+        {#if !isParsingIncompleteEscalation && (manualActionConfig.primary?.action === 'retry' || manualActionConfig.retry || manualActionConfig.primary || manualActionConfig.secondary)}
           {#if manualActionConfig.commentRequiredForPrimary || manualActionConfig.commentRequiredForReject}
             <label class="escalation-comment">
               {manualActionConfig.commentRequiredForPrimary && reasonCode === 'AP_CURRENCY_CONVERSION_REQUIRED'
@@ -1004,6 +1023,7 @@
               disabled={manualLoadingAction !== null || retrying}
               aria-busy={manualLoadingAction === primaryAction ||
                 (primaryAction === 'retry' && retrying)}
+              onfocus={() => focusManualComment(primaryAction)}
               onclick={() =>
                 runManualAction(manualActionConfig.primary!.action, manualActionConfig.primary!.label)}
             >
@@ -1018,6 +1038,7 @@
               class={manualActionButtonClass('retry', manualActionConfig)}
               disabled={manualLoadingAction !== null || retrying}
               aria-busy={manualLoadingAction === 'retry'}
+              onfocus={() => focusManualComment('retry')}
               onclick={() => runManualAction('retry', manualActionConfig.retry!.label)}
             >
               {manualLoadingAction === 'retry' ? 'Working…' : manualActionConfig.retry.label}
@@ -1030,6 +1051,7 @@
               class={manualActionButtonClass(secondaryAction, manualActionConfig)}
               disabled={manualLoadingAction !== null || retrying}
               aria-busy={manualLoadingAction === secondaryAction}
+              onfocus={() => focusManualComment(secondaryAction)}
               onclick={() =>
                 runManualAction(
                   manualActionConfig.secondary!.action,
@@ -1041,7 +1063,43 @@
                 : manualActionConfig.secondary.label}
             </button>
           {/if}
+          {#if manualActionConfig.tertiary}
+            {@const tertiaryAction = manualActionConfig.tertiary.action}
+            <button
+              type="button"
+              class={manualActionButtonClass(tertiaryAction, manualActionConfig)}
+              disabled={manualLoadingAction !== null || retrying}
+              aria-busy={manualLoadingAction === tertiaryAction}
+              onfocus={() => focusManualComment(tertiaryAction)}
+              onclick={() =>
+                runManualAction(
+                  manualActionConfig.tertiary!.action,
+                  manualActionConfig.tertiary!.label
+                )}
+            >
+              {manualLoadingAction === tertiaryAction
+                ? 'Working…'
+                : manualActionConfig.tertiary.label}
+            </button>
+          {/if}
         </div>
+        {#if isParsingIncompleteEscalation}
+          <label class="escalation-comment">
+            {parsingIncompleteCommentLabel(manualCommentFocusAction)}
+            <textarea
+              bind:value={escalationComment}
+              rows="3"
+              placeholder={manualCommentFocusAction === 'reject'
+                ? 'Required to reject this claim'
+                : 'Optional message to the submitter'}
+              onfocus={() => {
+                if (manualCommentFocusAction == null) {
+                  manualCommentFocusAction = 'request_info';
+                }
+              }}
+            ></textarea>
+          </label>
+        {/if}
         {#if !shouldRetryViaEscalationRespond(item) && manualActionConfig.primary?.action !== 'retry' && !manualActionConfig.retry}
           <p class="hint">
             Email escalation is not pending — fix setup in Finance, then use Retry processing below.
@@ -1061,11 +1119,11 @@
           {#if review.confidence != null}
             <p><strong>Extraction confidence:</strong> {formatConfidence(review.confidence)}</p>
           {/if}
-          {#if review.missing.length > 0}
+          {#if review.missing.length > 0 && !isParsingIncompleteEscalation}
             <p><strong>Missing fields:</strong></p>
             <ul>
               {#each review.missing as field}
-                <li>{field.replaceAll('_', ' ')}</li>
+                <li>{extractedFieldLabel(field)}</li>
               {/each}
             </ul>
           {/if}
