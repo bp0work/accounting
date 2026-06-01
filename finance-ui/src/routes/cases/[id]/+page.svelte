@@ -323,11 +323,19 @@
   $: reviewSnapshot = item ? manualReviewDetails(item) : { missing: [], confidence: null, extracted: {} };
   $: coaLabelResolutionKey = `${expenseCoaAccounts.length}:${reviewCoaAccounts.length}:${liabilityCoaAccounts.length}`;
   $: showTeachPanel =
-    (item?.status === 'manual_review' || item?.status === 'on_hold') &&
-    reviewSnapshot.missing.length > 0 &&
     vendorName.length > 0 &&
-    (item.type !== 'expense_claim' ||
-      Boolean(item?.workflow_metadata?.parsing_confirmed_at));
+    (item?.status === 'pending_confirmation' ||
+      ((item?.status === 'manual_review' || item?.status === 'on_hold') &&
+        reviewSnapshot.missing.length > 0 &&
+        (item.type !== 'expense_claim' ||
+          Boolean(item?.workflow_metadata?.parsing_confirmed_at))));
+  $: teachFieldNames = (() => {
+    if (!item || !showTeachPanel) return [] as string[];
+    if (item.status === 'pending_confirmation' && reviewSnapshot.missing.length === 0) {
+      return ['document_date', 'document_number', 'total_amount', 'tax_amount'];
+    }
+    return reviewSnapshot.missing;
+  })();
   $: canRetryWithHints = showTeachPanel && savedHintFields.size > 0;
   $: isExpenseConfirm = item?.type === 'expense_claim';
   $: canWriteParsingConfirm = isExpenseConfirm
@@ -393,7 +401,7 @@
   }
 
   $: if (item && showTeachPanel) {
-    const names = reviewSnapshot.missing;
+    const names = teachFieldNames;
     const key = `${item.id}:${names.join(',')}`;
     if (key !== teachFieldsKey) {
       teachFieldsKey = key;
@@ -1164,84 +1172,6 @@
           {/if}
         </section>
       {/if}
-      {#if showTeachPanel}
-        <section class="teach-box teach-box-secondary">
-          <h2>Vendor extraction hints</h2>
-          <p class="hint teach-box-lead">
-            Help the agent find these fields on future documents from this vendor. This is not
-            the primary way to resolve a stuck case — use the parsing confirmation form when the
-            case is awaiting confirmation.
-          </p>
-          <button
-            type="button"
-            class="teach-toggle"
-            onclick={() => (teachPanelExpanded = !teachPanelExpanded)}
-          >
-            {teachPanelExpanded ? 'Hide hints' : 'Show hints for future documents'}
-          </button>
-          {#if teachPanelExpanded}
-            <p class="hint">
-              Vendor: <strong>{vendorName}</strong>. Map how each missing field appears on this
-              vendor&apos;s documents.
-            </p>
-            {#each teachFields as row}
-              <div class="teach-field">
-                <h3>{row.field_name.replaceAll('_', ' ')}</h3>
-                <label>
-                  {vendorHintFieldLabelInputLabel(row.field_name)}
-                  <input
-                    type="text"
-                    bind:value={row.field_label}
-                    placeholder="e.g. Date and time"
-                  />
-                </label>
-                <label>
-                  {vendorHintExampleValueInputLabel(row.field_name)}
-                  <input
-                    type="text"
-                    bind:value={row.example_value}
-                    placeholder="e.g. 24 Apr 2025 07:42 PM"
-                  />
-                </label>
-                {#if DATE_FIELD_NAMES.has(row.field_name)}
-                  <label>
-                    {vendorHintDateFormatInputLabel(row.field_name)}
-                    <input
-                      type="text"
-                      bind:value={row.date_format}
-                      placeholder="e.g. DD Mon YYYY HH:MM AM/PM"
-                    />
-                  </label>
-                {/if}
-                <button
-                  type="button"
-                  class="save-hint"
-                  disabled={row.saving}
-                  onclick={() => saveHint(row)}
-                >
-                  {row.saving ? 'Saving…' : 'Save hint'}
-                </button>
-              </div>
-            {/each}
-            {#if teachMessage}
-              <p class="hint success">{teachMessage}</p>
-            {/if}
-            {#if canRetryWithHints}
-              <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-                {retrying ? 'Requeuing…' : 'Retry with hints'}
-              </button>
-            {:else if canRetryTransientHermes}
-              <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
-                {retrying ? 'Requeuing…' : 'Retry processing'}
-              </button>
-              <p class="hint">
-                Hermes timed out or was temporarily unavailable. Retry requeues this case after
-                Ollama is healthy.
-              </p>
-            {/if}
-          {/if}
-        </section>
-      {/if}
     {/if}
     {#if item.status === 'pending_confirmation'}
       {@const parsingExtracted =
@@ -1453,6 +1383,88 @@
         {/if}
         {#if parsingMessage}
           <p class="hint success">{parsingMessage}</p>
+        {/if}
+      </section>
+    {/if}
+    {#if showTeachPanel}
+      <section class="teach-box teach-box-secondary">
+        <h2>Vendor extraction hints</h2>
+        <p class="hint teach-box-lead">
+          Help the agent find these fields on future documents from this vendor.
+          {#if item.status === 'pending_confirmation'}
+            Save hints before confirming if extraction missed labels on this vendor&apos;s layout.
+          {:else}
+            This is not the primary way to resolve a stuck case — use the parsing confirmation
+            form when the case is awaiting confirmation.
+          {/if}
+        </p>
+        <button
+          type="button"
+          class="teach-toggle"
+          onclick={() => (teachPanelExpanded = !teachPanelExpanded)}
+        >
+          {teachPanelExpanded ? 'Hide hints' : 'Show hints for future documents'}
+        </button>
+        {#if teachPanelExpanded}
+          <p class="hint">
+            Vendor: <strong>{vendorName}</strong>. Map how each field appears on this vendor&apos;s
+            documents.
+          </p>
+          {#each teachFields as row}
+            <div class="teach-field">
+              <h3>{row.field_name.replaceAll('_', ' ')}</h3>
+              <label>
+                {vendorHintFieldLabelInputLabel(row.field_name)}
+                <input
+                  type="text"
+                  bind:value={row.field_label}
+                  placeholder="e.g. Date and time"
+                />
+              </label>
+              <label>
+                {vendorHintExampleValueInputLabel(row.field_name)}
+                <input
+                  type="text"
+                  bind:value={row.example_value}
+                  placeholder="e.g. 24 Apr 2025 07:42 PM"
+                />
+              </label>
+              {#if DATE_FIELD_NAMES.has(row.field_name)}
+                <label>
+                  {vendorHintDateFormatInputLabel(row.field_name)}
+                  <input
+                    type="text"
+                    bind:value={row.date_format}
+                    placeholder="e.g. DD Mon YYYY HH:MM AM/PM"
+                  />
+                </label>
+              {/if}
+              <button
+                type="button"
+                class="save-hint"
+                disabled={row.saving}
+                onclick={() => saveHint(row)}
+              >
+                {row.saving ? 'Saving…' : 'Save hint'}
+              </button>
+            </div>
+          {/each}
+          {#if teachMessage}
+            <p class="hint success">{teachMessage}</p>
+          {/if}
+          {#if canRetryWithHints}
+            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
+              {retrying ? 'Requeuing…' : 'Retry with hints'}
+            </button>
+          {:else if canRetryTransientHermes}
+            <button type="button" class="retry" disabled={retrying} onclick={handleRetry}>
+              {retrying ? 'Requeuing…' : 'Retry processing'}
+            </button>
+            <p class="hint">
+              Hermes timed out or was temporarily unavailable. Retry requeues this case after Ollama
+              is healthy.
+            </p>
+          {/if}
         {/if}
       </section>
     {/if}

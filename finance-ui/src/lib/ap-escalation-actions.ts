@@ -156,6 +156,7 @@ export function isManualReviewQueueCase(
   roleName: string | undefined | null
 ): boolean {
   if (!canUseManualReviewActions(roleName)) return false;
+  if (caseItem.status === 'pending_confirmation') return true;
   if (caseItem.status !== 'manual_review' && caseItem.status !== 'on_hold') return false;
   return hasPendingEscalation(caseItem);
 }

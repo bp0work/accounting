@@ -54,3 +54,13 @@ async def fetch_active_hints(
 ) -> list[VendorExtractionHint]:
     repo = VendorExtractionHintRepository(session)
     return await repo.list_for_vendor(tenant_id, vendor_name)
+
+
+async def get_hints_for_vendor(
+    session: AsyncSession,
+    vendor_name: str,
+    *,
+    tenant_id: UUID,
+) -> list[VendorExtractionHint]:
+    """Active hints for a vendor (used by workers before Hermes extraction)."""
+    return await fetch_active_hints(session, tenant_id=tenant_id, vendor_name=vendor_name)
