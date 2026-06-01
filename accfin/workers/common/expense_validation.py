@@ -159,7 +159,7 @@ def check_expense_policy(
     limit: Decimal | None = None
 
     if policy_name is None:
-        if (submission_date - (parse_document_date(extracted) or submission_date)).days > 365:
+        if (submission_date - (parse_document_date(extracted) or submission_date)).days > 548:
             return False, category, None
         return True, category, None
 
