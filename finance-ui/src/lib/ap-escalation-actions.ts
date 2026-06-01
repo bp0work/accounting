@@ -7,12 +7,48 @@ export type EscalationUiAction = 'approve' | 'reject' | 'request_info' | 'retry'
 export type EscalationActionConfig = {
   primary: { label: string; action: EscalationUiAction } | null;
   secondary: { label: string; action: EscalationUiAction } | null;
+  tertiary?: { label: string; action: EscalationUiAction } | null;
   /** Extra Retry when primary/secondary are other actions (e.g. Provide Details + Reject). */
   retry?: { label: string } | null;
   commentRequiredForPrimary: boolean;
   commentRequiredForReject: boolean;
   contextMessage: string;
 };
+
+const PARSING_INCOMPLETE_CONTEXT =
+  'The agent could not extract all required fields. Fill in the missing details yourself, request them from the submitter, or reject the claim.';
+
+export function isParsingIncompleteReasonCode(code: string): boolean {
+  return code === 'EXP_PARSING_INCOMPLETE' || code === 'AP_PARSING_INCOMPLETE';
+}
+
+function parsingIncompleteEscalationConfig(): EscalationActionConfig {
+  return {
+    primary: { label: 'Fill in missing fields', action: 'retry' },
+    secondary: { label: 'Request from submitter', action: 'request_info' },
+    tertiary: { label: 'Reject', action: 'reject' },
+    retry: null,
+    commentRequiredForPrimary: false,
+    commentRequiredForReject: true,
+    contextMessage: PARSING_INCOMPLETE_CONTEXT,
+  };
+}
+
+/** Comment field label for parsing-incomplete three-action panel (below buttons). */
+export function parsingIncompleteCommentLabel(
+  focusAction: EscalationUiAction | null
+): string {
+  switch (focusAction) {
+    case 'reject':
+      return 'Rejection reason (required)';
+    case 'request_info':
+      return 'Message to submitter (optional)';
+    case 'retry':
+      return 'Note (optional)';
+    default:
+      return 'Message to submitter (optional)';
+  }
+}
 
 function withSetupRetry(
   config: Omit<EscalationActionConfig, 'retry'>
@@ -35,6 +71,9 @@ export function manualActionButtonClass(
   action: EscalationUiAction,
   config: EscalationActionConfig
 ): string {
+  if (config.tertiary && config.primary?.action === 'retry' && action === 'retry') {
+    return 'approve';
+  }
   const peerRetryReject =
     config.primary?.action === 'retry' && config.secondary?.action === 'reject';
   if (peerRetryReject && (action === 'retry' || action === 'reject')) {
@@ -154,10 +193,7 @@ function contextForCode(code: string, caseItem: CaseItem): string {
     case 'AP_CURRENCY_CONVERSION_REQUIRED':
       return `Foreign currency on this invoice requires an exchange rate (e.g. 1 USD = 1.35 SGD). Enter the rate in the comment field and click Apply Rate & Continue.`;
     case 'AP_PARSING_INCOMPLETE':
-      return (
-        summary ||
-        `Parsing is incomplete for case ${caseNum}. Provide missing details to reprocess, or ask the sender to resubmit.`
-      );
+      return PARSING_INCOMPLETE_CONTEXT;
     case 'AP_DUPLICATE_FOUND':
       return `A possible duplicate invoice was detected. Use Override & Continue if this is not a duplicate, or Reject if it is.`;
     case 'EXP_SUBMITTER_NOT_FOUND':
@@ -177,7 +213,7 @@ function contextForCode(code: string, caseItem: CaseItem): string {
     case 'EXP_COA_NOT_FOUND':
       return 'Expense GL account could not be mapped. Confirm Chart of Accounts setup, then continue.';
     case 'EXP_PARSING_INCOMPLETE':
-      return summary || `Expense parsing incomplete for case ${caseNum}. Provide details or reject.`;
+      return PARSING_INCOMPLETE_CONTEXT;
     case 'EXP_DUPLICATE':
       return `Possible duplicate expense claim. Use Override & Continue if this is not a duplicate, or Reject if it is.`;
     case 'PERIOD_CLOSED':
@@ -248,13 +284,7 @@ export function escalationActionConfig(
         contextMessage,
       };
     case 'AP_PARSING_INCOMPLETE':
-      return withSetupRetry({
-        primary: { label: 'Provide Details', action: 'request_info' },
-        secondary: { label: 'Ask sender to resubmit', action: 'reject' },
-        commentRequiredForPrimary: true,
-        commentRequiredForReject: true,
-        contextMessage,
-      });
+      return parsingIncompleteEscalationConfig();
     case 'EXP_SUBMITTER_INACTIVE':
       return {
         primary: { label: 'Retry', action: 'retry' },
@@ -313,13 +343,7 @@ export function escalationActionConfig(
         contextMessage,
       };
     case 'EXP_PARSING_INCOMPLETE':
-      return withSetupRetry({
-        primary: { label: 'Provide Details', action: 'request_info' },
-        secondary: { label: 'Ask sender to resubmit', action: 'reject' },
-        commentRequiredForPrimary: true,
-        commentRequiredForReject: true,
-        contextMessage,
-      });
+      return parsingIncompleteEscalationConfig();
     case 'HERMES_TIMEOUT':
     case 'HERMES_UNAVAILABLE':
       return {
