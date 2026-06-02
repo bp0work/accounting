@@ -25,8 +25,7 @@
   let activeStatusFilter: string | null = null;
   let error = '';
   let loading = true;
-  let lastUpdatedAt: Date | null = null;
-  let secondsSinceUpdate = 0;
+  let countdown = 60;
   let tickTimer: ReturnType<typeof setInterval> | null = null;
   let statsTimer: ReturnType<typeof setInterval> | null = null;
   let casesTimer: ReturnType<typeof setInterval> | null = null;
@@ -103,8 +102,7 @@
   async function loadStats() {
     try {
       stats = await fetchDashboardStats();
-      lastUpdatedAt = new Date();
-      secondsSinceUpdate = 0;
+      countdown = 60;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load dashboard stats';
     }
@@ -145,9 +143,7 @@
     }, 30_000);
 
     tickTimer = setInterval(() => {
-      if (lastUpdatedAt) {
-        secondsSinceUpdate = Math.floor((Date.now() - lastUpdatedAt.getTime()) / 1000);
-      }
+      countdown = Math.max(0, countdown - 1);
     }, 1000);
 
     onCaseStatusChanged = () => {
@@ -168,10 +164,7 @@
 
 <h1>Operations dashboard</h1>
 <p class="subtitle">
-  Agent performance, case status overview, and recent activity.
-  {#if lastUpdatedAt}
-    <span class="updated">Last updated: {secondsSinceUpdate}s ago</span>
-  {/if}
+  <span class="updated">Next update in: {countdown}s</span>
 </p>
 
 {#if error}<p class="error">{error}</p>{/if}

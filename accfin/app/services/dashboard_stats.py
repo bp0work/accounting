@@ -221,7 +221,7 @@ async def _count_cases_by_type_status(
 
 async def _action_required_count(session: AsyncSession, user: TokenData) -> int:
     role = (user.role or "").lower()
-    if role == "accounts_manager":
+    if role in {"accounts_manager", "accounts_clerk"}:
         result = await session.execute(
             select(func.count())
             .select_from(Case)

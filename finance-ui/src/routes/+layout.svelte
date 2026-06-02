@@ -85,7 +85,12 @@
 
   function dashboardActionCountForRole(role: string, count: number): number {
     if (role === 'finance_manager') return 0;
-    if (role === 'accounts_manager' || role === 'cfo' || role === 'finance_director') {
+    if (
+      role === 'accounts_manager' ||
+      role === 'accounts_clerk' ||
+      role === 'cfo' ||
+      role === 'finance_director'
+    ) {
       return count;
     }
     return 0;
