@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.15.08-parsing-autocomplete"
+        return "0.15.09-dashboard-redesign"
 
     @property
     def edge_public_base_url(self) -> str:

@@ -97,8 +97,10 @@ export function fetchDashboard() {
   return apiFetch<CaseDashboard>('/cases/dashboard');
 }
 
-export function listCases(limit = 200) {
-  return apiFetch<{ data: CaseItem[] }>(`/cases?limit=${limit}`);
+export function listCases(limit = 200, status?: string) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (status) q.set('status', status);
+  return apiFetch<{ data: CaseItem[] }>(`/cases?${q}`);
 }
 
 export function fetchCase(caseId: string) {

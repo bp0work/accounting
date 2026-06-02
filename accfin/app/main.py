@@ -10,6 +10,7 @@ from app.api.routes import (
     auth,
     cases,
     coa,
+    dashboard,
     events,
     expense_claims,
     health,
@@ -76,6 +77,7 @@ api_router.include_router(admin.router)
 api_router.include_router(admin_counterparty.router)
 api_router.include_router(mail.router)
 api_router.include_router(cases.router)
+api_router.include_router(dashboard.router)
 api_router.include_router(vendor_extraction_hints.router)
 api_router.include_router(vendor_suggestions.router)
 api_router.include_router(reconciliation.router)
