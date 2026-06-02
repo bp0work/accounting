@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.15.05-reversal-cleanup"
+        return "0.15.06-receipt-age-copy"
 
     @property
     def edge_public_base_url(self) -> str:
