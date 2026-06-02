@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.redis_client import get_redis
 from app.models.case import Case, CaseTimeline
+from app.models.executive_mail import CaseEscalation
 from app.models.mail import Email, MailGatewayConfig
 from app.schemas.auth import TokenData
 from app.schemas.dashboard import (
@@ -20,7 +21,10 @@ from app.schemas.dashboard import (
     DashboardQueueDepths,
     DashboardStatsResponse,
     GatewayPerformance,
+    InterventionStat,
+    KpiPeriod,
     WorkerPerformance,
+    WorkerKpi,
 )
 
 SGT = ZoneInfo("Asia/Singapore")
@@ -56,6 +60,49 @@ AR_CASE_TYPES = (
 
 OUTCOME_STATUSES = ("posted", "rejected", "case_rejected")
 
+KPI_PERIOD_DAYS: tuple[tuple[str, int], ...] = (("30d", 30), ("60d", 60), ("90d", 90))
+
+EXPENSE_INTERVENTION_MAP: dict[str, list[str]] = {
+    "unable_to_parse": ["EXP_PARSING_INCOMPLETE"],
+    "duplicate_document": ["EXP_DUPLICATE"],
+    "counterparty_not_found": ["EXP_SUBMITTER_NOT_FOUND"],
+    "document_not_validated": ["EXP_SENDER_NOT_VALIDATED"],
+    "exchange_rate_issue": ["EXP_CURRENCY_CONVERSION_REQUIRED"],
+    "policy_exceeded": ["EXP_POLICY_EXCEEDED", "EXP_RECEIPT_INVALID"],
+    "missing_travel_requisition": ["EXP_MISSING_TRAVEL_REQUISITION"],
+    "out_of_period": ["PERIOD_CLOSED"],
+    "coa_mapping": ["EXP_COA_NOT_FOUND"],
+    "journal_entry": ["JOURNAL_ENTRY_FAILED"],
+}
+
+AP_INTERVENTION_MAP: dict[str, list[str]] = {
+    "unable_to_parse": ["AP_PARSING_INCOMPLETE"],
+    "duplicate_document": ["AP_DUPLICATE"],
+    "counterparty_not_found": ["AP_VENDOR_NOT_FOUND"],
+    "document_not_validated": ["AP_SENDER_NOT_VALIDATED"],
+    "exchange_rate_issue": ["AP_CURRENCY_CONVERSION_REQUIRED"],
+    "missing_supporting_doc": [
+        "AP_MISSING_PO",
+        "AP_MISSING_CONTRACT",
+        "AP_MISSING_GRN",
+        "AP_MISSING_DO",
+    ],
+    "out_of_period": ["PERIOD_CLOSED"],
+    "coa_mapping": ["AP_COA_NOT_FOUND"],
+    "journal_entry": ["JOURNAL_ENTRY_FAILED"],
+}
+
+AR_INTERVENTION_MAP: dict[str, list[str]] = {
+    "unable_to_parse": ["AR_PARSING_INCOMPLETE"],
+    "duplicate_document": ["AR_DUPLICATE"],
+    "counterparty_not_found": ["AR_CUSTOMER_NOT_FOUND"],
+    "credit_term_exposure": ["AR_CREDIT_LIMIT_EXCEEDED", "AR_OVERDUE"],
+    "exchange_rate_issue": ["AR_CURRENCY_CONVERSION_REQUIRED"],
+    "out_of_period": ["PERIOD_CLOSED"],
+    "coa_mapping": ["AR_COA_NOT_FOUND"],
+    "journal_entry": ["JOURNAL_ENTRY_FAILED"],
+}
+
 
 def sgt_period_bounds(now: datetime | None = None) -> DashboardPeriod:
     """Today and week start at midnight SGT."""
@@ -79,6 +126,34 @@ def compute_success_rate(posted: int, rejected: int, case_rejected: int) -> floa
     if total == 0:
         return 1.0
     return round(posted / total, 4)
+
+
+def _intervention_pct(count: int, total_cases: int) -> float:
+    if total_cases <= 0:
+        return 0.0
+    return round((count / total_cases) * 100, 1)
+
+
+def _aggregate_interventions(
+    *,
+    reason_counts: dict[str, int],
+    total_cases: int,
+    intervention_map: dict[str, list[str]],
+) -> dict[str, InterventionStat]:
+    interventions: dict[str, InterventionStat] = {}
+    total_interventions = 0
+    for key, reason_codes in intervention_map.items():
+        count = sum(int(reason_counts.get(code, 0)) for code in reason_codes)
+        total_interventions += count
+        interventions[key] = InterventionStat(
+            count=count,
+            pct=_intervention_pct(count, total_cases),
+        )
+    interventions["total_interventions"] = InterventionStat(
+        count=total_interventions,
+        pct=_intervention_pct(total_interventions, total_cases),
+    )
+    return interventions
 
 
 async def _count_emails_since(session: AsyncSession, since: datetime) -> int:
@@ -262,6 +337,77 @@ async def _queue_depths() -> DashboardQueueDepths:
     )
 
 
+async def _count_cases_for_period(
+    session: AsyncSession,
+    *,
+    case_types: tuple[str, ...],
+    cutoff: datetime,
+) -> int:
+    result = await session.execute(
+        select(func.count())
+        .select_from(Case)
+        .where(Case.type.in_(case_types), Case.created_at >= cutoff)
+    )
+    return int(result.scalar_one() or 0)
+
+
+async def _reason_code_counts_for_period(
+    session: AsyncSession,
+    *,
+    case_types: tuple[str, ...],
+    reason_codes: list[str],
+    cutoff: datetime,
+) -> dict[str, int]:
+    if not reason_codes:
+        return {}
+    result = await session.execute(
+        select(
+            CaseEscalation.reason_code,
+            func.count(func.distinct(CaseEscalation.case_id)),
+        )
+        .select_from(CaseEscalation)
+        .join(Case, Case.id == CaseEscalation.case_id)
+        .where(
+            Case.type.in_(case_types),
+            CaseEscalation.created_at >= cutoff,
+            CaseEscalation.reason_code.in_(reason_codes),
+        )
+        .group_by(CaseEscalation.reason_code)
+    )
+    return {str(row[0]): int(row[1]) for row in result.all() if row[0]}
+
+
+async def _worker_kpi(
+    session: AsyncSession,
+    *,
+    case_types: tuple[str, ...],
+    intervention_map: dict[str, list[str]],
+) -> WorkerKpi:
+    now = datetime.now(UTC)
+    all_reason_codes = [code for codes in intervention_map.values() for code in codes]
+    periods: dict[str, KpiPeriod] = {}
+    for label, days in KPI_PERIOD_DAYS:
+        cutoff = now - timedelta(days=days)
+        total_cases = await _count_cases_for_period(
+            session, case_types=case_types, cutoff=cutoff
+        )
+        reason_counts = await _reason_code_counts_for_period(
+            session,
+            case_types=case_types,
+            reason_codes=all_reason_codes,
+            cutoff=cutoff,
+        )
+        periods[label] = KpiPeriod(
+            total_cases=total_cases,
+            interventions=_aggregate_interventions(
+                reason_counts=reason_counts,
+                total_cases=total_cases,
+                intervention_map=intervention_map,
+            ),
+        )
+    return WorkerKpi.model_validate(periods)
+
+
 async def _build_worker_performance(
     session: AsyncSession,
     *,
@@ -293,6 +439,23 @@ async def _build_worker_performance(
         )
         worker.pending_approval = await _count_cases_by_type_status(
             session, case_types=EXPENSE_CASE_TYPES, status="pending_approval"
+        )
+        worker.kpi = await _worker_kpi(
+            session,
+            case_types=EXPENSE_CASE_TYPES,
+            intervention_map=EXPENSE_INTERVENTION_MAP,
+        )
+    elif key == "ap_worker":
+        worker.kpi = await _worker_kpi(
+            session,
+            case_types=AP_CASE_TYPES,
+            intervention_map=AP_INTERVENTION_MAP,
+        )
+    elif key == "ar_worker":
+        worker.kpi = await _worker_kpi(
+            session,
+            case_types=AR_CASE_TYPES,
+            intervention_map=AR_INTERVENTION_MAP,
         )
     return worker
 

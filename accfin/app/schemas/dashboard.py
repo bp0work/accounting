@@ -5,6 +5,22 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class InterventionStat(BaseModel):
+    count: int = 0
+    pct: float = 0.0
+
+
+class KpiPeriod(BaseModel):
+    total_cases: int = 0
+    interventions: dict[str, InterventionStat] = Field(default_factory=dict)
+
+
+class WorkerKpi(BaseModel):
+    d30: KpiPeriod = Field(alias="30d")
+    d60: KpiPeriod = Field(alias="60d")
+    d90: KpiPeriod = Field(alias="90d")
+
+
 class GatewayPerformance(BaseModel):
     emails_today: int = 0
     emails_this_week: int = 0
@@ -21,6 +37,7 @@ class WorkerPerformance(BaseModel):
     last_activity_at: datetime | None = None
     pending_confirmation: int | None = None
     pending_approval: int | None = None
+    kpi: WorkerKpi | None = None
 
 
 class AgentPerformance(BaseModel):
