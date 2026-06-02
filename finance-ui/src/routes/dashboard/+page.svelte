@@ -387,8 +387,8 @@
 
     </div>
 
-    <div class="agent-row row-1">
-      <article class="agent-card">
+    <div class="agent-row row-3">
+      <article class="agent-card expense-card">
         <h3>Expense Worker</h3>
         <dl class="metrics">
           <div><dt>Cases today</dt><dd>{formatCount(stats.agent_performance.expense_worker.cases_today)}</dd></div>
@@ -554,8 +554,14 @@
   .agent-row.row-2 {
     grid-template-columns: repeat(2, minmax(260px, 1fr));
   }
-  .agent-row.row-1 {
-    grid-template-columns: minmax(260px, 1fr);
+  .agent-row.row-3 {
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+  }
+  .agent-row.row-3 .expense-card {
+    grid-column: 1 / span 2;
+    justify-self: center;
+    width: 100%;
+    max-width: calc((100% - 1rem) / 2);
   }
   .agent-card {
     border: 1px solid #e2e8f0;
@@ -707,8 +713,12 @@
   }
   @media (max-width: 1100px) {
     .agent-row.row-2,
-    .agent-row.row-1 {
+    .agent-row.row-3 {
       grid-template-columns: 1fr;
+    }
+    .agent-row.row-3 .expense-card {
+      grid-column: auto;
+      max-width: 100%;
     }
   }
 </style>
