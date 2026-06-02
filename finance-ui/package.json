@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.15.08-parsing-autocomplete",
+  "version": "0.15.09-dashboard-redesign",
   "private": true,
   "type": "module",
   "scripts": {
