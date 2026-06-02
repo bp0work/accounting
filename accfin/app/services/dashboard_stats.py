@@ -50,7 +50,7 @@ WORKER_ACTORS: dict[str, str] = {
 }
 
 EXPENSE_CASE_TYPES = ("expense_claim",)
-AP_CASE_TYPES = ("ap_invoice", "ap_po_validation", "ap_payment_proposal")
+AP_CASE_TYPES = ("ap_invoice", "invoice", "ap_po_validation", "ap_payment_proposal")
 AR_CASE_TYPES = (
     "ar_invoice",
     "ar_payment_advice",
@@ -93,6 +93,7 @@ AP_INTERVENTION_MAP: dict[str, list[str]] = {
         "AP_MISSING_CONTRACT",
         "AP_MISSING_GRN",
         "AP_MISSING_DO",
+        "AP_CONTRACT_MISSING",
     ],
     "out_of_period": ["PERIOD_CLOSED"],
     "coa_mapping": ["AP_COA_NOT_FOUND"],
@@ -105,7 +106,7 @@ AR_INTERVENTION_MAP: dict[str, list[str]] = {
     "counterparty_not_found": ["AR_CUSTOMER_NOT_FOUND"],
     "credit_term_exposure": ["AR_CREDIT_LIMIT_EXCEEDED", "AR_OVERDUE"],
     "exchange_rate_issue": ["AR_CURRENCY_CONVERSION_REQUIRED"],
-    "out_of_period": ["PERIOD_CLOSED"],
+    "out_of_period": ["PERIOD_CLOSED", "EXP_GL_PERIOD_CLOSED"],
     "coa_mapping": ["AR_COA_NOT_FOUND"],
     "journal_entry": ["JOURNAL_ENTRY_FAILED"],
 }

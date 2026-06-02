@@ -83,6 +83,10 @@ def test_kpi_expense_reason_code_mapping() -> None:
         "EXP_MISSING_TRAVEL_REQUISITION"
     ]
     assert "EXP_POLICY_EXCEEDED" in EXPENSE_INTERVENTION_MAP["policy_exceeded"]
+    assert EXPENSE_INTERVENTION_MAP["out_of_period"] == [
+        "PERIOD_CLOSED",
+        "EXP_GL_PERIOD_CLOSED",
+    ]
 
 
 def test_kpi_ap_reason_code_mapping() -> None:
@@ -91,7 +95,9 @@ def test_kpi_ap_reason_code_mapping() -> None:
         "AP_MISSING_CONTRACT",
         "AP_MISSING_GRN",
         "AP_MISSING_DO",
+        "AP_CONTRACT_MISSING",
     ]
+    assert AP_INTERVENTION_MAP["document_not_validated"] == ["AP_SENDER_NOT_VALIDATED"]
 
 
 def test_kpi_ar_reason_code_mapping() -> None:
