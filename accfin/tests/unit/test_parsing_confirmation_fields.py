@@ -16,6 +16,19 @@ def test_normalize_extracted_fields_includes_gl_account_id_when_set() -> None:
     assert out["gl_account_id"] == "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 
+def test_normalize_extracted_fields_includes_document_validated() -> None:
+    out = normalize_extracted_fields(
+        {
+            "document_type": "receipt",
+            "vendor_name": "Cafe",
+            "total_amount": "10.00",
+            "currency": "SGD",
+            "document_validated": True,
+        }
+    )
+    assert out["document_validated"] == "true"
+
+
 def test_normalize_extracted_fields_gl_account_id_null_when_missing() -> None:
     out = normalize_extracted_fields(
         {
