@@ -40,6 +40,7 @@
     saveVendorExtractionHint,
     type VendorExtractionHintCreate,
   } from '$lib/api/vendor-hints';
+  import VendorAutocomplete from '$lib/components/VendorAutocomplete.svelte';
   import {
     vendorHintDateFormatInputLabel,
     vendorHintExampleValueInputLabel,
@@ -89,6 +90,9 @@
   let savedHintFields = new Set<string>();
   /** Active hints loaded from API for the current vendor name. */
   let vendorHintCount = 0;
+  let vendorHintPlaceholders: { document_date?: string; document_number?: string } = {};
+  let vendorHintsLoadedNotice = '';
+  let reviewVendorName = '';
   let reExtracting = false;
   let teachMessage = '';
   let parsingLoadingAction: 'confirm' | 'reject' | null = null;
@@ -371,7 +375,7 @@
     return vendor != null ? String(vendor).trim() : '';
   })();
 
-  $: vendorName = (parsingForm.vendor_name || extractedVendorName || '').trim();
+  $: vendorName = (parsingForm.vendor_name || reviewVendorName || extractedVendorName || '').trim();
   $: reviewSnapshot = item ? manualReviewDetails(item) : { missing: [], confidence: null, extracted: {} };
   $: coaLabelResolutionKey = `${expenseCoaAccounts.length}:${reviewCoaAccounts.length}:${liabilityCoaAccounts.length}`;
   $: showTeachPanel =
@@ -407,25 +411,70 @@
     hasVendorHints &&
     hasReExtractPermission(item);
 
+  $: canEditReviewVendor =
+    !!item &&
+    (item.status === 'manual_review' || item.status === 'on_hold') &&
+    (hasPermission('cases:write') ||
+      (item.type === 'expense_claim' && hasPermission('expenses:write')));
+
   async function loadVendorHints(vendor: string) {
     const name = vendor.trim();
     if (!name) {
       vendorHintCount = 0;
+      vendorHintPlaceholders = {};
+      vendorHintsLoadedNotice = '';
       return;
     }
     try {
       const rows = await listVendorExtractionHints(name);
-      const fromApi = rows.filter((h) => h.is_active).length;
-      vendorHintCount = Math.max(fromApi, savedHintFields.size);
+      const active = rows.filter((h) => h.is_active);
+      vendorHintCount = Math.max(active.length, savedHintFields.size);
+
+      const placeholders: { document_date?: string; document_number?: string } = {};
+      if (!parsingForm.document_date) {
+        const dateHint = active.find((h) => h.field_name === 'document_date');
+        if (dateHint?.example_value) {
+          const label = dateHint.field_label?.trim();
+          placeholders.document_date = label
+            ? `${label} (e.g. ${dateHint.example_value})`
+            : `e.g. ${dateHint.example_value}`;
+        }
+      }
+      if (!parsingForm.document_number) {
+        const numberHint = active.find((h) => h.field_name === 'document_number');
+        if (numberHint?.field_label?.trim()) {
+          placeholders.document_number = numberHint.field_label.trim();
+        }
+      }
+      vendorHintPlaceholders = placeholders;
+      vendorHintsLoadedNotice = active.length > 0 ? `Hints loaded for ${name}` : '';
     } catch {
       vendorHintCount = savedHintFields.size > 0 ? savedHintFields.size : 0;
+      vendorHintPlaceholders = {};
+      vendorHintsLoadedNotice = '';
     }
+  }
+
+  async function handleVendorSelect(name: string) {
+    parsingForm = { ...parsingForm, vendor_name: name };
+    reviewVendorName = name;
+    await loadVendorHints(name);
   }
 
   $: if (vendorName) {
     void loadVendorHints(vendorName);
   } else {
     vendorHintCount = 0;
+    vendorHintPlaceholders = {};
+    vendorHintsLoadedNotice = '';
+  }
+  $: if (
+    item &&
+    (item.status === 'manual_review' || item.status === 'on_hold') &&
+    !reviewVendorName &&
+    extractedVendorName
+  ) {
+    reviewVendorName = extractedVendorName;
   }
   $: canWriteParsingConfirm = isExpenseConfirm
     ? hasPermission('expenses:write')
@@ -1413,10 +1462,36 @@
               <dl class="extracted">
                 {#each reviewExtractedRows as row (row.key)}
                   <dt>{extractedFieldLabel(row.key)}</dt>
-                  <dd>{formatExtractedReviewValue(row.key, row.value)}</dd>
+                  <dd>
+                    {#if row.key === 'vendor_name' && canEditReviewVendor}
+                      <VendorAutocomplete
+                        bind:value={reviewVendorName}
+                        onSelect={handleVendorSelect}
+                        placeholder="Type to search vendors..."
+                      />
+                      {#if vendorHintsLoadedNotice}
+                        <span class="hint field-placeholder">{vendorHintsLoadedNotice}</span>
+                      {/if}
+                    {:else}
+                      {formatExtractedReviewValue(row.key, row.value)}
+                    {/if}
+                  </dd>
                 {/each}
               </dl>
             {/key}
+          {/if}
+          {#if canEditReviewVendor && review.missing.includes('vendor_name') && !reviewExtractedRows.some((row) => row.key === 'vendor_name')}
+            <label>
+              Vendor name
+              <VendorAutocomplete
+                bind:value={reviewVendorName}
+                onSelect={handleVendorSelect}
+                placeholder="Type to search vendors..."
+              />
+              {#if vendorHintsLoadedNotice}
+                <span class="hint field-placeholder">{vendorHintsLoadedNotice}</span>
+              {/if}
+            </label>
           {/if}
         </section>
       {/if}
@@ -1456,11 +1531,18 @@
             </label>
             <label>
               Document number
-              <input type="text" bind:value={parsingForm.document_number} />
+              <input
+                type="text"
+                bind:value={parsingForm.document_number}
+                placeholder={vendorHintPlaceholders.document_number ?? ''}
+              />
             </label>
             <label>
               Document date
               <input type="date" bind:value={parsingForm.document_date} />
+              {#if vendorHintPlaceholders.document_date && !parsingForm.document_date}
+                <span class="hint field-placeholder">{vendorHintPlaceholders.document_date}</span>
+              {/if}
             </label>
             <label>
               Due date
@@ -1477,15 +1559,29 @@
             </label>
             <label>
               Document number (optional)
-              <input type="text" bind:value={parsingForm.document_number} />
+              <input
+                type="text"
+                bind:value={parsingForm.document_number}
+                placeholder={vendorHintPlaceholders.document_number ?? ''}
+              />
             </label>
             <label>
               Document date
               <input type="date" bind:value={parsingForm.document_date} />
+              {#if vendorHintPlaceholders.document_date && !parsingForm.document_date}
+                <span class="hint field-placeholder">{vendorHintPlaceholders.document_date}</span>
+              {/if}
             </label>
             <label>
               Vendor name
-              <input type="text" bind:value={parsingForm.vendor_name} />
+              <VendorAutocomplete
+                bind:value={parsingForm.vendor_name}
+                onSelect={handleVendorSelect}
+                placeholder="Type to search vendors..."
+              />
+              {#if vendorHintsLoadedNotice}
+                <span class="hint field-placeholder">{vendorHintsLoadedNotice}</span>
+              {/if}
             </label>
             <label>
               Expense GL account
@@ -1506,7 +1602,14 @@
           {#if !isExpenseConfirm}
             <label>
               Vendor name
-              <input type="text" bind:value={parsingForm.vendor_name} />
+              <VendorAutocomplete
+                bind:value={parsingForm.vendor_name}
+                onSelect={handleVendorSelect}
+                placeholder="Type to search vendors..."
+              />
+              {#if vendorHintsLoadedNotice}
+                <span class="hint field-placeholder">{vendorHintsLoadedNotice}</span>
+              {/if}
             </label>
           {/if}
           <label>
@@ -2153,6 +2256,11 @@
   }
   .hint.success {
     color: #15803d;
+  }
+  .field-placeholder {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
   }
   .retry {
     margin-top: 0.75rem;

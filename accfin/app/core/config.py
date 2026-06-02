@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     @property
     def version(self) -> str:
-        return "0.15.07-confirm-parsing-persistence"
+        return "0.15.08-parsing-autocomplete"
 
     @property
     def edge_public_base_url(self) -> str:

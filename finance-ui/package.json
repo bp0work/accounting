@@ -1,6 +1,6 @@
 {
   "name": "finance-ui",
-  "version": "0.15.06-receipt-age-copy",
+  "version": "0.15.08-parsing-autocomplete",
   "private": true,
   "type": "module",
   "scripts": {
