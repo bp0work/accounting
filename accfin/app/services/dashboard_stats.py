@@ -50,7 +50,7 @@ WORKER_ACTORS: dict[str, str] = {
 }
 
 EXPENSE_CASE_TYPES = ("expense_claim",)
-AP_CASE_TYPES = ("ap_invoice", "invoice", "ap_po_validation", "ap_payment_proposal")
+AP_CASE_TYPES = ("ap_invoice", "ap_po_validation", "ap_payment_proposal")
 AR_CASE_TYPES = (
     "ar_invoice",
     "ar_payment_advice",
