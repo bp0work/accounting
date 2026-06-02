@@ -74,6 +74,9 @@ EXPENSE_INTERVENTION_MAP: dict[str, list[str]] = {
     "coa_mapping": ["EXP_COA_NOT_FOUND"],
     "journal_entry": ["JOURNAL_ENTRY_FAILED"],
 }
+# NOTE (0.15.13): policy_exceeded can look inflated in UAT because historical
+# policy-engine debug runs generated extra escalation rows; this is expected to
+# normalize as production-only traffic dominates the KPI window.
 
 AP_INTERVENTION_MAP: dict[str, list[str]] = {
     "unable_to_parse": ["AP_PARSING_INCOMPLETE"],
@@ -377,11 +380,31 @@ async def _reason_code_counts_for_period(
     return {str(row[0]): int(row[1]) for row in result.all() if row[0]}
 
 
+async def _parsing_awaiting_confirmation_count_for_period(
+    session: AsyncSession,
+    *,
+    case_types: tuple[str, ...],
+    cutoff: datetime,
+) -> int:
+    result = await session.execute(
+        select(func.count(func.distinct(CaseTimeline.case_id)))
+        .select_from(CaseTimeline)
+        .join(Case, Case.id == CaseTimeline.case_id)
+        .where(
+            Case.type.in_(case_types),
+            CaseTimeline.event_type == "parsing_awaiting_confirmation",
+            CaseTimeline.created_at >= cutoff,
+        )
+    )
+    return int(result.scalar_one() or 0)
+
+
 async def _worker_kpi(
     session: AsyncSession,
     *,
     case_types: tuple[str, ...],
     intervention_map: dict[str, list[str]],
+    use_parsing_awaiting_for_unable_to_parse: bool = False,
 ) -> WorkerKpi:
     now = datetime.now(UTC)
     all_reason_codes = [code for codes in intervention_map.values() for code in codes]
@@ -397,6 +420,14 @@ async def _worker_kpi(
             reason_codes=all_reason_codes,
             cutoff=cutoff,
         )
+        if use_parsing_awaiting_for_unable_to_parse:
+            reason_counts["EXP_PARSING_INCOMPLETE"] = (
+                await _parsing_awaiting_confirmation_count_for_period(
+                    session,
+                    case_types=case_types,
+                    cutoff=cutoff,
+                )
+            )
         periods[label] = KpiPeriod(
             total_cases=total_cases,
             interventions=_aggregate_interventions(
@@ -444,6 +475,7 @@ async def _build_worker_performance(
             session,
             case_types=EXPENSE_CASE_TYPES,
             intervention_map=EXPENSE_INTERVENTION_MAP,
+            use_parsing_awaiting_for_unable_to_parse=True,
         )
     elif key == "ap_worker":
         worker.kpi = await _worker_kpi(

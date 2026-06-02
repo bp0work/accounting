@@ -16,6 +16,7 @@ from app.services.dashboard_stats import (
     _aggregate_interventions,
     _count_processing_started,
     _intervention_pct,
+    _parsing_awaiting_confirmation_count_for_period,
     _reason_code_counts_for_period,
     DASHBOARD_STATUS_KEYS,
 )
@@ -76,6 +77,7 @@ async def test_dashboard_stats_agent_performance_today() -> None:
 
 
 def test_kpi_expense_reason_code_mapping() -> None:
+    assert EXPENSE_INTERVENTION_MAP["unable_to_parse"] == ["EXP_PARSING_INCOMPLETE"]
     assert EXPENSE_INTERVENTION_MAP["missing_travel_requisition"] == [
         "EXP_MISSING_TRAVEL_REQUISITION"
     ]
@@ -136,3 +138,28 @@ async def test_kpi_distinct_case_count_per_escalation() -> None:
         cutoff=datetime.now(UTC),
     )
     assert "count(distinct(case_escalations.case_id))" in captured_sql["sql"].lower()
+
+
+@pytest.mark.asyncio
+async def test_kpi_parsing_confirmation_count() -> None:
+    captured_sql = {}
+
+    class _Result:
+        def scalar_one(self):
+            return 5
+
+    class _Session:
+        async def execute(self, stmt):
+            captured_sql["sql"] = str(stmt)
+            return _Result()
+
+    count = await _parsing_awaiting_confirmation_count_for_period(
+        _Session(),  # type: ignore[arg-type]
+        case_types=("expense_claim",),
+        cutoff=datetime.now(UTC),
+    )
+    assert count == 5
+    sql = captured_sql["sql"].lower()
+    assert "case_timeline.event_type" in sql
+    assert "parsing_awaiting_confirmation" in sql
+    assert "count(distinct(case_timeline.case_id))" in sql
