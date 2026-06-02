@@ -16,7 +16,7 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 async def dashboard_stats(
-    _user: TokenData = Depends(require_permission("cases:read")),
+    user: TokenData = Depends(require_permission("cases:read")),
     session: AsyncSession = Depends(get_db_session),
 ) -> DashboardStatsResponse:
-    return await build_dashboard_stats(session)
+    return await build_dashboard_stats(session, user=user)

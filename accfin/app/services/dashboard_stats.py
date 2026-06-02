@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.redis_client import get_redis
 from app.models.case import Case, CaseTimeline
 from app.models.mail import Email, MailGatewayConfig
+from app.schemas.auth import TokenData
 from app.schemas.dashboard import (
     AgentPerformance,
     DashboardPeriod,
@@ -218,6 +219,40 @@ async def _count_cases_by_type_status(
     return int(result.scalar_one() or 0)
 
 
+async def _action_required_count(session: AsyncSession, user: TokenData) -> int:
+    role = (user.role or "").lower()
+    if role == "accounts_manager":
+        result = await session.execute(
+            select(func.count())
+            .select_from(Case)
+            .where(
+                Case.status.in_(
+                    (
+                        "pending_confirmation",
+                        "on_hold",
+                        "manual_review",
+                        "pending_reversal_approval",
+                    )
+                )
+            )
+        )
+        return int(result.scalar_one() or 0)
+    if role in {"cfo", "finance_director"}:
+        result = await session.execute(
+            select(func.count())
+            .select_from(Case)
+            .where(
+                (Case.status == "pending_reversal_approval")
+                | (
+                    (Case.status == "pending_approval")
+                    & (Case.current_approval_tier == 3)
+                )
+            )
+        )
+        return int(result.scalar_one() or 0)
+    return 0
+
+
 async def _queue_depths() -> DashboardQueueDepths:
     settings = get_settings()
     redis = get_redis()
@@ -262,7 +297,9 @@ async def _build_worker_performance(
     return worker
 
 
-async def build_dashboard_stats(session: AsyncSession) -> DashboardStatsResponse:
+async def build_dashboard_stats(
+    session: AsyncSession, *, user: TokenData
+) -> DashboardStatsResponse:
     period = sgt_period_bounds()
     queues = await _queue_depths()
 
@@ -319,4 +356,5 @@ async def build_dashboard_stats(session: AsyncSession) -> DashboardStatsResponse
         cases_by_status=cases_by_status,
         queue_depths=queues,
         period=period,
+        action_required_count=await _action_required_count(session, user),
     )

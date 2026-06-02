@@ -121,6 +121,7 @@
   let reversalApprovalNote = '';
   let reversalRejectReason = '';
   let reversalApprovalLoading: 'approve' | 'reject' | null = null;
+  let onCaseStatusChanged: ((event: Event) => void) | null = null;
 
   const confirmParsingRoles = new Set([
     'accounts_manager',
@@ -567,7 +568,20 @@
     }
   }
 
-  onMount(load);
+  onMount(() => {
+    void load();
+    onCaseStatusChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ case_id?: string }>).detail;
+      if (!detail?.case_id || detail.case_id !== caseId) return;
+      void load();
+    };
+    window.addEventListener('finance:case-status-changed', onCaseStatusChanged);
+    return () => {
+      if (onCaseStatusChanged) {
+        window.removeEventListener('finance:case-status-changed', onCaseStatusChanged);
+      }
+    };
+  });
 
   async function loadReviewCoaAccounts() {
     try {

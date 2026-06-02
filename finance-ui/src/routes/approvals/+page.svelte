@@ -31,6 +31,7 @@
   let cases: CaseItem[] = [];
   let error = '';
   let loading = true;
+  let onCaseStatusChanged: ((event: Event) => void) | null = null;
 
   $: role = ($sessionUser?.role_name ?? '').toLowerCase();
   $: queueLabel =
@@ -64,6 +65,15 @@
 
   onMount(() => {
     void loadAll();
+    onCaseStatusChanged = () => {
+      void loadAll();
+    };
+    window.addEventListener('finance:case-status-changed', onCaseStatusChanged);
+    return () => {
+      if (onCaseStatusChanged) {
+        window.removeEventListener('finance:case-status-changed', onCaseStatusChanged);
+      }
+    };
   });
 
   async function loadAll() {

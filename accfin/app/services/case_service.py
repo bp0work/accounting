@@ -18,6 +18,7 @@ from fastapi import status
 from app.schemas.auth import TokenData
 from app.schemas.case import CaseRetryResponse
 from app.services.case_retry import execute_case_retry
+from app.services.event_bus import publish_broadcast_event
 from app.services.timeline_actor import timeline_actor_label_for_user
 from app.services.wasabi_archive import WasabiArchiveService
 
@@ -154,6 +155,16 @@ class CaseService:
 
         await self._session.commit()
         await self._session.refresh(case)
+        if result.to_state:
+            await publish_broadcast_event(
+                "case.status_changed",
+                {
+                    "type": "case_status_changed",
+                    "case_id": str(case.id),
+                    "case_number": case.case_number,
+                    "status": result.to_state.value,
+                },
+            )
         return result
 
     async def retry_case(self, case_id: UUID, *, user: TokenData) -> CaseRetryResponse:

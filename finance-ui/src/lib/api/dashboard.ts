@@ -35,6 +35,7 @@ export type DashboardStats = {
     today_start: string;
     week_start: string;
   };
+  action_required_count: number;
 };
 
 export function fetchDashboardStats() {

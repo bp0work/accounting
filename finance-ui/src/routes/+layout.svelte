@@ -1,11 +1,17 @@
 <script lang="ts">
   import '../app.css';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { page } from '$app/stores';
   import { clearToken } from '$lib/api/client';
+  import { fetchDashboardStats } from '$lib/api/dashboard';
   import { requires2faWarning } from '$lib/api/auth';
   import UserMenu from '$lib/components/UserMenu.svelte';
   import type { MenuLink } from '$lib/components/userMenuTypes';
+  import {
+    liveUpdates,
+    startLiveUpdates,
+    stopLiveUpdates,
+  } from '$lib/stores/live-updates';
   import {
     authReady,
     clearAuth,
@@ -28,16 +34,65 @@
   $: show2faBanner = isLoggedIn && requires2faWarning($sessionUser);
   $: showAppChrome = !isLogin && $authReady;
   $: showNav = showAppChrome && isLoggedIn;
+  $: navBadgeCount = dashboardActionCountForRole(
+    ($sessionUser?.role_name ?? '').toLowerCase(),
+    actionRequiredCount
+  );
+  $: showNavBadge = navBadgeCount > 0;
+
+  let actionRequiredCount = 0;
+  let lastLiveSequence = 0;
 
   onMount(async () => {
     const loggedIn = await initAuth();
     if (!isLogin && !loggedIn) {
       const { goto } = await import('$app/navigation');
       await goto('/login');
+      return;
+    }
+    if (loggedIn) {
+      await refreshActionCount();
+      startLiveUpdates();
     }
   });
 
+  onDestroy(() => {
+    stopLiveUpdates();
+  });
+
+  $: if (
+    typeof window !== 'undefined' &&
+    isLoggedIn &&
+    $liveUpdates.sequence !== lastLiveSequence
+  ) {
+    lastLiveSequence = $liveUpdates.sequence;
+    const payload = $liveUpdates.lastCaseStatusEvent;
+    if (payload) {
+      window.dispatchEvent(new CustomEvent('finance:case-status-changed', { detail: payload }));
+      void refreshActionCount();
+    }
+  }
+
+  async function refreshActionCount() {
+    if (!isLoggedIn) return;
+    try {
+      const stats = await fetchDashboardStats();
+      actionRequiredCount = stats.action_required_count ?? 0;
+    } catch {
+      actionRequiredCount = 0;
+    }
+  }
+
+  function dashboardActionCountForRole(role: string, count: number): number {
+    if (role === 'finance_manager') return 0;
+    if (role === 'accounts_manager' || role === 'cfo' || role === 'finance_director') {
+      return count;
+    }
+    return 0;
+  }
+
   async function logout() {
+    stopLiveUpdates();
     clearToken();
     clearAuth();
     const { goto } = await import('$app/navigation');
@@ -83,7 +138,14 @@
       {#if showNav}
         <nav class="nav">
           <a href="/dashboard">Dashboard</a>
-          <a href="/approvals">Cases & Approvals</a>
+          <a href="/approvals" class="cases-nav-link">
+            Cases & Approvals
+            {#if showNavBadge}
+              <span class="nav-badge" aria-label={`${navBadgeCount} cases need action`}>
+                {navBadgeCount}
+              </span>
+            {/if}
+          </a>
           <a href="/counterparty-accounts">Counterparty Accounts</a>
           <a href="/agreements">Agreements</a>
           <a href="/accounting-calendar">Accounting Calendar</a>
@@ -165,6 +227,27 @@
 
   .nav a:hover {
     text-decoration: underline;
+  }
+
+  .cases-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
   }
 
   .skeleton-nav {

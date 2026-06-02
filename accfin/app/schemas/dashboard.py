@@ -46,3 +46,4 @@ class DashboardStatsResponse(BaseModel):
     cases_by_status: dict[str, int]
     queue_depths: DashboardQueueDepths
     period: DashboardPeriod
+    action_required_count: int = 0

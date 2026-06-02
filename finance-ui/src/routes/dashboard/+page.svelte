@@ -18,7 +18,6 @@
     visibleStatusesForRole,
   } from '$lib/dashboard-roles';
   import { formatAmount, formatCount } from '$lib/format';
-  import { subscribeFinanceEvents } from '$lib/sse-client';
   import { sessionUser } from '$lib/stores/session';
 
   let stats: DashboardStats | null = null;
@@ -31,7 +30,7 @@
   let tickTimer: ReturnType<typeof setInterval> | null = null;
   let statsTimer: ReturnType<typeof setInterval> | null = null;
   let casesTimer: ReturnType<typeof setInterval> | null = null;
-  let unsubscribeSse: (() => void) | null = null;
+  let onCaseStatusChanged: ((event: Event) => void) | null = null;
 
   $: role = ($sessionUser?.role_name ?? '').toLowerCase();
   $: visibleStatuses = visibleStatusesForRole(role);
@@ -151,18 +150,19 @@
       }
     }, 1000);
 
-    unsubscribeSse = subscribeFinanceEvents((eventType) => {
-      if (eventType === 'case.status_changed' || eventType === 'message') {
-        void refreshAll();
-      }
-    });
+    onCaseStatusChanged = () => {
+      void refreshAll();
+    };
+    window.addEventListener('finance:case-status-changed', onCaseStatusChanged);
   });
 
   onDestroy(() => {
     if (statsTimer) clearInterval(statsTimer);
     if (casesTimer) clearInterval(casesTimer);
     if (tickTimer) clearInterval(tickTimer);
-    unsubscribeSse?.();
+    if (onCaseStatusChanged) {
+      window.removeEventListener('finance:case-status-changed', onCaseStatusChanged);
+    }
   });
 </script>
 

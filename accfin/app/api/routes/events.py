@@ -59,12 +59,13 @@ async def event_stream(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> StreamingResponse:
     user = await _resolve_sse_user(token, credentials)
-    channel = f"finance:user:{user.user_id}"
+    user_channel = f"finance:user:{user.user_id}"
+    broadcast_channel = "finance:broadcast"
 
     async def generate():
         redis = get_redis()
         pubsub = redis.pubsub()
-        await pubsub.subscribe(channel)
+        await pubsub.subscribe(user_channel, broadcast_channel)
         yield "event: connected\ndata: {}\n\n"
         try:
             while True:
@@ -77,7 +78,7 @@ async def event_stream(
                     yield f"event: {event_type}\nid: {event_id}\ndata: {data}\n\n"
                 await asyncio.sleep(0.05)
         finally:
-            await pubsub.unsubscribe(channel)
+            await pubsub.unsubscribe(user_channel, broadcast_channel)
             await pubsub.close()
 
     return StreamingResponse(
