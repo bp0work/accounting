@@ -6,10 +6,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.dashboard_stats import (
+    AP_INTERVENTION_MAP,
+    AR_INTERVENTION_MAP,
+    EXPENSE_INTERVENTION_MAP,
+    KPI_PERIOD_DAYS,
     compute_success_rate,
     normalize_cases_by_status,
     sgt_period_bounds,
+    _aggregate_interventions,
     _count_processing_started,
+    _intervention_pct,
+    _reason_code_counts_for_period,
     DASHBOARD_STATUS_KEYS,
 )
 
@@ -66,3 +73,66 @@ async def test_dashboard_stats_agent_performance_today() -> None:
         since=sgt_period_bounds().today_start,
     )
     assert count == 2
+
+
+def test_kpi_expense_reason_code_mapping() -> None:
+    assert EXPENSE_INTERVENTION_MAP["missing_travel_requisition"] == [
+        "EXP_MISSING_TRAVEL_REQUISITION"
+    ]
+    assert "EXP_POLICY_EXCEEDED" in EXPENSE_INTERVENTION_MAP["policy_exceeded"]
+
+
+def test_kpi_ap_reason_code_mapping() -> None:
+    assert AP_INTERVENTION_MAP["missing_supporting_doc"] == [
+        "AP_MISSING_PO",
+        "AP_MISSING_CONTRACT",
+        "AP_MISSING_GRN",
+        "AP_MISSING_DO",
+    ]
+
+
+def test_kpi_ar_reason_code_mapping() -> None:
+    assert AR_INTERVENTION_MAP["credit_term_exposure"] == [
+        "AR_CREDIT_LIMIT_EXCEEDED",
+        "AR_OVERDUE",
+    ]
+
+
+def test_kpi_period_aggregation_30_60_90() -> None:
+    assert KPI_PERIOD_DAYS == (("30d", 30), ("60d", 60), ("90d", 90))
+
+
+def test_kpi_percentage_calculation() -> None:
+    assert _intervention_pct(8, 45) == 17.8
+
+
+def test_kpi_zero_total_no_division_error() -> None:
+    interventions = _aggregate_interventions(
+        reason_counts={"EXP_PARSING_INCOMPLETE": 3},
+        total_cases=0,
+        intervention_map=EXPENSE_INTERVENTION_MAP,
+    )
+    assert interventions["unable_to_parse"].pct == 0.0
+    assert interventions["total_interventions"].pct == 0.0
+
+
+@pytest.mark.asyncio
+async def test_kpi_distinct_case_count_per_escalation() -> None:
+    captured_sql = {}
+
+    class _Result:
+        def all(self):
+            return []
+
+    class _Session:
+        async def execute(self, stmt):
+            captured_sql["sql"] = str(stmt)
+            return _Result()
+
+    await _reason_code_counts_for_period(
+        _Session(),  # type: ignore[arg-type]
+        case_types=("expense_claim",),
+        reason_codes=["EXP_DUPLICATE"],
+        cutoff=datetime.now(UTC),
+    )
+    assert "count(distinct(case_escalations.case_id))" in captured_sql["sql"].lower()

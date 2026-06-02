@@ -16,6 +16,23 @@ export type WorkerPerformance = {
   last_activity_at: string | null;
   pending_confirmation?: number | null;
   pending_approval?: number | null;
+  kpi?: WorkerKpi | null;
+};
+
+export type InterventionStat = {
+  count: number;
+  pct: number;
+};
+
+export type KpiPeriod = {
+  total_cases: number;
+  interventions: Record<string, InterventionStat>;
+};
+
+export type WorkerKpi = {
+  '30d': KpiPeriod;
+  '60d': KpiPeriod;
+  '90d': KpiPeriod;
 };
 
 export type DashboardStats = {

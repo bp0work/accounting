@@ -4,7 +4,12 @@
 
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { fetchDashboardStats, type DashboardStats, type WorkerPerformance } from '$lib/api/dashboard';
+  import {
+    fetchDashboardStats,
+    type DashboardStats,
+    type WorkerKpi,
+    type WorkerPerformance,
+  } from '$lib/api/dashboard';
   import { listCases, type CaseItem } from '$lib/api/cases';
   import {
     caseActionByLabel,
@@ -30,6 +35,9 @@
   let statsTimer: ReturnType<typeof setInterval> | null = null;
   let casesTimer: ReturnType<typeof setInterval> | null = null;
   let onCaseStatusChanged: ((event: Event) => void) | null = null;
+  let arKpiExpanded = false;
+  let apKpiExpanded = false;
+  let expenseKpiExpanded = false;
 
   $: role = ($sessionUser?.role_name ?? '').toLowerCase();
   $: visibleStatuses = visibleStatusesForRole(role);
@@ -84,6 +92,62 @@
     if (state === 'active') return 'Active';
     if (state === 'stalled') return 'Stalled';
     return 'Idle';
+  }
+
+  type WorkerKpiRow = { key: string; label: string };
+  const KPI_PERIOD_KEYS: Array<'30d' | '60d' | '90d'> = ['30d', '60d', '90d'];
+  const EXPENSE_KPI_ROWS: WorkerKpiRow[] = [
+    { key: 'unable_to_parse', label: 'Unable to parse' },
+    { key: 'duplicate_document', label: 'Duplicate document' },
+    { key: 'counterparty_not_found', label: 'Counterparty not found (Employee)' },
+    { key: 'document_not_validated', label: 'Document not validated' },
+    { key: 'exchange_rate_issue', label: 'Exchange rate issue' },
+    { key: 'policy_exceeded', label: 'Policy exceeded / Receipt invalid' },
+    { key: 'missing_travel_requisition', label: 'Missing travel requisition' },
+    { key: 'out_of_period', label: 'Out of period' },
+    { key: 'coa_mapping', label: 'COA mapping' },
+    { key: 'journal_entry', label: 'Journal entry' },
+  ];
+  const AP_KPI_ROWS: WorkerKpiRow[] = [
+    { key: 'unable_to_parse', label: 'Unable to parse' },
+    { key: 'duplicate_document', label: 'Duplicate document' },
+    { key: 'counterparty_not_found', label: 'Counterparty not found (Vendor)' },
+    { key: 'document_not_validated', label: 'Document not validated' },
+    { key: 'exchange_rate_issue', label: 'Exchange rate issue' },
+    { key: 'missing_supporting_doc', label: 'Missing supporting doc (PO/Contract/GRN/DO)' },
+    { key: 'out_of_period', label: 'Out of period' },
+    { key: 'coa_mapping', label: 'COA mapping' },
+    { key: 'journal_entry', label: 'Journal entry' },
+  ];
+  const AR_KPI_ROWS: WorkerKpiRow[] = [
+    { key: 'unable_to_parse', label: 'Unable to parse' },
+    { key: 'duplicate_document', label: 'Duplicate document' },
+    { key: 'counterparty_not_found', label: 'Counterparty not found (Customer)' },
+    { key: 'credit_term_exposure', label: 'Credit term / Exposure issue' },
+    { key: 'exchange_rate_issue', label: 'Exchange rate issue' },
+    { key: 'out_of_period', label: 'Out of period' },
+    { key: 'coa_mapping', label: 'COA mapping' },
+    { key: 'journal_entry', label: 'Journal entry' },
+  ];
+
+  function statValue(kpi: WorkerKpi | null | undefined, key: string, period: '30d' | '60d' | '90d') {
+    const stat = kpi?.[period]?.interventions?.[key];
+    return `${formatCount(stat?.count ?? 0)} / ${(stat?.pct ?? 0).toFixed(1)}%`;
+  }
+
+  function totalCases(kpi: WorkerKpi | null | undefined, period: '30d' | '60d' | '90d') {
+    return formatCount(kpi?.[period]?.total_cases ?? 0);
+  }
+
+  function totalInterventionClass(kpi: WorkerKpi | null | undefined): string {
+    const pct = kpi?.['30d']?.interventions?.total_interventions?.pct ?? 0;
+    if (pct > 30) return 'kpi-total-red';
+    if (pct >= 15) return 'kpi-total-amber';
+    return 'kpi-total-green';
+  }
+
+  function isZeroRow(kpi: WorkerKpi | null | undefined, key: string): boolean {
+    return KPI_PERIOD_KEYS.every((period) => (kpi?.[period]?.interventions?.[key]?.count ?? 0) === 0);
   }
 
   function toggleStatusFilter(status: string) {
@@ -172,7 +236,7 @@
 {#if stats}
   <section class="section">
     <h2>Agent performance</h2>
-    <div class="agent-row">
+    <div class="agent-row row-2">
       <article class="agent-card">
         <h3>Gateway</h3>
         <dl class="metrics">
@@ -201,6 +265,120 @@
           {agentStateLabel(workerAgentState(stats.agent_performance.accounts_worker))}
         </p>
       </article>
+    </div>
+
+    <div class="agent-row row-3">
+      <article class="agent-card">
+        <h3>AR Worker</h3>
+        <dl class="metrics">
+          <div><dt>Cases today</dt><dd>{formatCount(stats.agent_performance.ar_worker.cases_today)}</dd></div>
+          <div><dt>This week</dt><dd>{formatCount(stats.agent_performance.ar_worker.cases_this_week)}</dd></div>
+          <div><dt>Avg time</dt><dd>{formatDuration(stats.agent_performance.ar_worker.avg_processing_seconds)}</dd></div>
+          <div><dt>Success rate</dt><dd>{Math.round(stats.agent_performance.ar_worker.success_rate * 100)}%</dd></div>
+          <div><dt>Queue</dt><dd>{formatCount(stats.agent_performance.ar_worker.queue_depth)}</dd></div>
+        </dl>
+        <p class="status-line">
+          <span class="dot {workerAgentState(stats.agent_performance.ar_worker)}"></span>
+          {agentStateLabel(workerAgentState(stats.agent_performance.ar_worker))}
+        </p>
+        <button type="button" class="kpi-toggle" onclick={() => (arKpiExpanded = !arKpiExpanded)}>
+          KPIs {arKpiExpanded ? '▴' : '▾'}
+        </button>
+        {#if arKpiExpanded}
+          <div class="kpi-block">
+            <table class="kpi-table">
+              <thead>
+                <tr><th>Cases processed</th><th>30d</th><th>60d</th><th>90d</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td></td>
+                  <td>{totalCases(stats.agent_performance.ar_worker.kpi, '30d')}</td>
+                  <td>{totalCases(stats.agent_performance.ar_worker.kpi, '60d')}</td>
+                  <td>{totalCases(stats.agent_performance.ar_worker.kpi, '90d')}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table class="kpi-table">
+              <thead>
+                <tr><th>Intervention</th><th>30d</th><th>60d</th><th>90d</th></tr>
+              </thead>
+              <tbody>
+                {#each AR_KPI_ROWS as row}
+                  <tr class:muted={isZeroRow(stats.agent_performance.ar_worker.kpi, row.key)}>
+                    <td>{row.label}</td>
+                    <td>{statValue(stats.agent_performance.ar_worker.kpi, row.key, '30d')}</td>
+                    <td>{statValue(stats.agent_performance.ar_worker.kpi, row.key, '60d')}</td>
+                    <td>{statValue(stats.agent_performance.ar_worker.kpi, row.key, '90d')}</td>
+                  </tr>
+                {/each}
+                <tr class={`kpi-total ${totalInterventionClass(stats.agent_performance.ar_worker.kpi)}`}>
+                  <td>Total interventions</td>
+                  <td>{statValue(stats.agent_performance.ar_worker.kpi, 'total_interventions', '30d')}</td>
+                  <td>{statValue(stats.agent_performance.ar_worker.kpi, 'total_interventions', '60d')}</td>
+                  <td>{statValue(stats.agent_performance.ar_worker.kpi, 'total_interventions', '90d')}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </article>
+
+      <article class="agent-card">
+        <h3>AP Worker</h3>
+        <dl class="metrics">
+          <div><dt>Cases today</dt><dd>{formatCount(stats.agent_performance.ap_worker.cases_today)}</dd></div>
+          <div><dt>This week</dt><dd>{formatCount(stats.agent_performance.ap_worker.cases_this_week)}</dd></div>
+          <div><dt>Avg time</dt><dd>{formatDuration(stats.agent_performance.ap_worker.avg_processing_seconds)}</dd></div>
+          <div><dt>Success rate</dt><dd>{Math.round(stats.agent_performance.ap_worker.success_rate * 100)}%</dd></div>
+          <div><dt>Queue</dt><dd>{formatCount(stats.agent_performance.ap_worker.queue_depth)}</dd></div>
+        </dl>
+        <p class="status-line">
+          <span class="dot {workerAgentState(stats.agent_performance.ap_worker)}"></span>
+          {agentStateLabel(workerAgentState(stats.agent_performance.ap_worker))}
+        </p>
+        <button type="button" class="kpi-toggle" onclick={() => (apKpiExpanded = !apKpiExpanded)}>
+          KPIs {apKpiExpanded ? '▴' : '▾'}
+        </button>
+        {#if apKpiExpanded}
+          <div class="kpi-block">
+            <table class="kpi-table">
+              <thead>
+                <tr><th>Cases processed</th><th>30d</th><th>60d</th><th>90d</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td></td>
+                  <td>{totalCases(stats.agent_performance.ap_worker.kpi, '30d')}</td>
+                  <td>{totalCases(stats.agent_performance.ap_worker.kpi, '60d')}</td>
+                  <td>{totalCases(stats.agent_performance.ap_worker.kpi, '90d')}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table class="kpi-table">
+              <thead>
+                <tr><th>Intervention</th><th>30d</th><th>60d</th><th>90d</th></tr>
+              </thead>
+              <tbody>
+                {#each AP_KPI_ROWS as row}
+                  <tr class:muted={isZeroRow(stats.agent_performance.ap_worker.kpi, row.key)}>
+                    <td>{row.label}</td>
+                    <td>{statValue(stats.agent_performance.ap_worker.kpi, row.key, '30d')}</td>
+                    <td>{statValue(stats.agent_performance.ap_worker.kpi, row.key, '60d')}</td>
+                    <td>{statValue(stats.agent_performance.ap_worker.kpi, row.key, '90d')}</td>
+                  </tr>
+                {/each}
+                <tr class={`kpi-total ${totalInterventionClass(stats.agent_performance.ap_worker.kpi)}`}>
+                  <td>Total interventions</td>
+                  <td>{statValue(stats.agent_performance.ap_worker.kpi, 'total_interventions', '30d')}</td>
+                  <td>{statValue(stats.agent_performance.ap_worker.kpi, 'total_interventions', '60d')}</td>
+                  <td>{statValue(stats.agent_performance.ap_worker.kpi, 'total_interventions', '90d')}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </article>
 
       <article class="agent-card">
         <h3>Expense Worker</h3>
@@ -217,36 +395,51 @@
           <span class="dot {workerAgentState(stats.agent_performance.expense_worker)}"></span>
           {agentStateLabel(workerAgentState(stats.agent_performance.expense_worker))}
         </p>
-      </article>
-
-      <article class="agent-card">
-        <h3>AP Worker</h3>
-        <dl class="metrics">
-          <div><dt>Cases today</dt><dd>{formatCount(stats.agent_performance.ap_worker.cases_today)}</dd></div>
-          <div><dt>This week</dt><dd>{formatCount(stats.agent_performance.ap_worker.cases_this_week)}</dd></div>
-          <div><dt>Avg time</dt><dd>{formatDuration(stats.agent_performance.ap_worker.avg_processing_seconds)}</dd></div>
-          <div><dt>Success rate</dt><dd>{Math.round(stats.agent_performance.ap_worker.success_rate * 100)}%</dd></div>
-          <div><dt>Queue</dt><dd>{formatCount(stats.agent_performance.ap_worker.queue_depth)}</dd></div>
-        </dl>
-        <p class="status-line">
-          <span class="dot {workerAgentState(stats.agent_performance.ap_worker)}"></span>
-          {agentStateLabel(workerAgentState(stats.agent_performance.ap_worker))}
-        </p>
-      </article>
-
-      <article class="agent-card">
-        <h3>AR Worker</h3>
-        <dl class="metrics">
-          <div><dt>Cases today</dt><dd>{formatCount(stats.agent_performance.ar_worker.cases_today)}</dd></div>
-          <div><dt>This week</dt><dd>{formatCount(stats.agent_performance.ar_worker.cases_this_week)}</dd></div>
-          <div><dt>Avg time</dt><dd>{formatDuration(stats.agent_performance.ar_worker.avg_processing_seconds)}</dd></div>
-          <div><dt>Success rate</dt><dd>{Math.round(stats.agent_performance.ar_worker.success_rate * 100)}%</dd></div>
-          <div><dt>Queue</dt><dd>{formatCount(stats.agent_performance.ar_worker.queue_depth)}</dd></div>
-        </dl>
-        <p class="status-line">
-          <span class="dot {workerAgentState(stats.agent_performance.ar_worker)}"></span>
-          {agentStateLabel(workerAgentState(stats.agent_performance.ar_worker))}
-        </p>
+        <button
+          type="button"
+          class="kpi-toggle"
+          onclick={() => (expenseKpiExpanded = !expenseKpiExpanded)}
+        >
+          KPIs {expenseKpiExpanded ? '▴' : '▾'}
+        </button>
+        {#if expenseKpiExpanded}
+          <div class="kpi-block">
+            <table class="kpi-table">
+              <thead>
+                <tr><th>Cases processed</th><th>30d</th><th>60d</th><th>90d</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td></td>
+                  <td>{totalCases(stats.agent_performance.expense_worker.kpi, '30d')}</td>
+                  <td>{totalCases(stats.agent_performance.expense_worker.kpi, '60d')}</td>
+                  <td>{totalCases(stats.agent_performance.expense_worker.kpi, '90d')}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table class="kpi-table">
+              <thead>
+                <tr><th>Intervention</th><th>30d</th><th>60d</th><th>90d</th></tr>
+              </thead>
+              <tbody>
+                {#each EXPENSE_KPI_ROWS as row}
+                  <tr class:muted={isZeroRow(stats.agent_performance.expense_worker.kpi, row.key)}>
+                    <td>{row.label}</td>
+                    <td>{statValue(stats.agent_performance.expense_worker.kpi, row.key, '30d')}</td>
+                    <td>{statValue(stats.agent_performance.expense_worker.kpi, row.key, '60d')}</td>
+                    <td>{statValue(stats.agent_performance.expense_worker.kpi, row.key, '90d')}</td>
+                  </tr>
+                {/each}
+                <tr class={`kpi-total ${totalInterventionClass(stats.agent_performance.expense_worker.kpi)}`}>
+                  <td>Total interventions</td>
+                  <td>{statValue(stats.agent_performance.expense_worker.kpi, 'total_interventions', '30d')}</td>
+                  <td>{statValue(stats.agent_performance.expense_worker.kpi, 'total_interventions', '60d')}</td>
+                  <td>{statValue(stats.agent_performance.expense_worker.kpi, 'total_interventions', '90d')}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {/if}
       </article>
     </div>
   </section>
@@ -347,8 +540,14 @@
   }
   .agent-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .agent-row.row-2 {
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+  }
+  .agent-row.row-3 {
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
   }
   .agent-card {
     border: 1px solid #e2e8f0;
@@ -387,6 +586,50 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
+  }
+  .kpi-toggle {
+    margin-top: 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .kpi-block {
+    margin-top: 0.75rem;
+  }
+  .kpi-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    margin-bottom: 0.5rem;
+  }
+  .kpi-table th,
+  .kpi-table td {
+    padding: 0.25rem 0.35rem;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+    text-align: right;
+  }
+  .kpi-table th:first-child,
+  .kpi-table td:first-child {
+    text-align: left;
+  }
+  .kpi-table tbody tr.muted {
+    color: #94a3b8;
+  }
+  .kpi-total {
+    font-weight: 700;
+  }
+  .kpi-total-green {
+    color: #15803d;
+  }
+  .kpi-total-amber {
+    color: #a16207;
+  }
+  .kpi-total-red {
+    color: #b91c1c;
   }
   .dot {
     width: 0.55rem;
@@ -453,5 +696,11 @@
   }
   a:hover {
     text-decoration: underline;
+  }
+  @media (max-width: 1100px) {
+    .agent-row.row-2,
+    .agent-row.row-3 {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
