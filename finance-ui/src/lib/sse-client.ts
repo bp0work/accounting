@@ -1,50 +1,38 @@
-import { apiUrl, ensureValidAccessToken, getToken } from './client';
+const ACCESS_TOKEN_KEY = 'finance_access_token';
+const STREAM_PATH = '/api/events/stream';
 
 export type SseHandler = (eventType: string, data: unknown) => void;
 
+function getAccessToken(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+function parseEventData(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 /** Subscribe to finance SSE; returns cleanup function. */
 export function subscribeFinanceEvents(onEvent: SseHandler): () => void {
-  let source: EventSource | null = null;
-  let closed = false;
+  const token = getAccessToken();
+  if (!token) return () => {};
 
-  void (async () => {
-    const token = getToken();
-    if (!token) return;
-    try {
-      await ensureValidAccessToken();
-    } catch {
-      return;
-    }
-    if (closed) return;
+  const url = `${STREAM_PATH}?token=${encodeURIComponent(token)}`;
+  const source = new EventSource(url);
 
-    const url = `${apiUrl('/events/stream')}?access_token=${encodeURIComponent(getToken() ?? '')}`;
-    source = new EventSource(url);
+  source.addEventListener('case.status_changed', (ev) => {
+    onEvent('case.status_changed', parseEventData((ev as MessageEvent).data));
+  });
 
-    source.addEventListener('case.status_changed', (ev) => {
-      try {
-        onEvent('case.status_changed', JSON.parse((ev as MessageEvent).data));
-      } catch {
-        onEvent('case.status_changed', null);
-      }
-    });
-    source.addEventListener('message', (ev) => {
-      try {
-        onEvent('message', JSON.parse((ev as MessageEvent).data));
-      } catch {
-        onEvent('message', null);
-      }
-    });
-    source.onmessage = (ev) => {
-      try {
-        onEvent('message', JSON.parse(ev.data));
-      } catch {
-        onEvent('message', null);
-      }
-    };
-  })();
+  source.onmessage = (ev) => {
+    onEvent('message', parseEventData(ev.data));
+  };
 
   return () => {
-    closed = true;
-    source?.close();
+    source.close();
   };
 }
