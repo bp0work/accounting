@@ -60,7 +60,11 @@ AR_CASE_TYPES = (
 
 OUTCOME_STATUSES = ("posted", "rejected", "case_rejected")
 
-KPI_PERIOD_DAYS: tuple[tuple[str, int], ...] = (("30d", 30), ("60d", 60), ("90d", 90))
+KPI_PERIOD_WINDOWS: tuple[tuple[str, int, int | None], ...] = (
+    ("30d", 30, None),
+    ("60d", 60, 30),
+    ("90d", 90, 60),
+)
 
 EXPENSE_INTERVENTION_MAP: dict[str, list[str]] = {
     "unable_to_parse": ["EXP_PARSING_INCOMPLETE"],
@@ -344,12 +348,19 @@ async def _count_cases_for_period(
     session: AsyncSession,
     *,
     case_types: tuple[str, ...],
-    cutoff: datetime,
+    lower_cutoff: datetime,
+    upper_cutoff: datetime | None = None,
 ) -> int:
+    filters = [
+        Case.type.in_(case_types),
+        Case.created_at >= lower_cutoff,
+    ]
+    if upper_cutoff is not None:
+        filters.append(Case.created_at < upper_cutoff)
     result = await session.execute(
         select(func.count())
         .select_from(Case)
-        .where(Case.type.in_(case_types), Case.created_at >= cutoff)
+        .where(*filters)
     )
     return int(result.scalar_one() or 0)
 
@@ -359,10 +370,18 @@ async def _reason_code_counts_for_period(
     *,
     case_types: tuple[str, ...],
     reason_codes: list[str],
-    cutoff: datetime,
+    lower_cutoff: datetime,
+    upper_cutoff: datetime | None = None,
 ) -> dict[str, int]:
     if not reason_codes:
         return {}
+    filters = [
+        Case.type.in_(case_types),
+        CaseEscalation.created_at >= lower_cutoff,
+        CaseEscalation.reason_code.in_(reason_codes),
+    ]
+    if upper_cutoff is not None:
+        filters.append(CaseEscalation.created_at < upper_cutoff)
     result = await session.execute(
         select(
             CaseEscalation.reason_code,
@@ -370,11 +389,7 @@ async def _reason_code_counts_for_period(
         )
         .select_from(CaseEscalation)
         .join(Case, Case.id == CaseEscalation.case_id)
-        .where(
-            Case.type.in_(case_types),
-            CaseEscalation.created_at >= cutoff,
-            CaseEscalation.reason_code.in_(reason_codes),
-        )
+        .where(*filters)
         .group_by(CaseEscalation.reason_code)
     )
     return {str(row[0]): int(row[1]) for row in result.all() if row[0]}
@@ -384,19 +399,66 @@ async def _parsing_awaiting_confirmation_count_for_period(
     session: AsyncSession,
     *,
     case_types: tuple[str, ...],
-    cutoff: datetime,
+    lower_cutoff: datetime,
+    upper_cutoff: datetime | None = None,
 ) -> int:
+    filters = [
+        Case.type.in_(case_types),
+        CaseTimeline.event_type == "parsing_awaiting_confirmation",
+        CaseTimeline.created_at >= lower_cutoff,
+    ]
+    if upper_cutoff is not None:
+        filters.append(CaseTimeline.created_at < upper_cutoff)
     result = await session.execute(
         select(func.count(func.distinct(CaseTimeline.case_id)))
         .select_from(CaseTimeline)
         .join(Case, Case.id == CaseTimeline.case_id)
-        .where(
-            Case.type.in_(case_types),
-            CaseTimeline.event_type == "parsing_awaiting_confirmation",
-            CaseTimeline.created_at >= cutoff,
-        )
+        .where(*filters)
     )
     return int(result.scalar_one() or 0)
+
+
+async def _distinct_total_interventions_for_period(
+    session: AsyncSession,
+    *,
+    case_types: tuple[str, ...],
+    reason_codes: list[str],
+    lower_cutoff: datetime,
+    upper_cutoff: datetime | None = None,
+    include_parsing_awaiting: bool = False,
+) -> int:
+    filters = [
+        Case.type.in_(case_types),
+        CaseEscalation.created_at >= lower_cutoff,
+        CaseEscalation.reason_code.in_(reason_codes),
+    ]
+    if upper_cutoff is not None:
+        filters.append(CaseEscalation.created_at < upper_cutoff)
+    escalation_result = await session.execute(
+        select(func.distinct(CaseEscalation.case_id))
+        .select_from(CaseEscalation)
+        .join(Case, Case.id == CaseEscalation.case_id)
+        .where(*filters)
+    )
+    case_ids = set(escalation_result.scalars().all())
+
+    if include_parsing_awaiting:
+        parsing_filters = [
+            Case.type.in_(case_types),
+            CaseTimeline.event_type == "parsing_awaiting_confirmation",
+            CaseTimeline.created_at >= lower_cutoff,
+        ]
+        if upper_cutoff is not None:
+            parsing_filters.append(CaseTimeline.created_at < upper_cutoff)
+        parsing_result = await session.execute(
+            select(func.distinct(CaseTimeline.case_id))
+            .select_from(CaseTimeline)
+            .join(Case, Case.id == CaseTimeline.case_id)
+            .where(*parsing_filters)
+        )
+        case_ids.update(parsing_result.scalars().all())
+
+    return len(case_ids)
 
 
 async def _worker_kpi(
@@ -409,32 +471,51 @@ async def _worker_kpi(
     now = datetime.now(UTC)
     all_reason_codes = [code for codes in intervention_map.values() for code in codes]
     periods: dict[str, KpiPeriod] = {}
-    for label, days in KPI_PERIOD_DAYS:
-        cutoff = now - timedelta(days=days)
+    for label, lower_days, upper_days in KPI_PERIOD_WINDOWS:
+        lower_cutoff = now - timedelta(days=lower_days)
+        upper_cutoff = now - timedelta(days=upper_days) if upper_days is not None else None
         total_cases = await _count_cases_for_period(
-            session, case_types=case_types, cutoff=cutoff
+            session,
+            case_types=case_types,
+            lower_cutoff=lower_cutoff,
+            upper_cutoff=upper_cutoff,
         )
         reason_counts = await _reason_code_counts_for_period(
             session,
             case_types=case_types,
             reason_codes=all_reason_codes,
-            cutoff=cutoff,
+            lower_cutoff=lower_cutoff,
+            upper_cutoff=upper_cutoff,
         )
         if use_parsing_awaiting_for_unable_to_parse:
             reason_counts["EXP_PARSING_INCOMPLETE"] = (
                 await _parsing_awaiting_confirmation_count_for_period(
                     session,
                     case_types=case_types,
-                    cutoff=cutoff,
+                    lower_cutoff=lower_cutoff,
+                    upper_cutoff=upper_cutoff,
                 )
             )
+        interventions = _aggregate_interventions(
+            reason_counts=reason_counts,
+            total_cases=total_cases,
+            intervention_map=intervention_map,
+        )
+        total_interventions = await _distinct_total_interventions_for_period(
+            session,
+            case_types=case_types,
+            reason_codes=all_reason_codes,
+            lower_cutoff=lower_cutoff,
+            upper_cutoff=upper_cutoff,
+            include_parsing_awaiting=use_parsing_awaiting_for_unable_to_parse,
+        )
+        interventions["total_interventions"] = InterventionStat(
+            count=total_interventions,
+            pct=_intervention_pct(total_interventions, total_cases),
+        )
         periods[label] = KpiPeriod(
             total_cases=total_cases,
-            interventions=_aggregate_interventions(
-                reason_counts=reason_counts,
-                total_cases=total_cases,
-                intervention_map=intervention_map,
-            ),
+            interventions=interventions,
         )
     return WorkerKpi.model_validate(periods)
 

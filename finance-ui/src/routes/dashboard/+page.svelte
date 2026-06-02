@@ -96,6 +96,11 @@
 
   type WorkerKpiRow = { key: string; label: string };
   const KPI_PERIOD_KEYS: Array<'30d' | '60d' | '90d'> = ['30d', '60d', '90d'];
+  const KPI_PERIOD_LABELS: Record<'30d' | '60d' | '90d', string> = {
+    '30d': '0-30d',
+    '60d': '31-60d',
+    '90d': '61-90d',
+  };
   const EXPENSE_KPI_ROWS: WorkerKpiRow[] = [
     { key: 'unable_to_parse', label: 'Unable to parse' },
     { key: 'duplicate_document', label: 'Duplicate document' },
@@ -267,7 +272,7 @@
       </article>
     </div>
 
-    <div class="agent-row row-3">
+    <div class="agent-row row-2">
       <article class="agent-card">
         <h3>AR Worker</h3>
         <dl class="metrics">
@@ -288,7 +293,7 @@
           <div class="kpi-block">
             <table class="kpi-table">
               <thead>
-                <tr><th>Cases processed</th><th>30d</th><th>60d</th><th>90d</th></tr>
+                <tr><th>Cases processed</th><th>{KPI_PERIOD_LABELS['30d']}</th><th>{KPI_PERIOD_LABELS['60d']}</th><th>{KPI_PERIOD_LABELS['90d']}</th></tr>
               </thead>
               <tbody>
                 <tr>
@@ -301,7 +306,7 @@
             </table>
             <table class="kpi-table">
               <thead>
-                <tr><th>Intervention</th><th>30d</th><th>60d</th><th>90d</th></tr>
+                <tr><th>Intervention</th><th>{KPI_PERIOD_LABELS['30d']}</th><th>{KPI_PERIOD_LABELS['60d']}</th><th>{KPI_PERIOD_LABELS['90d']}</th></tr>
               </thead>
               <tbody>
                 {#each AR_KPI_ROWS as row}
@@ -344,7 +349,7 @@
           <div class="kpi-block">
             <table class="kpi-table">
               <thead>
-                <tr><th>Cases processed</th><th>30d</th><th>60d</th><th>90d</th></tr>
+                <tr><th>Cases processed</th><th>{KPI_PERIOD_LABELS['30d']}</th><th>{KPI_PERIOD_LABELS['60d']}</th><th>{KPI_PERIOD_LABELS['90d']}</th></tr>
               </thead>
               <tbody>
                 <tr>
@@ -357,7 +362,7 @@
             </table>
             <table class="kpi-table">
               <thead>
-                <tr><th>Intervention</th><th>30d</th><th>60d</th><th>90d</th></tr>
+                <tr><th>Intervention</th><th>{KPI_PERIOD_LABELS['30d']}</th><th>{KPI_PERIOD_LABELS['60d']}</th><th>{KPI_PERIOD_LABELS['90d']}</th></tr>
               </thead>
               <tbody>
                 {#each AP_KPI_ROWS as row}
@@ -380,6 +385,9 @@
         {/if}
       </article>
 
+    </div>
+
+    <div class="agent-row row-1">
       <article class="agent-card">
         <h3>Expense Worker</h3>
         <dl class="metrics">
@@ -406,7 +414,7 @@
           <div class="kpi-block">
             <table class="kpi-table">
               <thead>
-                <tr><th>Cases processed</th><th>30d</th><th>60d</th><th>90d</th></tr>
+                <tr><th>Cases processed</th><th>{KPI_PERIOD_LABELS['30d']}</th><th>{KPI_PERIOD_LABELS['60d']}</th><th>{KPI_PERIOD_LABELS['90d']}</th></tr>
               </thead>
               <tbody>
                 <tr>
@@ -419,7 +427,7 @@
             </table>
             <table class="kpi-table">
               <thead>
-                <tr><th>Intervention</th><th>30d</th><th>60d</th><th>90d</th></tr>
+                <tr><th>Intervention</th><th>{KPI_PERIOD_LABELS['30d']}</th><th>{KPI_PERIOD_LABELS['60d']}</th><th>{KPI_PERIOD_LABELS['90d']}</th></tr>
               </thead>
               <tbody>
                 {#each EXPENSE_KPI_ROWS as row}
@@ -546,8 +554,8 @@
   .agent-row.row-2 {
     grid-template-columns: repeat(2, minmax(260px, 1fr));
   }
-  .agent-row.row-3 {
-    grid-template-columns: repeat(3, minmax(220px, 1fr));
+  .agent-row.row-1 {
+    grid-template-columns: minmax(260px, 1fr);
   }
   .agent-card {
     border: 1px solid #e2e8f0;
@@ -699,7 +707,7 @@
   }
   @media (max-width: 1100px) {
     .agent-row.row-2,
-    .agent-row.row-3 {
+    .agent-row.row-1 {
       grid-template-columns: 1fr;
     }
   }
