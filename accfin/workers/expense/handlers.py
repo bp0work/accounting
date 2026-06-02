@@ -380,7 +380,7 @@ class ExpenseWorkerService:
             issues = receipt_validity_issues(extracted)
             if issues:
                 summary = (
-                    "Receipt is invalid or older than 90 days. Please advise: a) reject and ask "
+                    "Receipt is invalid or older than 18 months. Please advise: a) reject and ask "
                     f"submitter to resubmit with valid receipt quoting Case ID {case.case_number}, "
                     "or b) accept with override reason."
                 )

@@ -208,7 +208,7 @@ function contextForCode(code: string, caseItem: CaseItem): string {
     case 'EXP_POLICY_EXCEEDED':
       return `Expense exceeds T&E policy limits. Accept with an override reason in the comment field, or Reject.`;
     case 'EXP_RECEIPT_INVALID':
-      return `Receipt is invalid or older than 90 days. Accept with override reason, or Reject and ask for a new receipt quoting Case ID ${caseNum}.`;
+      return `Receipt is invalid or older than 18 months. Accept with override reason, or Reject and ask for a new receipt quoting Case ID ${caseNum}.`;
     case 'EXP_CURRENCY_CONVERSION_REQUIRED':
       return `Foreign currency receipt — enter exchange rate in the comment (e.g. 1 USD = 1.35 SGD) and click Apply Rate & Continue.`;
     case 'EXP_COA_NOT_FOUND':
