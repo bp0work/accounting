@@ -9,12 +9,13 @@ from app.services.dashboard_stats import (
     AP_INTERVENTION_MAP,
     AR_INTERVENTION_MAP,
     EXPENSE_INTERVENTION_MAP,
-    KPI_PERIOD_DAYS,
+    KPI_PERIOD_WINDOWS,
     compute_success_rate,
     normalize_cases_by_status,
     sgt_period_bounds,
     _aggregate_interventions,
     _count_processing_started,
+    _distinct_total_interventions_for_period,
     _intervention_pct,
     _parsing_awaiting_confirmation_count_for_period,
     _reason_code_counts_for_period,
@@ -101,7 +102,7 @@ def test_kpi_ar_reason_code_mapping() -> None:
 
 
 def test_kpi_period_aggregation_30_60_90() -> None:
-    assert KPI_PERIOD_DAYS == (("30d", 30), ("60d", 60), ("90d", 90))
+    assert KPI_PERIOD_WINDOWS == (("30d", 30, None), ("60d", 60, 30), ("90d", 90, 60))
 
 
 def test_kpi_percentage_calculation() -> None:
@@ -135,7 +136,7 @@ async def test_kpi_distinct_case_count_per_escalation() -> None:
         _Session(),  # type: ignore[arg-type]
         case_types=("expense_claim",),
         reason_codes=["EXP_DUPLICATE"],
-        cutoff=datetime.now(UTC),
+        lower_cutoff=datetime.now(UTC),
     )
     assert "count(distinct(case_escalations.case_id))" in captured_sql["sql"].lower()
 
@@ -156,10 +157,43 @@ async def test_kpi_parsing_confirmation_count() -> None:
     count = await _parsing_awaiting_confirmation_count_for_period(
         _Session(),  # type: ignore[arg-type]
         case_types=("expense_claim",),
-        cutoff=datetime.now(UTC),
+        lower_cutoff=datetime.now(UTC),
     )
     assert count == 5
     sql = captured_sql["sql"].lower()
     assert "case_timeline.event_type" in sql
     assert "parsing_awaiting_confirmation" in sql
     assert "count(distinct(case_timeline.case_id))" in sql
+
+
+@pytest.mark.asyncio
+async def test_kpi_total_interventions_uses_distinct_case_ids() -> None:
+    captured_sql: list[str] = []
+
+    class _ScalarResult:
+        def __init__(self, values):
+            self._values = values
+
+        def all(self):
+            return self._values
+
+    class _Result:
+        def __init__(self, values):
+            self._values = values
+
+        def scalars(self):
+            return _ScalarResult(self._values)
+
+    class _Session:
+        async def execute(self, stmt):
+            captured_sql.append(str(stmt).lower())
+            return _Result([])
+
+    count = await _distinct_total_interventions_for_period(
+        _Session(),  # type: ignore[arg-type]
+        case_types=("expense_claim",),
+        reason_codes=["EXP_DUPLICATE"],
+        lower_cutoff=datetime.now(UTC),
+    )
+    assert count == 0
+    assert any("distinct(case_escalations.case_id)" in sql for sql in captured_sql)
