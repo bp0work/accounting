@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,10 +26,26 @@ from app.services.executive_mail_service import ExecutiveMailService
 from app.services.queue_router import enqueue_accounts
 from app.services.timeline_actor import timeline_actor_label_for_user
 from fastapi import status
-from workers.common.parsing_confirmation import normalize_extracted_fields
+from workers.common.parsing_confirmation import (
+    CONFIRM_PARSING_RESUME_STEP,
+    normalize_extracted_fields,
+)
 
 CONFIRM_PARSING_ROLES = frozenset(
     {"accounts_manager", "finance_manager", "cfo", "finance_director"}
+)
+
+CONFIRM_PARSING_PERSISTED_KEYS = (
+    "document_type",
+    "document_number",
+    "document_date",
+    "vendor_name",
+    "total_amount",
+    "tax_amount",
+    "currency",
+    "business_purpose",
+    "gl_account_id",
+    "document_validated",
 )
 
 
@@ -52,6 +69,58 @@ def _count_corrections(before: dict, after: dict) -> int:
     return n
 
 
+def _merge_confirmed_workflow_metadata(
+    existing_meta: dict[str, Any],
+    fields_in: dict[str, Any],
+    *,
+    user_id: UUID,
+    confirmed_at: datetime,
+) -> tuple[dict[str, Any], dict[str, str | None]]:
+    """Merge confirmed fields into workflow_metadata without dropping unrelated keys."""
+    meta = dict(existing_meta)
+    before = dict(meta.get("extracted_fields") or {})
+    merged_raw = {**before, **fields_in}
+    normalized = normalize_extracted_fields(merged_raw)
+    meta["extracted_fields"] = normalized
+    meta["parsing_confirmed"] = True
+    meta["resume_from_step"] = CONFIRM_PARSING_RESUME_STEP
+    meta["parsing_confirmed_by"] = str(user_id)
+    meta["parsing_confirmed_at"] = confirmed_at.isoformat()
+    meta.pop("pending_parsing_confirmation", None)
+    meta["current_stage"] = "processing"
+    return meta, normalized
+
+
+def _verify_confirmed_metadata_persisted(
+    workflow_metadata: dict[str, Any] | None,
+    normalized: dict[str, str | None],
+) -> None:
+    meta = workflow_metadata or {}
+    stored = dict(meta.get("extracted_fields") or {})
+    for key in CONFIRM_PARSING_PERSISTED_KEYS:
+        expected = normalized.get(key)
+        if expected is None or str(expected).strip() == "":
+            continue
+        if str(stored.get(key) or "") != str(expected):
+            raise AppHTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "PARSING_CONFIRM_PERSIST_FAILED",
+                f"Confirmed field {key} was not persisted to workflow_metadata.extracted_fields",
+            )
+    if meta.get("parsing_confirmed") is not True:
+        raise AppHTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "PARSING_CONFIRM_PERSIST_FAILED",
+            "parsing_confirmed flag was not persisted",
+        )
+    if meta.get("resume_from_step") != CONFIRM_PARSING_RESUME_STEP:
+        raise AppHTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "PARSING_CONFIRM_PERSIST_FAILED",
+            f"resume_from_step must be {CONFIRM_PARSING_RESUME_STEP}",
+        )
+
+
 async def execute_confirm_parsing(
     case_id: UUID,
     *,
@@ -61,8 +130,9 @@ async def execute_confirm_parsing(
     _assert_confirm_role(user)
     message_id = str(uuid4())
     confirmed_at = datetime.now(UTC)
-    fields_in = body.extracted_fields.model_dump(mode="json")
-    normalized_new = normalize_extracted_fields(fields_in)
+    fields_in = body.extracted_fields.model_dump(mode="json", exclude_none=False)
+    if fields_in.get("gl_account_id") is not None:
+        fields_in["gl_account_id"] = str(fields_in["gl_account_id"])
 
     factory = get_session_factory()
     async with factory() as session:
@@ -79,14 +149,14 @@ async def execute_confirm_parsing(
                 f"Case must be pending_confirmation (current: {case.status})",
             )
 
-        meta = dict(case.workflow_metadata or {})
-        before = dict(meta.get("extracted_fields") or {})
+        before = dict((case.workflow_metadata or {}).get("extracted_fields") or {})
+        meta, normalized_new = _merge_confirmed_workflow_metadata(
+            case.workflow_metadata or {},
+            fields_in,
+            user_id=user.user_id,
+            confirmed_at=confirmed_at,
+        )
         corrections = _count_corrections(before, normalized_new)
-        meta["extracted_fields"] = normalized_new
-        meta["parsing_confirmed_by"] = str(user.user_id)
-        meta["parsing_confirmed_at"] = confirmed_at.isoformat()
-        meta.pop("pending_parsing_confirmation", None)
-        meta["current_stage"] = "processing"
         case.workflow_metadata = meta
         flag_modified(case, "workflow_metadata")
         previous_status = case.status
@@ -106,10 +176,13 @@ async def execute_confirm_parsing(
             metadata={
                 "correction_count": corrections,
                 "queue_message_id": message_id,
+                "resume_from_step": CONFIRM_PARSING_RESUME_STEP,
             },
             actor_user_id=user.user_id,
         )
         await session.flush()
+        await session.refresh(case)
+        _verify_confirmed_metadata_persisted(case.workflow_metadata, normalized_new)
         await session.commit()
 
         snap = _case_enqueue_snapshot(case, message_id)

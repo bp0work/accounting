@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import attributes, selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.clients.hermes import HermesClient, HermesError
 from app.constants.tenant import TENANT_MMLOGISTIX
@@ -49,6 +50,7 @@ from workers.common.gl_period_check import ensure_gl_period_allows_posting
 from workers.common.parsing_confirmation import (
     apply_confirmed_extracted_fields_from_message,
     expense_fields_to_confirmation,
+    normalize_extracted_fields,
     pause_for_parsing_confirmation,
     requires_parsing_confirmation,
 )
@@ -108,6 +110,8 @@ def _pop_resume_from_step(case: Case) -> str | None:
     step = meta.pop("resume_from_step", None)
     if step is not None:
         case.workflow_metadata = meta
+        if hasattr(case, "_sa_instance_state"):
+            flag_modified(case, "workflow_metadata")
     return str(step) if step else None
 
 
@@ -162,7 +166,7 @@ class ExpenseWorkerService:
         email = await self._email_for_case(case)
         apply_confirmed_extracted_fields_from_message(case, message)
         resume_from = _pop_resume_from_step(case)
-        meta = case.workflow_metadata or {}
+        meta = dict(case.workflow_metadata or {})
         overrides: dict = dict(meta.get("exp_step_overrides") or {})
         for key in EXPENSE_STEP_OVERRIDE_QUEUE_KEYS:
             if message.get(key):
@@ -180,6 +184,10 @@ class ExpenseWorkerService:
 
         if use_stored:
             extracted = dict(meta.get("extracted_fields") or {})
+            if not extracted and isinstance(message.get("confirmed_extracted_fields"), dict):
+                extracted = dict(
+                    normalize_extracted_fields(message["confirmed_extracted_fields"])
+                )
             confidence_f = float(meta.get("extraction_confidence") or case.confidence_score or 0)
             await self._start_processing(case)
         else:

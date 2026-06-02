@@ -22,9 +22,12 @@ class ParsingConfirmationFields(BaseModel):
     business_purpose: str | None = None
     gl_account_id: UUID | None = None
     sender_validated: bool = False
+    document_validated: bool | None = None
 
     @model_validator(mode="after")
-    def require_exchange_rate_for_foreign_currency(self) -> ParsingConfirmationFields:
+    def validate_confirmation_fields(self) -> ParsingConfirmationFields:
+        if self.document_validated is None:
+            self.document_validated = self.sender_validated
         currency = (self.currency or "SGD").strip().upper()
         if currency != "SGD" and not (self.exchange_rate and str(self.exchange_rate).strip()):
             raise ValueError(

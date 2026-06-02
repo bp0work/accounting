@@ -32,6 +32,8 @@ PARSING_CONFIRMATION_NOTIFY_TO = (
     "fin.mmlogistix@bp0.work",
 )
 
+CONFIRM_PARSING_RESUME_STEP = "2B"
+
 SENDER_MAILBOX = "acc.mmlogistix@bp0.work"
 
 EXPENSE_CONFIRMATION_FIELD_KEYS = (
@@ -100,6 +102,13 @@ def normalize_extracted_fields(raw: dict[str, Any]) -> dict[str, str | None]:
         out["gl_account_id"] = str(gl_id).strip()
     else:
         out["gl_account_id"] = None
+    doc_validated = raw.get("document_validated")
+    if doc_validated is None:
+        out["document_validated"] = sender_str
+    else:
+        out["document_validated"] = (
+            "true" if str(doc_validated).strip().lower() in ("true", "1", "yes") else "false"
+        )
     return out
 
 
@@ -161,6 +170,9 @@ def apply_confirmed_extracted_fields_from_message(
     fields = normalize_extracted_fields(raw)
     meta = dict(case.workflow_metadata or {})
     meta["extracted_fields"] = fields
+    meta["parsing_confirmed"] = True
+    if not meta.get("resume_from_step"):
+        meta["resume_from_step"] = CONFIRM_PARSING_RESUME_STEP
     meta.pop("pending_parsing_confirmation", None)
     case.workflow_metadata = meta
     flag_modified(case, "workflow_metadata")
