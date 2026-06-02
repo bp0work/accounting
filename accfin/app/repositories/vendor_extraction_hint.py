@@ -77,7 +77,11 @@ class VendorExtractionHintRepository:
                 created_by=created_by,
             )
             .on_conflict_do_update(
-                constraint="uq_vendor_hint_field",
+                index_elements=[
+                    VendorExtractionHint.tenant_id,
+                    func.lower(VendorExtractionHint.vendor_name),
+                    VendorExtractionHint.field_name,
+                ],
                 set_={
                     "field_label": field_label.strip(),
                     "field_location": (field_location or "").strip() or None,

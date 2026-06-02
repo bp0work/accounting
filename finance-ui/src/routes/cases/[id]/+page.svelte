@@ -160,7 +160,6 @@
 
   const DATE_FIELD_NAMES = new Set([
     'document_date',
-    'invoice_date',
     'due_date',
     'payment_due_date',
   ]);
@@ -390,7 +389,19 @@
     if (item.status === 'pending_confirmation' && reviewSnapshot.missing.length === 0) {
       return ['document_date', 'document_number', 'total_amount', 'tax_amount'];
     }
-    return reviewSnapshot.missing;
+    const legacyToCanonical: Record<string, string> = {
+      invoice_date: 'document_date',
+      invoice_number: 'document_number',
+      merchant_name: 'vendor_name',
+      gst_amount: 'tax_amount',
+    };
+    const seen = new Set<string>();
+    const canonical = reviewSnapshot.missing.map((name) => legacyToCanonical[name] ?? name);
+    return canonical.filter((name) => {
+      if (seen.has(name)) return false;
+      seen.add(name);
+      return true;
+    });
   })();
   $: isExpenseConfirm = item?.type === 'expense_claim';
 
@@ -709,7 +720,7 @@
       savedHintFields = new Set([...savedHintFields, row.field_name]);
       vendorHintCount = Math.max(vendorHintCount, savedHintFields.size);
       void loadVendorHints(vendorName);
-      teachMessage = `Saved hint for ${row.field_name.replaceAll('_', ' ')}. Use Re-extract with hints to preview updated fields.`;
+      teachMessage = `Saved hint for ${extractedFieldLabel(row.field_name)}. Use Re-extract with hints to preview updated fields.`;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not save hint';
     } finally {
@@ -1775,7 +1786,7 @@
             </p>
             {#each teachFields as row}
             <div class="teach-field">
-              <h3>{row.field_name.replaceAll('_', ' ')}</h3>
+              <h3>{extractedFieldLabel(row.field_name)}</h3>
               <label>
                 {vendorHintFieldLabelInputLabel(row.field_name)}
                 <input
